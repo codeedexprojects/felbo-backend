@@ -15,7 +15,7 @@ const devFormat = combine(
 const prodFormat = combine(timestamp(), errors({ stack: true }), winston.format.json());
 
 export const logger = winston.createLogger({
-  level: config.node_env === 'production' ? 'info' : 'debug',
-  format: config.node_env === 'production' ? prodFormat : devFormat,
+  level: config.nodeEnv === 'production' ? 'info' : 'debug',
+  format: config.nodeEnv === 'production' ? prodFormat : devFormat,
   transports: [new winston.transports.Console()],
 });

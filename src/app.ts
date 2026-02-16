@@ -5,6 +5,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { requestId } from './shared/middleware/requestId';
 import { errorHandler } from './shared/middleware/errorHandler';
+import { authRoutes } from './modules/auth/auth.routes';
 
 const app = express();
 
@@ -26,6 +27,9 @@ app.get('/health', (_req, res) => {
 app.get('/api/v1', (_req, res) => {
   res.json({ message: 'Felbo API v1' });
 });
+
+// Routes
+app.use('/api/v1/auth', authRoutes);
 
 app.use(errorHandler);
 
