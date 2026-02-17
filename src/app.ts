@@ -5,7 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { requestId } from './shared/middleware/requestId';
 import { errorHandler } from './shared/middleware/errorHandler';
-import { authRoutes } from './modules/auth/auth.routes';
+import { userRoutes } from './modules/user/user.routes';
+import { vendorRoutes } from './modules/vendor/vendor.routes';
 
 const app = express();
 
@@ -29,7 +30,8 @@ app.get('/api/v1', (_req, res) => {
 });
 
 // Routes
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/vendors', vendorRoutes);
 
 app.use(errorHandler);
 

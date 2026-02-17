@@ -1,5 +1,9 @@
 import { Logger } from 'winston';
-import { AppError, ServiceUnavailableError } from '../errors/index';
+import { getRedisClient } from '../redis/redis';
+import { config } from '../config/config.service';
+import { AppError, ServiceUnavailableError, TooManyRequestsError } from '../errors/index';
+
+export type OtpFlowType = 'USER' | 'VENDOR';
 
 export interface SendOtpResult {
   sessionId: string;
@@ -12,6 +16,14 @@ export interface VerifyOtpResult {
 interface TwoFactorApiResponse {
   Status: string;
   Details: string;
+}
+
+const DAILY_CAP_TTL = 86400; // 24 hours
+const VERIFY_CAP_TTL = 300; // 5 minutes
+const VERIFY_MAX_ATTEMPTS = 5;
+
+function getDailyLimit(flowType: OtpFlowType): number {
+  return flowType === 'USER' ? config.otp.dailyLimitUser : config.otp.dailyLimitVendor;
 }
 
 export class TwoFactorOtpService {
@@ -28,7 +40,20 @@ export class TwoFactorOtpService {
     this.apiKey = apiKey;
   }
 
-  async sendOtp(phone: string): Promise<SendOtpResult> {
+  async sendOtp(phone: string, flowType: OtpFlowType): Promise<SendOtpResult> {
+    const redis = getRedisClient();
+    const dailyKey = `otp:daily:${phone}`;
+
+    const count = await redis.incr(dailyKey);
+    if (count === 1) {
+      await redis.expire(dailyKey, DAILY_CAP_TTL);
+    }
+
+    const limit = getDailyLimit(flowType);
+    if (count > limit) {
+      throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
+    }
+
     const url = `${this.baseUrl}/${this.apiKey}/SMS/${phone}/AUTOGEN`;
 
     try {
@@ -58,6 +83,18 @@ export class TwoFactorOtpService {
   }
 
   async verifyOtp(sessionId: string, otp: string): Promise<VerifyOtpResult> {
+    const redis = getRedisClient();
+    const verifyKey = `otp:verify:${sessionId}`;
+
+    const count = await redis.incr(verifyKey);
+    if (count === 1) {
+      await redis.expire(verifyKey, VERIFY_CAP_TTL);
+    }
+
+    if (count > VERIFY_MAX_ATTEMPTS) {
+      throw new TooManyRequestsError('Too many attempts. Please request a new OTP.');
+    }
+
     const url = `${this.baseUrl}/${this.apiKey}/SMS/VERIFY/${sessionId}/${otp}`;
 
     try {
@@ -66,6 +103,7 @@ export class TwoFactorOtpService {
 
       if (data.Status === 'Success' && data.Details === 'OTP Matched') {
         this.logger.info('OTP verified successfully', { sessionId });
+        await redis.del(verifyKey);
         return { verified: true };
       }
 
@@ -90,7 +128,20 @@ export class DevOtpService {
     this.fixedOtp = fixedOtp;
   }
 
-  sendOtp(phone: string): SendOtpResult {
+  async sendOtp(phone: string, flowType: OtpFlowType): Promise<SendOtpResult> {
+    const redis = getRedisClient();
+    const dailyKey = `otp:daily:${phone}`;
+
+    const count = await redis.incr(dailyKey);
+    if (count === 1) {
+      await redis.expire(dailyKey, DAILY_CAP_TTL);
+    }
+
+    const limit = getDailyLimit(flowType);
+    if (count > limit) {
+      throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
+    }
+
     const sessionId = `dev-session-${Date.now()}`;
 
     this.logger.info('[DEV] OTP sent', {
@@ -102,13 +153,29 @@ export class DevOtpService {
     return { sessionId };
   }
 
-  verifyOtp(sessionId: string, otp: string): VerifyOtpResult {
+  async verifyOtp(sessionId: string, otp: string): Promise<VerifyOtpResult> {
+    const redis = getRedisClient();
+    const verifyKey = `otp:verify:${sessionId}`;
+
+    const count = await redis.incr(verifyKey);
+    if (count === 1) {
+      await redis.expire(verifyKey, VERIFY_CAP_TTL);
+    }
+
+    if (count > VERIFY_MAX_ATTEMPTS) {
+      throw new TooManyRequestsError('Too many attempts. Please request a new OTP.');
+    }
+
     const verified = otp === this.fixedOtp;
 
     this.logger.info('[DEV] OTP verification', {
       sessionId,
       verified,
     });
+
+    if (verified) {
+      await redis.del(verifyKey);
+    }
 
     return { verified };
   }
