@@ -3,6 +3,8 @@ import { logger } from '../../shared/logger/logger';
 import { TwoFactorOtpService, DevOtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService } from '../../shared/services/jwt.service';
+import { paymentService } from '../payment/payment.container';
+import { shopService } from '../shop/shop.container';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -22,6 +24,9 @@ const vendorService = new VendorService(
   otpService,
   otpSessionService,
   jwtService,
+  paymentService,
+  shopService,
+  config.vendor.registrationFee,
   logger,
 );
 

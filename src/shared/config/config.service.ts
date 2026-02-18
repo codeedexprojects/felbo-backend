@@ -48,4 +48,14 @@ export const config = {
     dailyLimitUser: getEnvInt('OTP_DAILY_LIMIT_USER', 8),
     dailyLimitVendor: getEnvInt('OTP_DAILY_LIMIT_VENDOR', 10),
   },
+
+  razorpay: {
+    keyId: getEnv('RAZORPAY_KEY_ID', ''),
+    keySecret: getEnv('RAZORPAY_KEY_SECRET', ''),
+    webhookSecret: getEnv('RAZORPAY_WEBHOOK_SECRET', ''),
+  },
+
+  vendor: {
+    registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
+  },
 } as const;

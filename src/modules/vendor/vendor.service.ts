@@ -19,6 +19,8 @@ import {
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
+import PaymentService from '../payment/payment.service';
+import ShopService from '../shop/shop.service';
 import {
   UnauthorizedError,
   ForbiddenError,
@@ -38,6 +40,9 @@ export default class VendorService {
     private readonly otpService: OtpService,
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
+    private readonly paymentService: PaymentService,
+    private readonly shopService: ShopService,
+    private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
 
@@ -228,12 +233,12 @@ export default class VendorService {
       }
     }
 
-    // TODO: Read registration fee from configService.get('vendor.registrationFee') when config module is ready
-    const amount = 499;
+    const amount = this.registrationFee;
 
-    // TODO: Wire paymentService when payment module is ready
-    // const { orderId } = await paymentService.createVendorRegistrationOrder(input.phone, amount);
-    const orderId = `order_placeholder_${Date.now()}`;
+    const { orderId } = await this.paymentService.createVendorRegistrationOrder({
+      phone: input.phone,
+      amountRupees: amount,
+    });
 
     await this.vendorRepository.upsertByPhone(input.phone, {
       ownerName: input.ownerName,
@@ -278,18 +283,17 @@ export default class VendorService {
       throw new ValidationError('Order ID mismatch.');
     }
 
-    // TODO: Wire paymentService when payment module is ready
-    // await paymentService.verifyVendorRegistrationPayment({
-    //   orderId: input.orderId,
-    //   paymentId: input.paymentId,
-    //   signature: input.signature,
-    // });
+    await this.paymentService.verifyVendorRegistrationPayment({
+      orderId: input.orderId,
+      paymentId: input.paymentId,
+      signature: input.signature,
+    });
 
     await withTransaction(async (session) => {
       await this.vendorRepository.updateRegistrationPayment(
         vendor._id.toString(),
         {
-          amount: 499, // TODO: Read from config when payment module is wired
+          amount: this.registrationFee,
           paymentId: input.paymentId,
           paidAt: new Date(),
         },
@@ -345,21 +349,25 @@ export default class VendorService {
       throw new ConflictError('Vendor is not awaiting verification.');
     }
 
+    if (!vendor.shopDetails) {
+      throw new ValidationError('Cannot approve: vendor has no shop details.');
+    }
+
     await withTransaction(async (session) => {
       await this.vendorRepository.setVerificationStatus(vendorId, 'APPROVED', undefined, session);
       await this.vendorRepository.setStatus(vendorId, 'ACTIVE', session);
 
-      // TODO: Wire shopRepository when shop module is ready
-      // await shopRepository.create({
-      //   vendorId: vendor._id,
-      //   name: vendor.shopDetails!.name,
-      //   shopType: vendor.shopDetails!.type,
-      //   phone: vendor.phone,
-      //   address: vendor.shopDetails!.address,
-      //   location: vendor.shopDetails!.location,
-      //   isActive: true,
-      //   status: 'ACTIVE',
-      // }, session);
+      await this.shopService.createShopForVendor(
+        {
+          vendorId: vendor._id.toString(),
+          name: vendor.shopDetails!.name,
+          shopType: vendor.shopDetails!.type,
+          phone: vendor.phone,
+          address: vendor.shopDetails!.address,
+          location: vendor.shopDetails!.location,
+        },
+        session,
+      );
     });
 
     this.logger.info({
@@ -384,18 +392,19 @@ export default class VendorService {
 
     await withTransaction(async (session) => {
       await this.vendorRepository.setVerificationStatus(vendorId, 'REJECTED', reason, session);
-
-      if (vendor.registrationType === 'INDEPENDENT' && vendor.registrationPayment?.paymentId) {
-        // TODO: Wire paymentService when payment module is ready
-        // await paymentService.refundVendorRegistrationPayment(vendor.registrationPayment.paymentId);
-        this.logger.info({
-          action: 'VENDOR_REGISTRATION_REFUND_INITIATED',
-          module: 'vendor',
-          vendorId,
-          paymentId: vendor.registrationPayment.paymentId,
-        });
-      }
     });
+
+    if (vendor.registrationType === 'INDEPENDENT' && vendor.registrationPayment?.paymentId) {
+      await this.paymentService.refundVendorRegistrationPayment(
+        vendor.registrationPayment.paymentId,
+      );
+      this.logger.info({
+        action: 'VENDOR_REGISTRATION_REFUND_INITIATED',
+        module: 'vendor',
+        vendorId,
+        paymentId: vendor.registrationPayment.paymentId,
+      });
+    }
 
     this.logger.info({
       action: 'VENDOR_REJECTED',
