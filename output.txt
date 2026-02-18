@@ -6,6 +6,8 @@ import { logger } from '../../shared/logger/logger';
 import { TwoFactorOtpService, DevOtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService } from '../../shared/services/jwt.service';
+import { paymentService } from '../payment/payment.container';
+import { shopService } from '../shop/shop.container';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -25,6 +27,9 @@ const vendorService = new VendorService(
   otpService,
   otpSessionService,
   jwtService,
+  paymentService,
+  shopService,
+  config.vendor.registrationFee,
   logger,
 );
 
@@ -368,7 +373,11 @@ export default class VendorRepository {
     return vendor;
   }
 
-  upsertByPhone(phone: string, data: UpsertVendorData, session?: ClientSession): Promise<IVendor | null> {
+  upsertByPhone(
+    phone: string,
+    data: UpsertVendorData,
+    session?: ClientSession,
+  ): Promise<IVendor | null> {
     return VendorModel.findOneAndUpdate(
       { phone },
       { $set: { ...data, phone } },
@@ -443,7 +452,12 @@ router.post('/register/independent/confirm', vendorController.registerIndependen
 
 // Protected routes
 router.get('/profile', authenticate, authorize('VENDOR'), vendorController.getProfile);
-router.get('/registration-status', authenticate, authorize('VENDOR'), vendorController.getRegistrationStatus);
+router.get(
+  '/registration-status',
+  authenticate,
+  authorize('VENDOR'),
+  vendorController.getRegistrationStatus,
+);
 
 export const vendorRoutes = router;
 
@@ -473,6 +487,8 @@ import {
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
+import PaymentService from '../payment/payment.service';
+import ShopService from '../shop/shop.service';
 import {
   UnauthorizedError,
   ForbiddenError,
@@ -492,6 +508,9 @@ export default class VendorService {
     private readonly otpService: OtpService,
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
+    private readonly paymentService: PaymentService,
+    private readonly shopService: ShopService,
+    private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
 
@@ -640,17 +659,9 @@ export default class VendorService {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'ASSOCIATION',
-      associationMemberId: input.memberId,
-      associationIdProofUrl: input.idProofUrl,
-      shopDetails: {
-        name: input.shopName,
-        type: input.shopType,
-        address: input.address,
-        location: {
-          type: 'Point',
-          coordinates: [input.location.longitude, input.location.latitude],
-        },
-      },
+      associationMemberId: input.associationMemberId,
+      associationIdProofUrl: input.associationIdProofUrl,
+      shopDetails: input.shopDetails,
       verificationStatus: 'PENDING',
       status: 'PENDING',
     });
@@ -682,30 +693,19 @@ export default class VendorService {
       }
     }
 
-    // TODO: Read registration fee from configService.get('vendor.registrationFee') when config module is ready
-    const amount = 499;
+    const amount = this.registrationFee;
 
-    // TODO: Wire paymentService when payment module is ready
-    // const { orderId } = await paymentService.createVendorRegistrationOrder(input.phone, amount);
-    const orderId = `order_placeholder_${Date.now()}`;
+    const { orderId } = await this.paymentService.createVendorRegistrationOrder({
+      phone: input.phone,
+      amountRupees: amount,
+    });
 
     await this.vendorRepository.upsertByPhone(input.phone, {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'INDEPENDENT',
-      documents: {
-        shopLicense: input.shopLicenseUrl,
-        ownerIdProof: input.ownerIdProofUrl,
-      },
-      shopDetails: {
-        name: input.shopName,
-        type: input.shopType,
-        address: input.address,
-        location: {
-          type: 'Point',
-          coordinates: [input.location.longitude, input.location.latitude],
-        },
-      },
+      documents: input.documents,
+      shopDetails: input.shopDetails,
       registrationPaymentOrderId: orderId,
       verificationStatus: 'PENDING',
       status: 'PENDING',
@@ -732,18 +732,17 @@ export default class VendorService {
       throw new ValidationError('Order ID mismatch.');
     }
 
-    // TODO: Wire paymentService when payment module is ready
-    // await paymentService.verifyVendorRegistrationPayment({
-    //   orderId: input.orderId,
-    //   paymentId: input.paymentId,
-    //   signature: input.signature,
-    // });
+    await this.paymentService.verifyVendorRegistrationPayment({
+      orderId: input.orderId,
+      paymentId: input.paymentId,
+      signature: input.signature,
+    });
 
     await withTransaction(async (session) => {
       await this.vendorRepository.updateRegistrationPayment(
         vendor._id.toString(),
         {
-          amount: 499, // TODO: Read from config when payment module is wired
+          amount: this.registrationFee,
           paymentId: input.paymentId,
           paidAt: new Date(),
         },
@@ -799,21 +798,25 @@ export default class VendorService {
       throw new ConflictError('Vendor is not awaiting verification.');
     }
 
+    if (!vendor.shopDetails) {
+      throw new ValidationError('Cannot approve: vendor has no shop details.');
+    }
+
     await withTransaction(async (session) => {
       await this.vendorRepository.setVerificationStatus(vendorId, 'APPROVED', undefined, session);
       await this.vendorRepository.setStatus(vendorId, 'ACTIVE', session);
 
-      // TODO: Wire shopRepository when shop module is ready
-      // await shopRepository.create({
-      //   vendorId: vendor._id,
-      //   name: vendor.shopDetails!.name,
-      //   shopType: vendor.shopDetails!.type,
-      //   phone: vendor.phone,
-      //   address: vendor.shopDetails!.address,
-      //   location: vendor.shopDetails!.location,
-      //   isActive: true,
-      //   status: 'ACTIVE',
-      // }, session);
+      await this.shopService.createShopForVendor(
+        {
+          vendorId: vendor._id.toString(),
+          name: vendor.shopDetails!.name,
+          shopType: vendor.shopDetails!.type,
+          phone: vendor.phone,
+          address: vendor.shopDetails!.address,
+          location: vendor.shopDetails!.location,
+        },
+        session,
+      );
     });
 
     this.logger.info({
@@ -838,18 +841,19 @@ export default class VendorService {
 
     await withTransaction(async (session) => {
       await this.vendorRepository.setVerificationStatus(vendorId, 'REJECTED', reason, session);
-
-      if (vendor.registrationType === 'INDEPENDENT' && vendor.registrationPayment?.paymentId) {
-        // TODO: Wire paymentService when payment module is ready
-        // await paymentService.refundVendorRegistrationPayment(vendor.registrationPayment.paymentId);
-        this.logger.info({
-          action: 'VENDOR_REGISTRATION_REFUND_INITIATED',
-          module: 'vendor',
-          vendorId,
-          paymentId: vendor.registrationPayment.paymentId,
-        });
-      }
     });
+
+    if (vendor.registrationType === 'INDEPENDENT' && vendor.registrationPayment?.paymentId) {
+      await this.paymentService.refundVendorRegistrationPayment(
+        vendor.registrationPayment.paymentId,
+      );
+      this.logger.info({
+        action: 'VENDOR_REGISTRATION_REFUND_INITIATED',
+        module: 'vendor',
+        vendorId,
+        paymentId: vendor.registrationPayment.paymentId,
+      });
+    }
 
     this.logger.info({
       action: 'VENDOR_REJECTED',
@@ -919,12 +923,17 @@ export interface RegisterAssociationInput {
   phone: string;
   ownerName: string;
   email?: string;
-  shopName: string;
-  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
-  address: AddressInput;
-  location: { longitude: number; latitude: number };
-  memberId: string;
-  idProofUrl: string;
+  associationMemberId: string;
+  associationIdProofUrl: string;
+  shopDetails: {
+    name: string;
+    type: 'MENS' | 'WOMENS' | 'UNISEX';
+    address: AddressInput;
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }
 
 export interface RegisterAssociationResponse {
@@ -935,12 +944,19 @@ export interface RegisterIndependentInitiateInput {
   phone: string;
   ownerName: string;
   email?: string;
-  shopName: string;
-  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
-  address: AddressInput;
-  location: { longitude: number; latitude: number };
-  shopLicenseUrl: string;
-  ownerIdProofUrl: string;
+  documents: {
+    shopLicense: string;
+    ownerIdProof: string;
+  };
+  shopDetails: {
+    name: string;
+    type: 'MENS' | 'WOMENS' | 'UNISEX';
+    address: AddressInput;
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }
 
 export interface RegisterIndependentInitiateResponse {
@@ -1053,8 +1069,18 @@ const addressSchema = z.object({
 });
 
 const locationSchema = z.object({
-  longitude: z.number(),
-  latitude: z.number(),
+  type: z.literal('Point'),
+  coordinates: z.tuple([z.number(), z.number()]),
+});
+
+const shopDetailsSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Shop name must be at least 2 characters')
+    .max(100, 'Shop name must be at most 100 characters'),
+  type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  address: addressSchema,
+  location: locationSchema,
 });
 
 export const sendOtpSchema = z.object({
@@ -1075,26 +1101,28 @@ export const registerVerifyOtpSchema = z.object({
 
 export const registerAssociationSchema = z.object({
   phone: phoneSchema,
-  ownerName: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be at most 100 characters'),
+  ownerName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters'),
   email: z.string().email('Enter valid email').optional(),
-  shopName: z.string().min(2, 'Shop name must be at least 2 characters').max(100, 'Shop name must be at most 100 characters'),
-  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
-  address: addressSchema,
-  location: locationSchema,
-  memberId: z.string().min(1, 'Member ID is required'),
-  idProofUrl: z.string().url('Enter valid URL for ID proof'),
+  associationMemberId: z.string().min(1, 'Member ID is required'),
+  associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
+  shopDetails: shopDetailsSchema,
 });
 
 export const registerIndependentInitiateSchema = z.object({
   phone: phoneSchema,
-  ownerName: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be at most 100 characters'),
+  ownerName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters'),
   email: z.string().email('Enter valid email').optional(),
-  shopName: z.string().min(2, 'Shop name must be at least 2 characters').max(100, 'Shop name must be at most 100 characters'),
-  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
-  address: addressSchema,
-  location: locationSchema,
-  shopLicenseUrl: z.string().url('Enter valid URL for shop license'),
-  ownerIdProofUrl: z.string().url('Enter valid URL for owner ID proof'),
+  documents: z.object({
+    shopLicense: z.string().url('Enter valid URL for shop license'),
+    ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
+  }),
+  shopDetails: shopDetailsSchema,
 });
 
 export const registerIndependentConfirmSchema = z.object({

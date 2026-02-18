@@ -191,17 +191,9 @@ export default class VendorService {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'ASSOCIATION',
-      associationMemberId: input.memberId,
-      associationIdProofUrl: input.idProofUrl,
-      shopDetails: {
-        name: input.shopName,
-        type: input.shopType,
-        address: input.address,
-        location: {
-          type: 'Point',
-          coordinates: [input.location.longitude, input.location.latitude],
-        },
-      },
+      associationMemberId: input.associationMemberId,
+      associationIdProofUrl: input.associationIdProofUrl,
+      shopDetails: input.shopDetails,
       verificationStatus: 'PENDING',
       status: 'PENDING',
     });
@@ -244,19 +236,8 @@ export default class VendorService {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'INDEPENDENT',
-      documents: {
-        shopLicense: input.shopLicenseUrl,
-        ownerIdProof: input.ownerIdProofUrl,
-      },
-      shopDetails: {
-        name: input.shopName,
-        type: input.shopType,
-        address: input.address,
-        location: {
-          type: 'Point',
-          coordinates: [input.location.longitude, input.location.latitude],
-        },
-      },
+      documents: input.documents,
+      shopDetails: input.shopDetails,
       registrationPaymentOrderId: orderId,
       verificationStatus: 'PENDING',
       status: 'PENDING',

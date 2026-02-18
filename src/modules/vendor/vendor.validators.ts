@@ -24,8 +24,18 @@ const addressSchema = z.object({
 });
 
 const locationSchema = z.object({
-  longitude: z.number(),
-  latitude: z.number(),
+  type: z.literal('Point'),
+  coordinates: z.tuple([z.number(), z.number()]),
+});
+
+const shopDetailsSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Shop name must be at least 2 characters')
+    .max(100, 'Shop name must be at most 100 characters'),
+  type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  address: addressSchema,
+  location: locationSchema,
 });
 
 export const sendOtpSchema = z.object({
@@ -51,15 +61,9 @@ export const registerAssociationSchema = z.object({
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name must be at most 100 characters'),
   email: z.string().email('Enter valid email').optional(),
-  shopName: z
-    .string()
-    .min(2, 'Shop name must be at least 2 characters')
-    .max(100, 'Shop name must be at most 100 characters'),
-  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
-  address: addressSchema,
-  location: locationSchema,
-  memberId: z.string().min(1, 'Member ID is required'),
-  idProofUrl: z.string().url('Enter valid URL for ID proof'),
+  associationMemberId: z.string().min(1, 'Member ID is required'),
+  associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
+  shopDetails: shopDetailsSchema,
 });
 
 export const registerIndependentInitiateSchema = z.object({
@@ -69,15 +73,11 @@ export const registerIndependentInitiateSchema = z.object({
     .min(2, 'Name must be at least 2 characters')
     .max(100, 'Name must be at most 100 characters'),
   email: z.string().email('Enter valid email').optional(),
-  shopName: z
-    .string()
-    .min(2, 'Shop name must be at least 2 characters')
-    .max(100, 'Shop name must be at most 100 characters'),
-  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
-  address: addressSchema,
-  location: locationSchema,
-  shopLicenseUrl: z.string().url('Enter valid URL for shop license'),
-  ownerIdProofUrl: z.string().url('Enter valid URL for owner ID proof'),
+  documents: z.object({
+    shopLicense: z.string().url('Enter valid URL for shop license'),
+    ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
+  }),
+  shopDetails: shopDetailsSchema,
 });
 
 export const registerIndependentConfirmSchema = z.object({

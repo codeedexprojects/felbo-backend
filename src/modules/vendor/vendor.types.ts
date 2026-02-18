@@ -48,12 +48,17 @@ export interface RegisterAssociationInput {
   phone: string;
   ownerName: string;
   email?: string;
-  shopName: string;
-  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
-  address: AddressInput;
-  location: { longitude: number; latitude: number };
-  memberId: string;
-  idProofUrl: string;
+  associationMemberId: string;
+  associationIdProofUrl: string;
+  shopDetails: {
+    name: string;
+    type: 'MENS' | 'WOMENS' | 'UNISEX';
+    address: AddressInput;
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }
 
 export interface RegisterAssociationResponse {
@@ -64,12 +69,19 @@ export interface RegisterIndependentInitiateInput {
   phone: string;
   ownerName: string;
   email?: string;
-  shopName: string;
-  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
-  address: AddressInput;
-  location: { longitude: number; latitude: number };
-  shopLicenseUrl: string;
-  ownerIdProofUrl: string;
+  documents: {
+    shopLicense: string;
+    ownerIdProof: string;
+  };
+  shopDetails: {
+    name: string;
+    type: 'MENS' | 'WOMENS' | 'UNISEX';
+    address: AddressInput;
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }
 
 export interface RegisterIndependentInitiateResponse {
