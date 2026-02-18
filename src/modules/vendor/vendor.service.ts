@@ -15,6 +15,8 @@ import {
   RegisterIndependentConfirmResponse,
   RegistrationStatusResponse,
   VendorProfileDto,
+  ListVendorsFilter,
+  ListVendorsResponse,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -416,8 +418,54 @@ export default class VendorService {
       rejectedBy,
       reason,
     });
+  }
+  async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
+    const query: Record<string, unknown> = {};
 
-    // TODO: Queue FCM push notification via Bull queue
-    // `Your Felbo vendor application was not approved. Reason: ${reason}. Contact support.`
+    if (filter.verificationStatus) {
+      query.verificationStatus = filter.verificationStatus;
+    }
+
+    if (filter.status) {
+      query.status = filter.status;
+    }
+
+    if (filter.search) {
+      const regex = new RegExp(filter.search, 'i');
+      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
+    }
+
+    const { vendors, total } = await this.vendorRepository.findAll(
+      query,
+      filter.page,
+      filter.limit,
+    );
+
+    return {
+      vendors: vendors.map((v) => ({
+        id: v._id.toString(),
+        phone: v.phone,
+        ownerName: v.ownerName,
+        email: v.email || null,
+        registrationType: v.registrationType,
+        verificationStatus: v.verificationStatus,
+        status: v.status,
+        createdAt: v.createdAt,
+        shopDetails: v.shopDetails
+          ? {
+              name: v.shopDetails.name,
+              type: v.shopDetails.type,
+              address: v.shopDetails.address,
+            }
+          : undefined,
+        documents: v.documents,
+        associationIdProofUrl: v.associationIdProofUrl,
+        associationMemberId: v.associationMemberId,
+      })),
+      total,
+      page: filter.page,
+      limit: filter.limit,
+      totalPages: Math.ceil(total / filter.limit),
+    };
   }
 }

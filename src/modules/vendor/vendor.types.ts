@@ -164,3 +164,35 @@ export interface UpsertVendorData {
   verificationStatus: 'PENDING';
   status: 'PENDING';
 }
+
+export interface ListVendorsFilter {
+  page: number;
+  limit: number;
+  verificationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  search?: string;
+}
+
+export interface ListVendorsResponse {
+  vendors: (Omit<VendorProfileDto, 'registrationType' | 'verificationStatus' | 'status'> & {
+    registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
+    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+    status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+    createdAt: Date;
+    shopDetails?: {
+      name: string;
+      type: string;
+      address: AddressInput;
+    };
+    documents?: {
+      shopLicense?: string;
+      ownerIdProof?: string;
+    };
+    associationIdProofUrl?: string;
+    associationMemberId?: string;
+  })[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

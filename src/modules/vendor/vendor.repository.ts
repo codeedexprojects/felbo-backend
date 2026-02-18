@@ -71,4 +71,15 @@ export default class VendorRepository {
   ): Promise<IVendor | null> {
     return VendorModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
   }
+  findAll(
+    filter: Record<string, unknown>,
+    page: number,
+    limit: number,
+  ): Promise<{ vendors: IVendor[]; total: number }> {
+    const skip = (page - 1) * limit;
+    return Promise.all([
+      VendorModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      VendorModel.countDocuments(filter).exec(),
+    ]).then(([vendors, total]) => ({ vendors, total }));
+  }
 }
