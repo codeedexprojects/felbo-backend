@@ -11,7 +11,7 @@ async function bootstrap(): Promise<void> {
 
   // Start HTTP server
   app.listen(config.port, () => {
-    logger.info(`Server running on port ${config.port} [${config.node_env}]`);
+    logger.info(`Server running on port ${config.port} [${config.nodeEnv}]`);
   });
 }
 

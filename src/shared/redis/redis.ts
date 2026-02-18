@@ -10,7 +10,6 @@ export async function connectRedis(): Promise<RedisClientType> {
       host: config.redis.host,
       port: config.redis.port,
     },
-    password: config.redis.password,
   });
 
   redisClient.on('error', (err) => {
@@ -38,3 +37,5 @@ export async function disconnectRedis(): Promise<void> {
     logger.info('Redis disconnected');
   }
 }
+
+export { RedisClientType };
