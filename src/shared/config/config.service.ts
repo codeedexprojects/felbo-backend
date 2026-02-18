@@ -50,9 +50,9 @@ export const config = {
   },
 
   razorpay: {
-    keyId: getEnv('RAZORPAY_KEY_ID', ''),
-    keySecret: getEnv('RAZORPAY_KEY_SECRET', ''),
-    webhookSecret: getEnv('RAZORPAY_WEBHOOK_SECRET', ''),
+    keyId: getEnv('RAZORPAY_KEY_ID', '') || 'rzp_test_087135',
+    keySecret: getEnv('RAZORPAY_KEY_SECRET', '') || 'rzp_test_087135',
+    webhookSecret: getEnv('RAZORPAY_WEBHOOK_SECRET', '') || 'rzp_test_087135',
   },
 
   vendor: {

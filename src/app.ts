@@ -9,6 +9,7 @@ import { userRoutes } from './modules/user/user.routes';
 import { vendorRoutes } from './modules/vendor/vendor.routes';
 import { shopRoutes } from './modules/shop/shop.routes';
 import { paymentRoutes } from './modules/payment/payment.routes';
+import { adminRoutes } from './modules/admin/admin.routes';
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/vendors', vendorRoutes);
 app.use('/api/v1/shops', shopRoutes);
 app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 app.use(errorHandler);
 
