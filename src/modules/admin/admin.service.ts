@@ -5,13 +5,36 @@ import { AdminLoginInput, AdminLoginResponse, AdminDTO } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { UnauthorizedError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
+import VendorService from '../vendor/vendor.service';
+import { ListVendorsFilter, ListVendorsResponse } from '../vendor/vendor.types';
 
 export class AdminService {
   constructor(
     private readonly adminRepository: AdminRepository,
     private readonly jwtService: JwtService,
+    private readonly vendorService: VendorService,
     private readonly logger: Logger,
   ) {}
+
+  async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
+    return this.vendorService.listVendors(filter);
+  }
+
+  async listVerificationRequests(page: number, limit: number): Promise<ListVendorsResponse> {
+    return this.vendorService.listVendors({
+      page,
+      limit,
+      verificationStatus: 'PENDING',
+    });
+  }
+
+  async verifyVendor(vendorId: string, adminId: string): Promise<void> {
+    await this.vendorService.approveVendor(vendorId, adminId);
+  }
+
+  async rejectVendor(vendorId: string, adminId: string, reason: string): Promise<void> {
+    await this.vendorService.rejectVendor(vendorId, adminId, reason);
+  }
 
   async login(input: AdminLoginInput): Promise<AdminLoginResponse> {
     const { email, password } = input;
@@ -46,7 +69,7 @@ export class AdminService {
     const tokenPayload: TokenPayload = {
       userId: admin._id.toString(),
       phone: admin.phone,
-      role: 'ADMIN',
+      role: admin.role,
     };
 
     const token = this.jwtService.signToken(tokenPayload);
