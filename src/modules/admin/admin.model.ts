@@ -8,6 +8,7 @@ export interface IAdmin extends Document {
   email: string;
   phone: string;
   passwordHash: string;
+  refreshTokenHash?: string;
   role: AdminRole;
   status: AdminStatus;
   createdBy?: mongoose.Types.ObjectId;
@@ -38,6 +39,10 @@ const adminSchema = new Schema<IAdmin>(
     passwordHash: {
       type: String,
       required: true,
+      select: false,
+    },
+    refreshTokenHash: {
+      type: String,
       select: false,
     },
     role: {

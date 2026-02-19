@@ -9,6 +9,18 @@ export class AdminRepository {
       .exec();
   }
 
+  async findById(id: string): Promise<IAdmin | null> {
+    return AdminModel.findById(id).exec();
+  }
+
+  async findByIdWithRefreshToken(id: string): Promise<IAdmin | null> {
+    return AdminModel.findById(id).select('+refreshTokenHash').exec();
+  }
+
+  updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IAdmin | null> {
+    return AdminModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
+  }
+
   async updateLastLogin(id: string, session?: ClientSession): Promise<void> {
     await AdminModel.findByIdAndUpdate(id, { lastLoginAt: new Date() }, { session }).exec();
   }
