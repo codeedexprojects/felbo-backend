@@ -21,9 +21,11 @@ function getEnvInt(key: string, fallback: number): number {
   return parsed;
 }
 
+const isProduction = getEnv('NODE_ENV', 'development') === 'production';
+
 export const config = {
   nodeEnv: getEnv('NODE_ENV', 'development'),
-  isProduction: getEnv('NODE_ENV', 'development') === 'production',
+  isProduction,
   port: getEnvInt('PORT', 3000),
 
   mongo: {
@@ -38,8 +40,11 @@ export const config = {
 
   jwt: {
     secret: getEnv('JWT_SECRET', 'development_secret_key_change_in_production'),
-    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 30 * 24 * 60 * 60), // 30 days
+    refreshSecret: getEnv('JWT_REFRESH_SECRET', 'development_refresh_secret_change_in_production'),
+    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 15 * 60), // 15 minutes
     adminExpirySeconds: getEnvInt('JWT_ADMIN_EXPIRY_SECONDS', 8 * 60 * 60), // 8 hours
+    refreshExpiry: getEnv('JWT_REFRESH_EXPIRY', '30d'),
+    adminRefreshExpiry: getEnv('JWT_ADMIN_REFRESH_EXPIRY', '7d'),
   },
 
   otp: {
@@ -57,5 +62,18 @@ export const config = {
 
   vendor: {
     registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
+  },
+
+  admin: {
+    cookie: {
+      name: 'adminRefreshToken',
+      options: {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'strict' as const,
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days — matches JWT_ADMIN_REFRESH_EXPIRY
+        path: '/api/v1/admin',
+      },
+    },
   },
 } as const;

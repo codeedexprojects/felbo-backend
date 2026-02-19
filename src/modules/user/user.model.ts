@@ -7,6 +7,7 @@ export interface IUser extends Document {
   walletBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
+  refreshTokenHash?: string | null;
   lastLoginAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +42,11 @@ const userSchema = new Schema<IUser>(
       enum: ['ACTIVE', 'BLOCKED', 'DELETED'],
       default: 'ACTIVE',
       index: true,
+    },
+    refreshTokenHash: {
+      type: String,
+      default: null,
+      select: false,
     },
     lastLoginAt: {
       type: Date,

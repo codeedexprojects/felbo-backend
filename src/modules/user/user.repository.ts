@@ -12,6 +12,14 @@ export default class UserRepository {
     return UserModel.findById(id).exec();
   }
 
+  findByIdWithRefreshToken(id: string): Promise<IUser | null> {
+    return UserModel.findById(id).select('+refreshTokenHash').exec();
+  }
+
+  updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
+  }
+
   async create(data: { phone: string; name?: string }, session?: ClientSession): Promise<IUser> {
     const [user] = await UserModel.create([data], { session });
     return user;

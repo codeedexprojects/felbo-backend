@@ -22,3 +22,11 @@ export const listVendorsSchema = z.object({
 export const rejectVendorSchema = z.object({
   reason: z.string().min(1, 'Rejection reason is required').max(500, 'Reason too long'),
 });
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+export const vendorIdParamSchema = z.object({
+  id: z.string().min(1),
+});

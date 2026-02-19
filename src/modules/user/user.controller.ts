@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import UserService from './user.service';
-import { sendOtpSchema, verifyOtpSchema, updateProfileSchema } from './user.validators';
+import {
+  sendOtpSchema,
+  verifyOtpSchema,
+  updateProfileSchema,
+  refreshTokenSchema,
+} from './user.validators';
 
 export default class UserController {
   constructor(private readonly userService: UserService) {}
@@ -41,6 +46,25 @@ export default class UserController {
     res.status(200).json({
       success: true,
       data: result,
+    });
+  };
+
+  refreshToken = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = refreshTokenSchema.parse(req.body);
+    const result = await this.userService.refreshAccessToken(refreshToken);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  logout = async (req: Request, res: Response): Promise<void> => {
+    await this.userService.logout(req.user!.userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully.',
     });
   };
 }

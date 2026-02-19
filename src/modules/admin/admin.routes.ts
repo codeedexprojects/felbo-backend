@@ -7,8 +7,11 @@ import { authorize } from '../../shared/middleware/authorize';
 const router = Router();
 
 router.post('/login', adminController.login);
+router.post('/refresh-token', adminController.refreshToken);
 
 router.use(authenticate);
+
+router.post('/logout', adminController.logout);
 
 router.get('/vendors', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.listVendors);
 

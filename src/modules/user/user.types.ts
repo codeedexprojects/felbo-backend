@@ -40,6 +40,7 @@ export interface VerifyOtpInput {
 
 export interface VerifyOtpResponse {
   token: string;
+  refreshToken: string;
   isNewUser: boolean;
   user: {
     id: string;
@@ -48,4 +49,9 @@ export interface VerifyOtpResponse {
     email: string | null;
     walletBalance: number;
   };
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
 }
