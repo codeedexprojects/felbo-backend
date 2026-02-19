@@ -145,8 +145,7 @@ shopSchema.index({ onboardingStatus: 1 });
 
 export const ShopModel = mongoose.model<IShop>('Shop', shopSchema);
 
-// --- Service Model ---
-
+// Service Model
 export interface IService extends Document {
   shopId: mongoose.Types.ObjectId;
   name: string;
@@ -175,7 +174,7 @@ serviceSchema.index({ shopId: 1, name: 1 }, { unique: true });
 
 export const ServiceModel = mongoose.model<IService>('Service', serviceSchema);
 
-// --- Barber Model ---
+// Barber Model
 
 export interface IBarber extends Document {
   shopId: mongoose.Types.ObjectId;

@@ -35,8 +35,6 @@ export default class ShopService {
     private readonly logger: Logger,
   ) {}
 
-  // --- DTO mappers ---
-
   private toShopDto(shop: IShop): ShopDto {
     return {
       id: shop._id.toString(),
@@ -97,8 +95,6 @@ export default class ShopService {
     };
   }
 
-  // --- Helpers ---
-
   private async assertShopOwnership(shopId: string, vendorId: string): Promise<IShop> {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') {
@@ -109,8 +105,6 @@ export default class ShopService {
     }
     return shop;
   }
-
-  // --- Shop CRUD ---
 
   async createShopForVendor(input: CreateShopInput, session?: ClientSession): Promise<ShopDto> {
     const shop = await this.shopRepository.create(input, session);
