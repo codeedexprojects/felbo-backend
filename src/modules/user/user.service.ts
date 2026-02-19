@@ -8,6 +8,7 @@ import {
   SendOtpResponse,
   VerifyOtpInput,
   VerifyOtpResponse,
+  RefreshTokenResponse,
 } from './user.types';
 import { IUser } from './user.model';
 import {
@@ -120,6 +121,10 @@ export default class UserService {
     };
 
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.userRepository.updateRefreshToken(user._id.toString(), refreshTokenHash);
 
     this.logger.info({
       action: 'USER_AUTHENTICATED',
@@ -131,9 +136,53 @@ export default class UserService {
 
     return {
       token,
+      refreshToken,
       isNewUser,
       user: this.toVerifyOtpUserDto(user),
     };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
+
+    const user = await this.userRepository.findByIdWithRefreshToken(decoded.userId);
+
+    if (!user || user.status === 'BLOCKED' || user.status === 'DELETED') {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    if (!user.refreshTokenHash) {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const isValid = this.jwtService.compareTokenHash(refreshToken, user.refreshTokenHash);
+
+    if (!isValid) {
+      await this.userRepository.updateRefreshToken(user._id.toString(), null);
+      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+        userId: user._id,
+      });
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const tokenPayload: TokenPayload = {
+      userId: user._id.toString(),
+      phone: user.phone,
+      role: 'USER',
+    };
+
+    const newToken = this.jwtService.signToken(tokenPayload);
+    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
+    await this.userRepository.updateRefreshToken(user._id.toString(), newRefreshTokenHash);
+
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.userRepository.updateRefreshToken(userId, null);
+    this.logger.info('User logged out', { userId });
   }
 
   async getProfile(userId: string): Promise<UserProfileDto> {

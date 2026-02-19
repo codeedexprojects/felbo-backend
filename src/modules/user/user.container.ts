@@ -15,7 +15,12 @@ const otpService = config.isProduction
 
 const otpSessionService = new OtpSessionService();
 
-const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
+const jwtService = new JwtService(
+  config.jwt.secret,
+  config.jwt.expirySeconds,
+  config.jwt.refreshSecret,
+  config.jwt.refreshExpiry,
+);
 
 const userService = new UserService(
   userRepository,

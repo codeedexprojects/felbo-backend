@@ -20,5 +20,6 @@ export interface AdminLoginInput {
 
 export interface AdminLoginResponse {
   token: string;
+  refreshToken: string;
   admin: AdminDTO;
 }

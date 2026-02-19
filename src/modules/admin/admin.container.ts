@@ -9,7 +9,12 @@ import { vendorService } from '../vendor/vendor.container';
 
 const adminRepository = new AdminRepository();
 
-const jwtService = new JwtService(config.jwt.secret, config.jwt.adminExpirySeconds);
+const jwtService = new JwtService(
+  config.jwt.secret,
+  config.jwt.adminExpirySeconds,
+  config.jwt.refreshSecret,
+  config.jwt.adminRefreshExpiry,
+);
 
 const adminService = new AdminService(adminRepository, jwtService, vendorService, logger);
 

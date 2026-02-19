@@ -23,3 +23,7 @@ export const updateProfileSchema = z.object({
   name: z.string().min(2, 'Enter valid name').max(50, 'Enter valid name').trim().optional(),
   email: z.string().email('Enter valid email').optional().or(z.literal('')),
 });
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
