@@ -419,6 +419,7 @@ export default class VendorService {
       reason,
     });
   }
+
   async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
     const query: Record<string, unknown> = {};
 

@@ -173,24 +173,33 @@ export interface ListVendorsFilter {
   search?: string;
 }
 
+export interface VendorListItemDto {
+  id: string;
+  phone: string;
+  ownerName: string;
+  email: string | null;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  createdAt: Date;
+
+  shopDetails?: {
+    name: string;
+    type: string;
+    address: AddressInput;
+  };
+
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+
+  associationIdProofUrl?: string;
+  associationMemberId?: string;
+}
+
 export interface ListVendorsResponse {
-  vendors: (Omit<VendorProfileDto, 'registrationType' | 'verificationStatus' | 'status'> & {
-    registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
-    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
-    status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-    createdAt: Date;
-    shopDetails?: {
-      name: string;
-      type: string;
-      address: AddressInput;
-    };
-    documents?: {
-      shopLicense?: string;
-      ownerIdProof?: string;
-    };
-    associationIdProofUrl?: string;
-    associationMemberId?: string;
-  })[];
+  vendors: VendorListItemDto[];
   total: number;
   page: number;
   limit: number;
