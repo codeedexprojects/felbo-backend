@@ -15,6 +15,11 @@ router.patch(
   shopController.updateWorkingHours,
 );
 
+// Onboarding routes (protected, vendor only)
+router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
+router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
+router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
+
 // Public discovery routes
 router.get('/nearby', shopController.getNearbyShops);
 router.get('/search', shopController.searchShops);

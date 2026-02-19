@@ -6,6 +6,10 @@ import {
   nearbyShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
+  shopIdOnboardingParamSchema,
+  completeProfileSchema,
+  addServiceSchema,
+  addBarberSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -35,6 +39,39 @@ export default class ShopController {
     const result = await this.shopService.updateWorkingHours(req.user!.userId, validated);
 
     res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  completeProfile = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = completeProfileSchema.parse(req.body);
+    const result = await this.shopService.completeProfile(shopId, req.user!.userId, validated);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  addService = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = addServiceSchema.parse(req.body);
+    const result = await this.shopService.addService(shopId, req.user!.userId, validated);
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  addBarber = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = addBarberSchema.parse(req.body);
+    const result = await this.shopService.addBarber(shopId, req.user!.userId, validated);
+
+    res.status(201).json({
       success: true,
       data: result,
     });

@@ -55,7 +55,10 @@ export default class VendorService {
     };
   }
 
-  private toProfileDto(vendor: IVendor): VendorProfileDto {
+  private toProfileDto(
+    vendor: IVendor,
+    onboardingStatus: VendorProfileDto['onboardingStatus'],
+  ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
       phone: vendor.phone,
@@ -64,7 +67,19 @@ export default class VendorService {
       registrationType: vendor.registrationType,
       verificationStatus: vendor.verificationStatus,
       status: vendor.status,
+      onboardingStatus,
     };
+  }
+
+  private async getShopOnboardingStatus(
+    vendorId: string,
+  ): Promise<VendorProfileDto['onboardingStatus']> {
+    try {
+      const shop = await this.shopService.getMyShop(vendorId);
+      return shop.onboardingStatus;
+    } catch {
+      return null;
+    }
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
@@ -129,6 +144,8 @@ export default class VendorService {
 
     const token = this.jwtService.signToken(tokenPayload);
 
+    const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
+
     this.logger.info({
       action: 'VENDOR_LOGIN',
       module: 'vendor',
@@ -136,7 +153,7 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, vendor: this.toVendorDto(vendor) };
+    return { token, vendor: this.toVendorDto(vendor), onboardingStatus };
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -178,9 +195,11 @@ export default class VendorService {
       if (existing.verificationStatus === 'APPROVED') {
         throw new ConflictError('Account already exists. Please login.');
       }
+
       if (existing.verificationStatus === 'PENDING') {
         throw new ConflictError('Application already under review.');
       }
+
       if (existing.verificationStatus === 'REJECTED') {
         throw new ForbiddenError('Contact support to reapply.');
       }
@@ -318,7 +337,9 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    return this.toProfileDto(vendor);
+    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+
+    return this.toProfileDto(vendor, onboardingStatus);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
@@ -326,6 +347,7 @@ export default class VendorService {
     if (!vendor) {
       throw new NotFoundError('Vendor not found.');
     }
+
     if (vendor.verificationStatus !== 'PENDING') {
       throw new ConflictError('Vendor is not awaiting verification.');
     }

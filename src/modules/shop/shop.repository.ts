@@ -1,5 +1,14 @@
 import { ClientSession, PipelineStage } from 'mongoose';
-import { ShopModel, IShop } from './shop.model';
+import {
+  ShopModel,
+  IShop,
+  ServiceModel,
+  IService,
+  BarberModel,
+  IBarber,
+  BarberServiceModel,
+  IBarberService,
+} from './shop.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
@@ -20,6 +29,7 @@ export default class ShopRepository {
           location: data.location,
           isActive: true,
           status: 'ACTIVE',
+          onboardingStatus: 'PENDING_PROFILE',
         },
       ],
       { session },
@@ -57,6 +67,37 @@ export default class ShopRepository {
     ).exec();
   }
 
+  completeProfile(
+    id: string,
+    data: { description: string; workingHours: WorkingHours; photos: string[] },
+    onboardingStatus: string,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          description: data.description,
+          workingHours: data.workingHours,
+          photos: data.photos,
+          onboardingStatus,
+        },
+      },
+      { new: true },
+    ).exec();
+  }
+
+  updateOnboardingStatus(
+    id: string,
+    onboardingStatus: string,
+    session?: ClientSession,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: { onboardingStatus } },
+      { new: true, session },
+    ).exec();
+  }
+
   async findNearby(
     longitude: number,
     latitude: number,
@@ -68,6 +109,7 @@ export default class ShopRepository {
     const matchStage: Record<string, unknown> = {
       status: 'ACTIVE',
       isActive: true,
+      onboardingStatus: 'COMPLETED',
     };
     if (filter.shopType) {
       matchStage.shopType = filter.shopType;
@@ -104,6 +146,7 @@ export default class ShopRepository {
     const matchFilter: Record<string, unknown> = {
       status: 'ACTIVE',
       isActive: true,
+      onboardingStatus: 'COMPLETED',
     };
     if (filter.city) {
       matchFilter['address.city'] = { $regex: filter.city, $options: 'i' };
@@ -119,5 +162,99 @@ export default class ShopRepository {
     ];
 
     return ShopModel.find(matchFilter).skip(skip).limit(limit).exec();
+  }
+
+  // --- Service operations ---
+
+  async createService(
+    data: {
+      shopId: string;
+      name: string;
+      basePrice: number;
+      baseDuration: number;
+      description?: string;
+    },
+    session?: ClientSession,
+  ): Promise<IService> {
+    const [service] = await ServiceModel.create(
+      [
+        {
+          shopId: data.shopId,
+          name: data.name,
+          basePrice: data.basePrice,
+          baseDuration: data.baseDuration,
+          description: data.description,
+          isActive: true,
+        },
+      ],
+      { session },
+    );
+    return service;
+  }
+
+  countActiveServices(shopId: string, session?: ClientSession): Promise<number> {
+    return ServiceModel.countDocuments({ shopId, isActive: true })
+      .session(session ?? null)
+      .exec();
+  }
+
+  findActiveServicesByIds(serviceIds: string[], shopId: string): Promise<IService[]> {
+    return ServiceModel.find({ _id: { $in: serviceIds }, shopId, isActive: true }).exec();
+  }
+
+  // --- Barber operations ---
+
+  async createBarber(
+    data: { shopId: string; name: string; phone: string; photo?: string },
+    session?: ClientSession,
+  ): Promise<IBarber> {
+    const [barber] = await BarberModel.create(
+      [
+        {
+          shopId: data.shopId,
+          name: data.name,
+          phone: data.phone,
+          photo: data.photo,
+          isActive: true,
+        },
+      ],
+      { session },
+    );
+    return barber;
+  }
+
+  countActiveBarbers(shopId: string, session?: ClientSession): Promise<number> {
+    return BarberModel.countDocuments({ shopId, isActive: true })
+      .session(session ?? null)
+      .exec();
+  }
+
+  // --- BarberService operations ---
+
+  createBarberServices(
+    data: Array<{
+      barberId: string;
+      serviceId: string;
+      shopId: string;
+      price: number;
+      duration: number;
+    }>,
+    session?: ClientSession,
+  ): Promise<IBarberService[]> {
+    return BarberServiceModel.create(
+      data.map((d) => ({
+        barberId: d.barberId,
+        serviceId: d.serviceId,
+        shopId: d.shopId,
+        price: d.price,
+        duration: d.duration,
+        isActive: true,
+      })),
+      { session },
+    );
+  }
+
+  findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ barberId, isActive: true }).exec();
   }
 }
