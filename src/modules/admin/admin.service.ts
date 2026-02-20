@@ -7,6 +7,7 @@ import { UnauthorizedError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
 import VendorService from '../vendor/vendor.service';
 import { ListVendorsFilter, ListVendorsResponse } from '../vendor/vendor.types';
+
 export class AdminService {
   constructor(
     private readonly adminRepository: AdminRepository,
