@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { Logger } from 'winston';
 import { AdminRepository } from './admin.repository';
 import { AdminLoginInput, AdminLoginResponse, AdminDTO } from './admin.types';
@@ -7,6 +6,7 @@ import { UnauthorizedError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
 import VendorService from '../vendor/vendor.service';
 import { ListVendorsFilter, ListVendorsResponse } from '../vendor/vendor.types';
+import { comparePassword } from '../../shared/utils/password';
 
 export class AdminService {
   constructor(
@@ -56,7 +56,7 @@ export class AdminService {
       throw new UnauthorizedError('Account is inactive. Contact super admin.');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
+    const isPasswordValid = await comparePassword(password, admin.passwordHash);
 
     if (!isPasswordValid) {
       this.logger.warn('Admin login failed: invalid password', {
