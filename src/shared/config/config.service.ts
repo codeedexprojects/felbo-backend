@@ -33,6 +33,7 @@ export const config = {
   },
 
   redis: {
+    url: process.env.REDIS_URL || undefined,
     host: getEnv('REDIS_HOST', 'localhost'),
     port: getEnvInt('REDIS_PORT', 6379),
     password: process.env.REDIS_PASSWORD || undefined,
