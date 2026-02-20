@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodError } from 'zod';
+import z, { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 import { logger } from '../logger/logger';
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
+  logger.error('Dev error:', err);
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,
@@ -16,12 +17,13 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }
 
   if (err instanceof ZodError) {
-    const firstIssue = err.issues[0];
+    const flattened = z.flattenError(err);
     res.status(400).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
-        message: firstIssue?.message || 'Validation failed',
+        message: 'Validation failed',
+        fieldErrors: flattened.fieldErrors,
       },
     });
     return;
