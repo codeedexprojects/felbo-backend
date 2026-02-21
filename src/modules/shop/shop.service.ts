@@ -100,9 +100,11 @@ export default class ShopService {
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
+
     if (shop.vendorId.toString() !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+
     return shop;
   }
 
@@ -119,22 +121,18 @@ export default class ShopService {
     return this.toShopDto(shop);
   }
 
-  async getMyShop(vendorId: string): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
+  async getMyShops(vendorId: string): Promise<ShopDto[]> {
+    const shops = await this.shopRepository.findAllByVendorId(vendorId);
+    return shops.map((shop) => this.toShopDto(shop));
+  }
+
+  async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
     return this.toShopDto(shop);
   }
 
-  async updateMyShop(vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
-    if (shop.status === 'DELETED') {
-      throw new ForbiddenError('Cannot update a deleted shop.');
-    }
+  async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -164,11 +162,12 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async updateWorkingHours(vendorId: string, input: UpdateWorkingHoursInput): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
+  async updateWorkingHours(
+    shopId: string,
+    vendorId: string,
+    input: UpdateWorkingHoursInput,
+  ): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),

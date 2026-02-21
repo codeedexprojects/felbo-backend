@@ -55,9 +55,11 @@ export default class VendorRepository {
     session?: ClientSession,
   ): Promise<IVendor | null> {
     const update: Record<string, unknown> = { verificationStatus: status };
+
     if (note !== undefined) {
       update.verificationNote = note;
     }
+
     if (status === 'APPROVED') {
       update.verifiedAt = new Date();
     }

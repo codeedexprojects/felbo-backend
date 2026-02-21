@@ -77,8 +77,24 @@ export default class VendorService {
     vendorId: string,
   ): Promise<VendorProfileDto['onboardingStatus']> {
     try {
-      const shop = await this.shopService.getMyShop(vendorId);
-      return shop.onboardingStatus;
+      const shops = await this.shopService.getMyShops(vendorId);
+      if (shops.length === 0) return null;
+
+      // Return the least-progressed onboarding status across all shops
+      const statusPriority: Record<string, number> = {
+        PENDING_PROFILE: 0,
+        PENDING_SERVICES: 1,
+        PENDING_BARBERS: 2,
+        COMPLETED: 3,
+      };
+
+      const leastProgressed = shops.reduce((min, shop) =>
+        (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+          ? shop
+          : min,
+      );
+
+      return leastProgressed.onboardingStatus;
     } catch {
       return null;
     }

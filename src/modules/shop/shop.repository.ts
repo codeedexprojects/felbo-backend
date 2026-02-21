@@ -41,8 +41,8 @@ export default class ShopRepository {
     return ShopModel.findById(id).exec();
   }
 
-  findByVendorId(vendorId: string): Promise<IShop | null> {
-    return ShopModel.findOne({ vendorId }).exec();
+  findAllByVendorId(vendorId: string): Promise<IShop[]> {
+    return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
   }
 
   updateById(
