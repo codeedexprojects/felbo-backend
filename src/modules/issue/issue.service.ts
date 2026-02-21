@@ -9,6 +9,7 @@ export class IssueService {
 
   async listIssues(filter: ListIssuesFilter): Promise<ListIssuesResponse> {
     const { issues, total } = await this.issueRepository.findAll(filter);
+    const counts = await this.issueRepository.getStatusCounts();
 
     return {
       issues: issues.map(this.toDTO),
@@ -16,6 +17,7 @@ export class IssueService {
       page: filter.page,
       limit: filter.limit,
       totalPages: Math.ceil(total / filter.limit),
+      counts,
     };
   }
 

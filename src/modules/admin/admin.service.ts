@@ -32,11 +32,12 @@ export class AdminService {
   }
 
   async listVendors(filter: ListVendorsFilter, callerRole: string): Promise<ListVendorsResponse> {
-    if (callerRole === 'ASSOCIATION_ADMIN') {
-      filter.registrationType = 'ASSOCIATION';
-    }
+    const effectiveFilter: ListVendorsFilter =
+      callerRole === 'ASSOCIATION_ADMIN'
+        ? { ...filter, registrationType: 'ASSOCIATION' }
+        : { ...filter };
 
-    return this.vendorService.listVendors(filter);
+    return this.vendorService.listVendors(effectiveFilter);
   }
 
   async listVerificationRequests(
