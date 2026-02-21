@@ -2,10 +2,15 @@ import { Logger } from 'winston';
 import { AdminRepository } from './admin.repository';
 import { AdminLoginInput, AdminLoginResponse, AdminDTO } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import { UnauthorizedError } from '../../shared/errors/index';
+import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
 import VendorService from '../vendor/vendor.service';
-import { ListVendorsFilter, ListVendorsResponse } from '../vendor/vendor.types';
+import {
+  ListVendorsFilter,
+  ListVendorsResponse,
+  ListVerificationRequestsResponse,
+  VendorAdminDetail,
+} from '../vendor/vendor.types';
 import { comparePassword } from '../../shared/utils/password';
 
 export class AdminService {
@@ -16,16 +21,29 @@ export class AdminService {
     private readonly logger: Logger,
   ) {}
 
-  async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
+  async getVendorDetail(vendorId: string, callerRole: string): Promise<VendorAdminDetail> {
+    const detail = await this.vendorService.getVendorDetailForAdmin(vendorId);
+
+    if (callerRole === 'ASSOCIATION_ADMIN' && detail.registrationType !== 'ASSOCIATION') {
+      throw new ForbiddenError('Access denied. You can only view association vendors.');
+    }
+
+    return detail;
+  }
+
+  async listVendors(filter: ListVendorsFilter, callerRole: string): Promise<ListVendorsResponse> {
+    if (callerRole === 'ASSOCIATION_ADMIN') {
+      filter.registrationType = 'ASSOCIATION';
+    }
+
     return this.vendorService.listVendors(filter);
   }
 
-  async listVerificationRequests(page: number, limit: number): Promise<ListVendorsResponse> {
-    return this.vendorService.listVendors({
-      page,
-      limit,
-      verificationStatus: 'PENDING',
-    });
+  async listVerificationRequests(
+    page: number,
+    limit: number,
+  ): Promise<ListVerificationRequestsResponse> {
+    return this.vendorService.listVerificationRequests(page, limit);
   }
 
   async verifyVendor(vendorId: string, adminId: string): Promise<void> {

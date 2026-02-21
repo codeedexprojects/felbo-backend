@@ -17,6 +17,8 @@ import {
   VendorProfileDto,
   ListVendorsFilter,
   ListVendorsResponse,
+  ListVerificationRequestsResponse,
+  VendorAdminDetail,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -420,6 +422,78 @@ export default class VendorService {
     });
   }
 
+  async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    let shop: VendorAdminDetail['shop'] = null;
+    let barbers: VendorAdminDetail['barbers'] = [];
+    let services: VendorAdminDetail['services'] = [];
+
+    const shopDto = await this.shopService.findShopByVendorId(vendorId);
+
+    if (shopDto) {
+      shop = {
+        id: shopDto.id,
+        name: shopDto.name,
+        shopType: shopDto.shopType,
+        phone: shopDto.phone,
+        address: shopDto.address,
+        rating: shopDto.rating,
+        onboardingStatus: shopDto.onboardingStatus,
+        status: shopDto.status,
+        isActive: shopDto.isActive,
+      };
+
+      const barberDtos = await this.shopService.getBarbersByShopId(shopDto.id);
+      const serviceDtos = await this.shopService.getServicesByShopId(shopDto.id);
+
+      barbers = barberDtos.map((b) => ({
+        id: b.id,
+        name: b.name,
+        phone: b.phone,
+        photo: b.photo,
+        isActive: b.isActive,
+      }));
+
+      services = serviceDtos.map((s) => ({
+        id: s.id,
+        name: s.name,
+        basePrice: s.basePrice,
+        baseDuration: s.baseDuration,
+        description: s.description,
+      }));
+    }
+
+    return {
+      id: vendor._id.toString(),
+      phone: vendor.phone,
+      email: vendor.email || null,
+      ownerName: vendor.ownerName,
+      registrationType: vendor.registrationType,
+      registrationDate: vendor.createdAt,
+      verificationStatus: vendor.verificationStatus,
+      verificationNote: vendor.verificationNote,
+      verifiedAt: vendor.verifiedAt,
+      status: vendor.status,
+      isBlocked: vendor.isBlocked,
+      isFlagged: vendor.isFlagged,
+      documents: vendor.documents,
+      associationMemberId: vendor.associationMemberId,
+      associationIdProofUrl: vendor.associationIdProofUrl,
+      cancellationCount: vendor.cancellationCount,
+      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      shop,
+      barbers,
+      barberCount: barbers.length,
+      services,
+      serviceCount: services.length,
+      recentBookings: [],
+    };
+  }
+
   async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
     const query: Record<string, unknown> = {};
 
@@ -429,6 +503,10 @@ export default class VendorService {
 
     if (filter.status) {
       query.status = filter.status;
+    }
+
+    if (filter.registrationType) {
+      query.registrationType = filter.registrationType;
     }
 
     if (filter.search) {
@@ -441,6 +519,7 @@ export default class VendorService {
       filter.page,
       filter.limit,
     );
+    const counts = await this.vendorRepository.getStatusCounts();
 
     return {
       vendors: vendors.map((v) => ({
@@ -467,6 +546,47 @@ export default class VendorService {
       page: filter.page,
       limit: filter.limit,
       totalPages: Math.ceil(total / filter.limit),
+      counts,
+    };
+  }
+
+  async listVerificationRequests(
+    page: number,
+    limit: number,
+  ): Promise<ListVerificationRequestsResponse> {
+    const { vendors, total } = await this.vendorRepository.findAll(
+      { verificationStatus: 'PENDING' },
+      page,
+      limit,
+    );
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+
+    return {
+      vendors: vendors.map((v) => ({
+        id: v._id.toString(),
+        phone: v.phone,
+        ownerName: v.ownerName,
+        email: v.email || null,
+        registrationType: v.registrationType,
+        verificationStatus: v.verificationStatus,
+        status: v.status,
+        createdAt: v.createdAt,
+        shopDetails: v.shopDetails
+          ? {
+              name: v.shopDetails.name,
+              type: v.shopDetails.type,
+              address: v.shopDetails.address,
+            }
+          : undefined,
+        documents: v.documents,
+        associationIdProofUrl: v.associationIdProofUrl,
+        associationMemberId: v.associationMemberId,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      counts,
     };
   }
 }
