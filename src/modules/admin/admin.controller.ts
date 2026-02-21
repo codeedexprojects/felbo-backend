@@ -69,6 +69,7 @@ export class AdminController {
         limit: validated.limit,
         status: validated.status,
         verificationStatus: validated.verificationStatus,
+        registrationType: validated.registrationType,
         search: validated.search,
       },
       callerRole,

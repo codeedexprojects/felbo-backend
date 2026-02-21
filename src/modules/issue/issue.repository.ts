@@ -31,6 +31,20 @@ export class IssueRepository {
     return { issues, total };
   }
 
+  async getStatusCounts(): Promise<{
+    total: number;
+    open: number;
+    resolved: number;
+    rejected: number;
+  }> {
+    const total = await BookingIssueModel.countDocuments().exec();
+    const open = await BookingIssueModel.countDocuments({ status: 'OPEN' }).exec();
+    const resolved = await BookingIssueModel.countDocuments({ status: 'RESOLVED' }).exec();
+    const rejected = await BookingIssueModel.countDocuments({ status: 'REJECTED' }).exec();
+
+    return { total, open, resolved, rejected };
+  }
+
   async findById(id: string): Promise<PopulatedBookingIssue | null> {
     return BookingIssueModel.findById(id)
       .populate<{ userId: PopulatedBookingIssue['userId'] }>('userId', 'name phone')

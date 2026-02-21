@@ -447,8 +447,10 @@ export default class VendorService {
         isActive: shopDto.isActive,
       };
 
-      const barberDtos = await this.shopService.getBarbersByShopId(shopDto.id);
-      const serviceDtos = await this.shopService.getServicesByShopId(shopDto.id);
+      const [barberDtos, serviceDtos] = await Promise.all([
+        this.shopService.getBarbersByShopId(shopDto.id),
+        this.shopService.getServicesByShopId(shopDto.id),
+      ]);
 
       barbers = barberDtos.map((b) => ({
         id: b.id,
@@ -519,7 +521,7 @@ export default class VendorService {
       filter.page,
       filter.limit,
     );
-    const counts = await this.vendorRepository.getStatusCounts();
+    const counts = await this.vendorRepository.getStatusCounts(filter.registrationType);
 
     return {
       vendors: vendors.map((v) => ({
