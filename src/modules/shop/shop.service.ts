@@ -127,6 +127,11 @@ export default class ShopService {
     return this.toShopDto(shop);
   }
 
+  async findShopByVendorId(vendorId: string): Promise<ShopDto | null> {
+    const shop = await this.shopRepository.findByVendorId(vendorId);
+    return shop ? this.toShopDto(shop) : null;
+  }
+
   async updateMyShop(vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
     const shop = await this.shopRepository.findByVendorId(vendorId);
     if (!shop) {
@@ -404,5 +409,15 @@ export default class ShopService {
     );
 
     return shops.map((s) => this.toShopDto(s));
+  }
+
+  async getBarbersByShopId(shopId: string): Promise<BarberDto[]> {
+    const barbers = await this.shopRepository.findBarbersByShopId(shopId);
+    return barbers.map((b) => this.toBarberDto(b, []));
+  }
+
+  async getServicesByShopId(shopId: string): Promise<ServiceDto[]> {
+    const services = await this.shopRepository.findServicesByShopId(shopId);
+    return services.map((s) => this.toServiceDto(s));
   }
 }

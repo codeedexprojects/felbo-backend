@@ -71,6 +71,41 @@ export default class VendorRepository {
   ): Promise<IVendor | null> {
     return VendorModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
   }
+
+  async getStatusCounts(): Promise<{
+    total: number;
+    active: number;
+    pendingVerification: number;
+    suspended: number;
+  }> {
+    const total = await VendorModel.countDocuments().exec();
+    const active = await VendorModel.countDocuments({ status: 'ACTIVE' }).exec();
+    const pendingVerification = await VendorModel.countDocuments({
+      verificationStatus: 'PENDING',
+    }).exec();
+    const suspended = await VendorModel.countDocuments({ status: 'SUSPENDED' }).exec();
+
+    return { total, active, pendingVerification, suspended };
+  }
+
+  async getVerificationRequestCounts(): Promise<{
+    pending: number;
+    association: number;
+    independent: number;
+  }> {
+    const pending = await VendorModel.countDocuments({ verificationStatus: 'PENDING' }).exec();
+    const association = await VendorModel.countDocuments({
+      verificationStatus: 'PENDING',
+      registrationType: 'ASSOCIATION',
+    }).exec();
+    const independent = await VendorModel.countDocuments({
+      verificationStatus: 'PENDING',
+      registrationType: 'INDEPENDENT',
+    }).exec();
+
+    return { pending, association, independent };
+  }
+
   async findAll(
     filter: Record<string, unknown>,
     page: number,

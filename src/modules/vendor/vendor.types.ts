@@ -171,6 +171,7 @@ export interface ListVendorsFilter {
   verificationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   search?: string;
+  registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
 }
 
 export interface VendorListItemDto {
@@ -198,10 +199,84 @@ export interface VendorListItemDto {
   associationMemberId?: string;
 }
 
+export interface VendorStatusCounts {
+  total: number;
+  active: number;
+  pendingVerification: number;
+  suspended: number;
+}
+
 export interface ListVendorsResponse {
   vendors: VendorListItemDto[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  counts: VendorStatusCounts;
+}
+
+export interface VerificationRequestCounts {
+  pending: number;
+  association: number;
+  independent: number;
+}
+
+export interface ListVerificationRequestsResponse {
+  vendors: VendorListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  counts: VerificationRequestCounts;
+}
+
+export interface VendorAdminDetail {
+  id: string;
+  phone: string;
+  email: string | null;
+  ownerName: string;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  registrationDate: Date;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationNote?: string;
+  verifiedAt?: Date;
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  isBlocked: boolean;
+  isFlagged: boolean;
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+  associationMemberId?: string;
+  associationIdProofUrl?: string;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+  shop: {
+    id: string;
+    name: string;
+    shopType: string;
+    phone: string;
+    address: AddressInput;
+    rating: { average: number; count: number };
+    onboardingStatus: string;
+    status: string;
+    isActive: boolean;
+  } | null;
+  barbers: {
+    id: string;
+    name: string;
+    phone: string;
+    photo?: string;
+    isActive: boolean;
+  }[];
+  barberCount: number;
+  services: {
+    id: string;
+    name: string;
+    basePrice: number;
+    baseDuration: number;
+    description?: string;
+  }[];
+  serviceCount: number;
+  recentBookings: unknown[];
 }

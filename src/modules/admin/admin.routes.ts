@@ -13,12 +13,22 @@ router.use(authenticate);
 
 router.post('/logout', adminController.logout);
 
-router.get('/vendors', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.listVendors);
+router.get(
+  '/vendors',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN', 'ASSOCIATION_ADMIN'),
+  adminController.listVendors,
+);
 
 router.get(
   '/vendors/requests',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),
   adminController.listVerificationRequests,
+);
+
+router.get(
+  '/vendors/:id',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN', 'ASSOCIATION_ADMIN'),
+  adminController.getVendorDetail,
 );
 
 router.post(

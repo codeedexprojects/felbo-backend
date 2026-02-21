@@ -257,4 +257,12 @@ export default class ShopRepository {
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ barberId, isActive: true }).exec();
   }
+
+  findBarbersByShopId(shopId: string): Promise<IBarber[]> {
+    return BarberModel.find({ shopId, isActive: true }).exec();
+  }
+
+  findServicesByShopId(shopId: string): Promise<IService[]> {
+    return ServiceModel.find({ shopId, isActive: true }).exec();
+  }
 }
