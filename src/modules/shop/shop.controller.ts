@@ -18,6 +18,9 @@ export default class ShopController {
   getMyShops = async (req: Request, res: Response): Promise<void> => {
     const result = await this.shopService.getMyShops(req.user!.userId);
 
+    // eslint-disable-next-line no-console
+    console.log('hello');
+
     res.status(200).json({
       success: true,
       data: result,
