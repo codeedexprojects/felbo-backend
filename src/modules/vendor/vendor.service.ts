@@ -79,8 +79,24 @@ export default class VendorService {
     vendorId: string,
   ): Promise<VendorProfileDto['onboardingStatus']> {
     try {
-      const shop = await this.shopService.getMyShop(vendorId);
-      return shop.onboardingStatus;
+      const shops = await this.shopService.getMyShops(vendorId);
+      if (shops.length === 0) return null;
+
+      // Return the least-progressed onboarding status across all shops
+      const statusPriority: Record<string, number> = {
+        PENDING_PROFILE: 0,
+        PENDING_SERVICES: 1,
+        PENDING_BARBERS: 2,
+        COMPLETED: 3,
+      };
+
+      const leastProgressed = shops.reduce((min, shop) =>
+        (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+          ? shop
+          : min,
+      );
+
+      return leastProgressed.onboardingStatus;
     } catch {
       return null;
     }
@@ -424,49 +440,72 @@ export default class VendorService {
 
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
     const vendor = await this.vendorRepository.findById(vendorId);
+
     if (!vendor) {
       throw new NotFoundError('Vendor not found.');
     }
 
-    let shop: VendorAdminDetail['shop'] = null;
-    let barbers: VendorAdminDetail['barbers'] = [];
-    let services: VendorAdminDetail['services'] = [];
+    const shopDtos = await this.shopService.getMyShops(vendorId);
 
-    const shopDto = await this.shopService.findShopByVendorId(vendorId);
+    const shopIds = shopDtos.map((shop) => shop.id);
 
-    if (shopDto) {
-      shop = {
-        id: shopDto.id,
-        name: shopDto.name,
-        shopType: shopDto.shopType,
-        phone: shopDto.phone,
-        address: shopDto.address,
-        rating: shopDto.rating,
-        onboardingStatus: shopDto.onboardingStatus,
-        status: shopDto.status,
-        isActive: shopDto.isActive,
-      };
+    let shops: VendorAdminDetail['shops'] = [];
 
-      const [barberDtos, serviceDtos] = await Promise.all([
-        this.shopService.getBarbersByShopId(shopDto.id),
-        this.shopService.getServicesByShopId(shopDto.id),
+    if (shopIds.length > 0) {
+      const [allBarbers, allServices] = await Promise.all([
+        this.shopService.getBarbersByShopIds(shopIds),
+        this.shopService.getServicesByShopIds(shopIds),
       ]);
 
-      barbers = barberDtos.map((b) => ({
-        id: b.id,
-        name: b.name,
-        phone: b.phone,
-        photo: b.photo,
-        isActive: b.isActive,
-      }));
+      const barbersByShop = new Map<string, typeof allBarbers>();
+      const servicesByShop = new Map<string, typeof allServices>();
 
-      services = serviceDtos.map((s) => ({
-        id: s.id,
-        name: s.name,
-        basePrice: s.basePrice,
-        baseDuration: s.baseDuration,
-        description: s.description,
-      }));
+      for (const barber of allBarbers) {
+        const key = barber.shopId.toString();
+        if (!barbersByShop.has(key)) barbersByShop.set(key, []);
+        barbersByShop.get(key)!.push(barber);
+      }
+
+      for (const service of allServices) {
+        const key = service.shopId.toString();
+        if (!servicesByShop.has(key)) servicesByShop.set(key, []);
+        servicesByShop.get(key)!.push(service);
+      }
+
+      shops = shopDtos.map((shopDto) => {
+        const barberList = barbersByShop.get(shopDto.id) ?? [];
+        const serviceList = servicesByShop.get(shopDto.id) ?? [];
+
+        return {
+          id: shopDto.id,
+          name: shopDto.name,
+          shopType: shopDto.shopType,
+          phone: shopDto.phone,
+          address: shopDto.address,
+          rating: shopDto.rating,
+          onboardingStatus: shopDto.onboardingStatus,
+          status: shopDto.status,
+          isActive: shopDto.isActive,
+
+          barbers: barberList.map((b) => ({
+            id: b.id.toString(),
+            name: b.name,
+            phone: b.phone,
+            photo: b.photo,
+            isActive: b.isActive,
+          })),
+          barberCount: barberList.length,
+
+          services: serviceList.map((s) => ({
+            id: s.id.toString(),
+            name: s.name,
+            basePrice: s.basePrice,
+            baseDuration: s.baseDuration,
+            description: s.description,
+          })),
+          serviceCount: serviceList.length,
+        };
+      });
     }
 
     return {
@@ -487,11 +526,7 @@ export default class VendorService {
       associationIdProofUrl: vendor.associationIdProofUrl,
       cancellationCount: vendor.cancellationCount,
       cancellationsThisWeek: vendor.cancellationsThisWeek,
-      shop,
-      barbers,
-      barberCount: barbers.length,
-      services,
-      serviceCount: services.length,
+      shops,
       recentBookings: [],
     };
   }

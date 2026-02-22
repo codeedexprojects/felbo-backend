@@ -251,7 +251,8 @@ export interface VendorAdminDetail {
   associationIdProofUrl?: string;
   cancellationCount: number;
   cancellationsThisWeek: number;
-  shop: {
+
+  shops: {
     id: string;
     name: string;
     shopType: string;
@@ -261,22 +262,25 @@ export interface VendorAdminDetail {
     onboardingStatus: string;
     status: string;
     isActive: boolean;
-  } | null;
-  barbers: {
-    id: string;
-    name: string;
-    phone: string;
-    photo?: string;
-    isActive: boolean;
+
+    barbers: {
+      id: string;
+      name: string;
+      phone: string;
+      photo?: string;
+      isActive: boolean;
+    }[];
+    barberCount: number;
+
+    services: {
+      id: string;
+      name: string;
+      basePrice: number;
+      baseDuration: number;
+      description?: string;
+    }[];
+    serviceCount: number;
   }[];
-  barberCount: number;
-  services: {
-    id: string;
-    name: string;
-    basePrice: number;
-    baseDuration: number;
-    description?: string;
-  }[];
-  serviceCount: number;
+
   recentBookings: unknown[];
 }

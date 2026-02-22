@@ -16,6 +16,8 @@ import {
   ServiceDto,
   BarberDto,
   BarberServiceDto,
+  AdminBarberSummaryDto,
+  AdminServiceSummaryDto,
 } from './shop.types';
 import {
   NotFoundError,
@@ -99,9 +101,11 @@ export default class ShopService {
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
+
     if (shop.vendorId.toString() !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+
     return shop;
   }
 
@@ -118,27 +122,18 @@ export default class ShopService {
     return this.toShopDto(shop);
   }
 
-  async getMyShop(vendorId: string): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
+  async getMyShops(vendorId: string): Promise<ShopDto[]> {
+    const shops = await this.shopRepository.findAllByVendorId(vendorId);
+    return shops.map((shop) => this.toShopDto(shop));
+  }
+
+  async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
     return this.toShopDto(shop);
   }
 
-  async findShopByVendorId(vendorId: string): Promise<ShopDto | null> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    return shop ? this.toShopDto(shop) : null;
-  }
-
-  async updateMyShop(vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
-    if (shop.status === 'DELETED') {
-      throw new ForbiddenError('Cannot update a deleted shop.');
-    }
+  async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -168,14 +163,12 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async updateWorkingHours(vendorId: string, input: UpdateWorkingHoursInput): Promise<ShopDto> {
-    const shop = await this.shopRepository.findByVendorId(vendorId);
-    if (!shop) {
-      throw new NotFoundError('Shop not found.');
-    }
-    if (shop.status === 'DELETED') {
-      throw new ForbiddenError('Cannot update a deleted shop.');
-    }
+  async updateWorkingHours(
+    shopId: string,
+    vendorId: string,
+    input: UpdateWorkingHoursInput,
+  ): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),
@@ -419,5 +412,31 @@ export default class ShopService {
   async getServicesByShopId(shopId: string): Promise<ServiceDto[]> {
     const services = await this.shopRepository.findServicesByShopId(shopId);
     return services.map((s) => this.toServiceDto(s));
+  }
+
+  async getBarbersByShopIds(shopIds: string[]): Promise<AdminBarberSummaryDto[]> {
+    const barbers = await this.shopRepository.findBarbersByShopIds(shopIds);
+
+    return barbers.map((b) => ({
+      id: b._id.toString(),
+      name: b.name,
+      phone: b.phone,
+      photo: b.photo,
+      isActive: b.isActive,
+      shopId: b.shopId.toString(),
+    }));
+  }
+
+  async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
+    const services = await this.shopRepository.findServicesByShopIds(shopIds);
+
+    return services.map((s) => ({
+      id: s._id.toString(),
+      shopId: s.shopId.toString(),
+      name: s.name,
+      basePrice: s.basePrice,
+      baseDuration: s.baseDuration,
+      description: s.description,
+    }));
   }
 }
