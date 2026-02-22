@@ -1,0 +1,88 @@
+import { z } from 'zod';
+
+const phoneSchema = z
+  .string()
+  .length(10, 'Enter valid 10-digit mobile number')
+  .regex(/^[6-9]\d{9}$/, 'Enter valid 10-digit mobile number');
+
+const otpSchema = z
+  .string()
+  .length(6, 'Enter 6-digit OTP')
+  .regex(/^\d{6}$/, 'Enter 6-digit OTP');
+
+const addressSchema = z.object({
+  line1: z.string().min(1, 'Address line 1 is required'),
+  line2: z.string().optional(),
+  area: z.string().min(1, 'Area is required'),
+  city: z.string().min(1, 'City is required'),
+  district: z.string().min(1, 'District is required'),
+  state: z.string().min(1, 'State is required'),
+  pincode: z
+    .string()
+    .length(6, 'Enter valid 6-digit pincode')
+    .regex(/^\d{6}$/, 'Enter valid 6-digit pincode'),
+});
+
+const locationSchema = z.object({
+  type: z.literal('Point'),
+  coordinates: z.tuple([z.number(), z.number()]),
+});
+
+const shopDetailsSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Shop name must be at least 2 characters')
+    .max(100, 'Shop name must be at most 100 characters'),
+  type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  address: addressSchema,
+  location: locationSchema,
+});
+
+export const sendOtpSchema = z.object({
+  phone: phoneSchema,
+});
+
+export const loginVerifyOtpSchema = z.object({
+  phone: phoneSchema,
+  otp: otpSchema,
+  sessionId: z.string().min(1, 'Session ID is required'),
+});
+
+export const registerVerifyOtpSchema = z.object({
+  phone: phoneSchema,
+  otp: otpSchema,
+  sessionId: z.string().min(1, 'Session ID is required'),
+});
+
+export const registerAssociationSchema = z.object({
+  phone: phoneSchema,
+  ownerName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters'),
+  email: z.string().email('Enter valid email').optional(),
+  associationMemberId: z.string().min(1, 'Member ID is required'),
+  associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
+  shopDetails: shopDetailsSchema,
+});
+
+export const registerIndependentInitiateSchema = z.object({
+  phone: phoneSchema,
+  ownerName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters'),
+  email: z.string().email('Enter valid email').optional(),
+  documents: z.object({
+    shopLicense: z.string().url('Enter valid URL for shop license'),
+    ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
+  }),
+  shopDetails: shopDetailsSchema,
+});
+
+export const registerIndependentConfirmSchema = z.object({
+  phone: phoneSchema,
+  orderId: z.string().min(1, 'Order ID is required'),
+  paymentId: z.string().min(1, 'Payment ID is required'),
+  signature: z.string().min(1, 'Signature is required'),
+});
