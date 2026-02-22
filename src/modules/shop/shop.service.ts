@@ -77,7 +77,6 @@ export default class ShopService {
     return {
       id: bs._id.toString(),
       serviceId: bs.serviceId.toString(),
-      price: bs.price,
       duration: bs.duration,
       isActive: bs.isActive,
     };
@@ -174,6 +173,9 @@ export default class ShopService {
     if (!shop) {
       throw new NotFoundError('Shop not found.');
     }
+    if (shop.status === 'DELETED') {
+      throw new ForbiddenError('Cannot update a deleted shop.');
+    }
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),
@@ -193,8 +195,7 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  // --- Onboarding ---
-
+  // Onboarding
   async completeProfile(
     shopId: string,
     vendorId: string,
@@ -323,7 +324,6 @@ export default class ShopService {
           barberId: createdBarber._id.toString(),
           serviceId: s.serviceId,
           shopId,
-          price: s.price,
           duration: s.duration,
         }));
 

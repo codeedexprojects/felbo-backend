@@ -175,7 +175,6 @@ serviceSchema.index({ shopId: 1, name: 1 }, { unique: true });
 export const ServiceModel = mongoose.model<IService>('Service', serviceSchema);
 
 // Barber Model
-
 export interface IBarber extends Document {
   shopId: mongoose.Types.ObjectId;
   name: string;
@@ -202,13 +201,11 @@ barberSchema.index({ shopId: 1, phone: 1 }, { unique: true });
 
 export const BarberModel = mongoose.model<IBarber>('Barber', barberSchema);
 
-// --- BarberService Model ---
-
+// BarberService Model
 export interface IBarberService extends Document {
   barberId: mongoose.Types.ObjectId;
   serviceId: mongoose.Types.ObjectId;
   shopId: mongoose.Types.ObjectId;
-  price: number;
   duration: number;
   isActive: boolean;
   createdAt: Date;
@@ -220,7 +217,6 @@ const barberServiceSchema = new Schema<IBarberService>(
     barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
     serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
     shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    price: { type: Number, required: true },
     duration: { type: Number, required: true },
     isActive: { type: Boolean, default: true },
   },

@@ -93,7 +93,6 @@ export const addBarberSchema = z.object({
     .array(
       z.object({
         serviceId: z.string().min(1, 'Service ID is required'),
-        price: z.number().positive('Price must be positive'),
         duration: z.number().int().positive('Duration must be a positive integer (minutes)'),
       }),
     )

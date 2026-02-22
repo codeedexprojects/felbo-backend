@@ -202,7 +202,7 @@ export default class ShopRepository {
     return ServiceModel.find({ _id: { $in: serviceIds }, shopId, isActive: true }).exec();
   }
 
-  // --- Barber operations ---
+  // Barber operations
 
   async createBarber(
     data: { shopId: string; name: string; phone: string; photo?: string },
@@ -229,14 +229,12 @@ export default class ShopRepository {
       .exec();
   }
 
-  // --- BarberService operations ---
-
+  // BarberService operations
   createBarberServices(
     data: Array<{
       barberId: string;
       serviceId: string;
       shopId: string;
-      price: number;
       duration: number;
     }>,
     session?: ClientSession,
@@ -246,7 +244,6 @@ export default class ShopRepository {
         barberId: d.barberId,
         serviceId: d.serviceId,
         shopId: d.shopId,
-        price: d.price,
         duration: d.duration,
         isActive: true,
       })),

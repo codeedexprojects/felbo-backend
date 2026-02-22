@@ -5,7 +5,12 @@ import { authorize } from '../../shared/middleware/authorize';
 
 const router = Router();
 
-// Vendor-facing (protected)
+// Onboarding routes
+router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
+router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
+router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
+
+// Vendor-facing
 router.get('/my-shop', authenticate, authorize('VENDOR'), shopController.getMyShop);
 router.patch('/my-shop', authenticate, authorize('VENDOR'), shopController.updateMyShop);
 router.patch(
@@ -14,11 +19,6 @@ router.patch(
   authorize('VENDOR'),
   shopController.updateWorkingHours,
 );
-
-// Onboarding routes (protected, vendor only)
-router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
-router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
-router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
 
 // Public discovery routes
 router.get('/nearby', shopController.getNearbyShops);
