@@ -66,7 +66,10 @@ export const shopIdParamSchema = z.object({
 });
 
 export const shopIdOnboardingParamSchema = z.object({
-  shopId: z.string().min(1, 'Shop ID is required'),
+  shopId: z
+    .string()
+    .min(1, 'Shop ID is required')
+    .regex(/^[0-9a-fA-F]{24}$/, 'Invalid shop ID'),
 });
 
 export const completeProfileSchema = z.object({

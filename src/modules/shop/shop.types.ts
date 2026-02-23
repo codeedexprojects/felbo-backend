@@ -152,3 +152,21 @@ export interface BarberDto {
   isActive: boolean;
   services: BarberServiceDto[];
 }
+
+export interface AdminBarberSummaryDto {
+  id: string;
+  shopId: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isActive: boolean;
+}
+
+export interface AdminServiceSummaryDto {
+  id: string;
+  shopId: string;
+  name: string;
+  basePrice: number;
+  baseDuration: number;
+  description?: string;
+}

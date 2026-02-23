@@ -15,8 +15,11 @@ import {
 export default class ShopController {
   constructor(private readonly shopService: ShopService) {}
 
-  getMyShop = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.shopService.getMyShop(req.user!.userId);
+  getMyShops = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.shopService.getMyShops(req.user!.userId);
+
+    // eslint-disable-next-line no-console
+    console.log('hello');
 
     res.status(200).json({
       success: true,
@@ -24,9 +27,20 @@ export default class ShopController {
     });
   };
 
-  updateMyShop = async (req: Request, res: Response): Promise<void> => {
+  getShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.getShop(shopId, req.user!.userId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  updateShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = updateShopSchema.parse(req.body);
-    const result = await this.shopService.updateMyShop(req.user!.userId, validated);
+    const result = await this.shopService.updateShop(shopId, req.user!.userId, validated);
 
     res.status(200).json({
       success: true,
@@ -35,8 +49,9 @@ export default class ShopController {
   };
 
   updateWorkingHours = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = updateWorkingHoursSchema.parse(req.body);
-    const result = await this.shopService.updateWorkingHours(req.user!.userId, validated);
+    const result = await this.shopService.updateWorkingHours(shopId, req.user!.userId, validated);
 
     res.status(200).json({
       success: true,
