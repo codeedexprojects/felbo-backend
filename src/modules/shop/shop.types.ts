@@ -1,3 +1,9 @@
+export type OnboardingStatus =
+  | 'PENDING_PROFILE'
+  | 'PENDING_SERVICES'
+  | 'PENDING_BARBERS'
+  | 'COMPLETED';
+
 export interface ShopAddress {
   line1: string;
   line2?: string;
@@ -54,6 +60,31 @@ export interface UpdateWorkingHoursInput {
   workingHours: WorkingHours;
 }
 
+export interface CompleteProfileInput {
+  description: string;
+  workingHours: WorkingHours;
+  photos: string[];
+}
+
+export interface AddServiceInput {
+  name: string;
+  basePrice: number;
+  baseDuration: number;
+  description?: string;
+}
+
+export interface BarberServiceInput {
+  serviceId: string;
+  duration: number;
+}
+
+export interface AddBarberInput {
+  name: string;
+  phone: string;
+  photo?: string;
+  services: BarberServiceInput[];
+}
+
 export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
@@ -88,8 +119,54 @@ export interface ShopDto {
   };
   isActive: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  onboardingStatus: OnboardingStatus;
 }
 
 export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
+}
+
+export interface ServiceDto {
+  id: string;
+  shopId: string;
+  name: string;
+  basePrice: number;
+  baseDuration: number;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface BarberServiceDto {
+  id: string;
+  serviceId: string;
+  duration: number;
+  isActive: boolean;
+}
+
+export interface BarberDto {
+  id: string;
+  shopId: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isActive: boolean;
+  services: BarberServiceDto[];
+}
+
+export interface AdminBarberSummaryDto {
+  id: string;
+  shopId: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isActive: boolean;
+}
+
+export interface AdminServiceSummaryDto {
+  id: string;
+  shopId: string;
+  name: string;
+  basePrice: number;
+  baseDuration: number;
+  description?: string;
 }

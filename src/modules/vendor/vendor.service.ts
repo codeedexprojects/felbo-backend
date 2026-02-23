@@ -17,6 +17,10 @@ import {
   VendorProfileDto,
   ListVendorsFilter,
   ListVendorsResponse,
+  ListVerificationRequestsResponse,
+  VerificationRequestItemDto,
+  VendorAdminDetail,
+  VendorRequestAdminDetail,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -57,7 +61,10 @@ export default class VendorService {
     };
   }
 
-  private toProfileDto(vendor: IVendor): VendorProfileDto {
+  private toProfileDto(
+    vendor: IVendor,
+    onboardingStatus: VendorProfileDto['onboardingStatus'],
+  ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
       phone: vendor.phone,
@@ -66,7 +73,35 @@ export default class VendorService {
       registrationType: vendor.registrationType,
       verificationStatus: vendor.verificationStatus,
       status: vendor.status,
+      onboardingStatus,
     };
+  }
+
+  private async getShopOnboardingStatus(
+    vendorId: string,
+  ): Promise<VendorProfileDto['onboardingStatus']> {
+    try {
+      const shops = await this.shopService.getMyShops(vendorId);
+      if (shops.length === 0) return null;
+
+      // Return the least-progressed onboarding status across all shops
+      const statusPriority: Record<string, number> = {
+        PENDING_PROFILE: 0,
+        PENDING_SERVICES: 1,
+        PENDING_BARBERS: 2,
+        COMPLETED: 3,
+      };
+
+      const leastProgressed = shops.reduce((min, shop) =>
+        (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+          ? shop
+          : min,
+      );
+
+      return leastProgressed.onboardingStatus;
+    } catch {
+      return null;
+    }
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
@@ -131,6 +166,8 @@ export default class VendorService {
 
     const token = this.jwtService.signToken(tokenPayload);
 
+    const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
+
     this.logger.info({
       action: 'VENDOR_LOGIN',
       module: 'vendor',
@@ -138,7 +175,7 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, vendor: this.toVendorDto(vendor) };
+    return { token, vendor: this.toVendorDto(vendor), onboardingStatus };
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -180,9 +217,11 @@ export default class VendorService {
       if (existing.verificationStatus === 'APPROVED') {
         throw new ConflictError('Account already exists. Please login.');
       }
+
       if (existing.verificationStatus === 'PENDING') {
         throw new ConflictError('Application already under review.');
       }
+
       if (existing.verificationStatus === 'REJECTED') {
         throw new ForbiddenError('Contact support to reapply.');
       }
@@ -320,7 +359,9 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    return this.toProfileDto(vendor);
+    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+
+    return this.toProfileDto(vendor, onboardingStatus);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
@@ -328,6 +369,7 @@ export default class VendorService {
     if (!vendor) {
       throw new NotFoundError('Vendor not found.');
     }
+
     if (vendor.verificationStatus !== 'PENDING') {
       throw new ConflictError('Vendor is not awaiting verification.');
     }
@@ -397,6 +439,134 @@ export default class VendorService {
       reason,
     });
   }
+
+  async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    const shopDtos = await this.shopService.getMyShops(vendorId);
+
+    const shopIds = shopDtos.map((shop) => shop.id);
+
+    let shops: VendorAdminDetail['shops'] = [];
+
+    if (shopIds.length > 0) {
+      const [allBarbers, allServices] = await Promise.all([
+        this.shopService.getBarbersByShopIds(shopIds),
+        this.shopService.getServicesByShopIds(shopIds),
+      ]);
+
+      const barbersByShop = new Map<string, typeof allBarbers>();
+      const servicesByShop = new Map<string, typeof allServices>();
+
+      for (const barber of allBarbers) {
+        const key = barber.shopId.toString();
+        if (!barbersByShop.has(key)) barbersByShop.set(key, []);
+        barbersByShop.get(key)!.push(barber);
+      }
+
+      for (const service of allServices) {
+        const key = service.shopId.toString();
+        if (!servicesByShop.has(key)) servicesByShop.set(key, []);
+        servicesByShop.get(key)!.push(service);
+      }
+
+      shops = shopDtos.map((shopDto) => {
+        const barberList = barbersByShop.get(shopDto.id) ?? [];
+        const serviceList = servicesByShop.get(shopDto.id) ?? [];
+
+        return {
+          id: shopDto.id,
+          name: shopDto.name,
+          shopType: shopDto.shopType,
+          phone: shopDto.phone,
+          address: shopDto.address,
+          rating: shopDto.rating,
+          onboardingStatus: shopDto.onboardingStatus,
+          status: shopDto.status,
+          isActive: shopDto.isActive,
+
+          barbers: barberList.map((b) => ({
+            id: b.id.toString(),
+            name: b.name,
+            phone: b.phone,
+            photo: b.photo,
+            isActive: b.isActive,
+          })),
+          barberCount: barberList.length,
+
+          services: serviceList.map((s) => ({
+            id: s.id.toString(),
+            name: s.name,
+            basePrice: s.basePrice,
+            baseDuration: s.baseDuration,
+            description: s.description,
+          })),
+          serviceCount: serviceList.length,
+        };
+      });
+    }
+
+    return {
+      id: vendor._id.toString(),
+      phone: vendor.phone,
+      email: vendor.email || null,
+      ownerName: vendor.ownerName,
+      registrationType: vendor.registrationType,
+      registrationDate: vendor.createdAt,
+      verificationStatus: vendor.verificationStatus,
+      verificationNote: vendor.verificationNote,
+      verifiedAt: vendor.verifiedAt,
+      status: vendor.status,
+      isBlocked: vendor.isBlocked,
+      isFlagged: vendor.isFlagged,
+      documents: vendor.documents,
+      associationMemberId: vendor.associationMemberId,
+      associationIdProofUrl: vendor.associationIdProofUrl,
+      cancellationCount: vendor.cancellationCount,
+      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      shops,
+      recentBookings: [],
+    };
+  }
+
+  async getVendorRequestDetailForAdmin(vendorId: string): Promise<VendorRequestAdminDetail> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+
+    return {
+      id: vendor._id.toString(),
+      phone: vendor.phone,
+      email: vendor.email || null,
+      ownerName: vendor.ownerName,
+      registrationType: vendor.registrationType,
+      registrationDate: vendor.createdAt,
+      verificationStatus: vendor.verificationStatus,
+      verificationNote: vendor.verificationNote,
+      associationMemberId: vendor.associationMemberId,
+      associationIdProofUrl: vendor.associationIdProofUrl,
+      registrationPayment: vendor.registrationPayment
+        ? {
+            amount: vendor.registrationPayment.amount,
+            paymentId: vendor.registrationPayment.paymentId,
+            paidAt: vendor.registrationPayment.paidAt,
+          }
+        : undefined,
+      documents: vendor.documents,
+      shopDetails: vendor.shopDetails
+        ? {
+            name: vendor.shopDetails.name,
+            type: vendor.shopDetails.type,
+            address: vendor.shopDetails.address,
+            location: vendor.shopDetails.location,
+          }
+        : undefined,
+    };
+  }
+
   async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
     const query: Record<string, unknown> = {};
 
@@ -406,6 +576,10 @@ export default class VendorService {
 
     if (filter.status) {
       query.status = filter.status;
+    }
+
+    if (filter.registrationType) {
+      query.registrationType = filter.registrationType;
     }
 
     if (filter.search) {
@@ -418,6 +592,7 @@ export default class VendorService {
       filter.page,
       filter.limit,
     );
+    const counts = await this.vendorRepository.getStatusCounts(filter.registrationType);
 
     return {
       vendors: vendors.map((v) => ({
@@ -444,6 +619,37 @@ export default class VendorService {
       page: filter.page,
       limit: filter.limit,
       totalPages: Math.ceil(total / filter.limit),
+      counts,
+    };
+  }
+
+  async listVerificationRequests(
+    page: number,
+    limit: number,
+  ): Promise<ListVerificationRequestsResponse> {
+    const { vendors, total } = await this.vendorRepository.findAll(
+      { verificationStatus: 'PENDING' },
+      page,
+      limit,
+    );
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+
+    return {
+      vendors: vendors.map(
+        (v): VerificationRequestItemDto => ({
+          id: v._id.toString(),
+          shopName: v.shopDetails?.name ?? null,
+          ownerName: v.ownerName,
+          phone: v.phone,
+          type: v.registrationType,
+          submitted: v.createdAt,
+        }),
+      ),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      counts,
     };
   }
 }

@@ -9,7 +9,11 @@ const router = Router();
 router.post('/send-otp', vendorController.sendOtp);
 router.post('/login/verify-otp', vendorController.loginVerifyOtp);
 router.post('/register/verify-otp', vendorController.registerVerifyOtp);
+
+// Association Registration
 router.post('/register/association', vendorController.registerAssociation);
+
+// Independent Registration
 router.post('/register/independent/initiate', vendorController.registerIndependentInitiate);
 router.post('/register/independent/confirm', vendorController.registerIndependentConfirm);
 

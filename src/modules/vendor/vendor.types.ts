@@ -21,6 +21,7 @@ export interface LoginVerifyOtpResponse {
     ownerName: string;
     email: string | null;
   };
+  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -114,6 +115,7 @@ export interface VendorProfileDto {
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
 }
 
 export interface CreateVendorData {
@@ -169,28 +171,156 @@ export interface ListVendorsFilter {
   verificationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   search?: string;
+  registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
+}
+
+export interface VendorListItemDto {
+  id: string;
+  phone: string;
+  ownerName: string;
+  email: string | null;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  createdAt: Date;
+
+  shopDetails?: {
+    name: string;
+    type: string;
+    address: AddressInput;
+  };
+
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+
+  associationIdProofUrl?: string;
+  associationMemberId?: string;
+}
+
+export interface VendorStatusCounts {
+  total: number;
+  active: number;
+  pendingVerification: number;
+  suspended: number;
 }
 
 export interface ListVendorsResponse {
-  vendors: (Omit<VendorProfileDto, 'registrationType' | 'verificationStatus' | 'status'> & {
-    registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
-    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
-    status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-    createdAt: Date;
-    shopDetails?: {
-      name: string;
-      type: string;
-      address: AddressInput;
-    };
-    documents?: {
-      shopLicense?: string;
-      ownerIdProof?: string;
-    };
-    associationIdProofUrl?: string;
-    associationMemberId?: string;
-  })[];
+  vendors: VendorListItemDto[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  counts: VendorStatusCounts;
+}
+
+export interface VerificationRequestCounts {
+  pending: number;
+  association: number;
+  independent: number;
+}
+
+export interface VerificationRequestItemDto {
+  id: string;
+  shopName: string | null;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  submitted: Date;
+}
+
+export interface ListVerificationRequestsResponse {
+  vendors: VerificationRequestItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  counts: VerificationRequestCounts;
+}
+
+export interface VendorAdminDetail {
+  id: string;
+  phone: string;
+  email: string | null;
+  ownerName: string;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  registrationDate: Date;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationNote?: string;
+  verifiedAt?: Date;
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  isBlocked: boolean;
+  isFlagged: boolean;
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+  associationMemberId?: string;
+  associationIdProofUrl?: string;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+
+  shops: {
+    id: string;
+    name: string;
+    shopType: string;
+    phone: string;
+    address: AddressInput;
+    rating: { average: number; count: number };
+    onboardingStatus: string;
+    status: string;
+    isActive: boolean;
+
+    barbers: {
+      id: string;
+      name: string;
+      phone: string;
+      photo?: string;
+      isActive: boolean;
+    }[];
+    barberCount: number;
+
+    services: {
+      id: string;
+      name: string;
+      basePrice: number;
+      baseDuration: number;
+      description?: string;
+    }[];
+    serviceCount: number;
+  }[];
+
+  recentBookings: unknown[];
+}
+
+export interface VendorRequestAdminDetail {
+  id: string;
+  phone: string;
+  email: string | null;
+  ownerName: string;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  registrationDate: Date;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationNote?: string;
+  associationMemberId?: string;
+  associationIdProofUrl?: string;
+  registrationPayment?: {
+    amount: number;
+    paymentId: string;
+    paidAt: Date;
+  };
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+  shopDetails?: {
+    name: string;
+    type: string;
+    address: AddressInput;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }

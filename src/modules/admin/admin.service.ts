@@ -1,12 +1,19 @@
-import bcrypt from 'bcryptjs';
 import { Logger } from 'winston';
 import { AdminRepository } from './admin.repository';
 import { AdminLoginInput, AdminLoginResponse, AdminDTO } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import { UnauthorizedError } from '../../shared/errors/index';
+import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
 import VendorService from '../vendor/vendor.service';
-import { ListVendorsFilter, ListVendorsResponse } from '../vendor/vendor.types';
+import {
+  ListVendorsFilter,
+  ListVendorsResponse,
+  ListVerificationRequestsResponse,
+  VendorAdminDetail,
+  VendorRequestAdminDetail,
+} from '../vendor/vendor.types';
+import { comparePassword } from '../../shared/utils/password';
+
 export class AdminService {
   constructor(
     private readonly adminRepository: AdminRepository,
@@ -15,16 +22,34 @@ export class AdminService {
     private readonly logger: Logger,
   ) {}
 
-  async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
-    return this.vendorService.listVendors(filter);
+  async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {
+    return this.vendorService.getVendorRequestDetailForAdmin(vendorId);
   }
 
-  async listVerificationRequests(page: number, limit: number): Promise<ListVendorsResponse> {
-    return this.vendorService.listVendors({
-      page,
-      limit,
-      verificationStatus: 'PENDING',
-    });
+  async getVendorDetail(vendorId: string, callerRole: string): Promise<VendorAdminDetail> {
+    const detail = await this.vendorService.getVendorDetailForAdmin(vendorId);
+
+    if (callerRole === 'ASSOCIATION_ADMIN' && detail.registrationType !== 'ASSOCIATION') {
+      throw new ForbiddenError('Access denied. You can only view association vendors.');
+    }
+
+    return detail;
+  }
+
+  async listVendors(filter: ListVendorsFilter, callerRole: string): Promise<ListVendorsResponse> {
+    const effectiveFilter: ListVendorsFilter =
+      callerRole === 'ASSOCIATION_ADMIN'
+        ? { ...filter, registrationType: 'ASSOCIATION' }
+        : { ...filter };
+
+    return this.vendorService.listVendors(effectiveFilter);
+  }
+
+  async listVerificationRequests(
+    page: number,
+    limit: number,
+  ): Promise<ListVerificationRequestsResponse> {
+    return this.vendorService.listVerificationRequests(page, limit);
   }
 
   async verifyVendor(vendorId: string, adminId: string): Promise<void> {
@@ -55,7 +80,7 @@ export class AdminService {
       throw new UnauthorizedError('Account is inactive. Contact super admin.');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
+    const isPasswordValid = await comparePassword(password, admin.passwordHash);
 
     if (!isPasswordValid) {
       this.logger.warn('Admin login failed: invalid password', {

@@ -64,3 +64,40 @@ export const searchShopsSchema = z.object({
 export const shopIdParamSchema = z.object({
   id: z.string().min(1),
 });
+
+export const shopIdOnboardingParamSchema = z.object({
+  shopId: z
+    .string()
+    .min(1, 'Shop ID is required')
+    .regex(/^[0-9a-fA-F]{24}$/, 'Invalid shop ID'),
+});
+
+export const completeProfileSchema = z.object({
+  description: z.string().min(1, 'Description is required').max(1000),
+  workingHours: workingHoursSchema,
+  photos: z.array(z.string().url()).min(1, 'At least one photo is required').max(10),
+});
+
+export const addServiceSchema = z.object({
+  name: z.string().min(1, 'Service name is required').max(100),
+  basePrice: z.number().positive('Base price must be positive'),
+  baseDuration: z.number().int().positive('Duration must be a positive integer (minutes)'),
+  description: z.string().max(500).optional(),
+});
+
+export const addBarberSchema = z.object({
+  name: z.string().min(2, 'Barber name must be at least 2 characters').max(100),
+  phone: z
+    .string()
+    .length(10, 'Enter valid 10-digit mobile number')
+    .regex(/^[6-9]\d{9}$/),
+  photo: z.string().url().optional(),
+  services: z
+    .array(
+      z.object({
+        serviceId: z.string().min(1, 'Service ID is required'),
+        duration: z.number().int().positive('Duration must be a positive integer (minutes)'),
+      }),
+    )
+    .min(1, 'At least one service is required'),
+});

@@ -198,7 +198,6 @@ const vendorSchema = new Schema<IVendor>(
 );
 
 // Indexes
-vendorSchema.index({ phone: 1 }, { unique: true });
 vendorSchema.index({ verificationStatus: 1 });
 vendorSchema.index({ status: 1 });
 vendorSchema.index({ isBlocked: 1 });

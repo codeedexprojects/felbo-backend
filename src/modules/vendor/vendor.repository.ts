@@ -55,9 +55,11 @@ export default class VendorRepository {
     session?: ClientSession,
   ): Promise<IVendor | null> {
     const update: Record<string, unknown> = { verificationStatus: status };
+
     if (note !== undefined) {
       update.verificationNote = note;
     }
+
     if (status === 'APPROVED') {
       update.verifiedAt = new Date();
     }
@@ -71,18 +73,66 @@ export default class VendorRepository {
   ): Promise<IVendor | null> {
     return VendorModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
   }
+
+  async getStatusCounts(registrationType?: 'ASSOCIATION' | 'INDEPENDENT'): Promise<{
+    total: number;
+    active: number;
+    pendingVerification: number;
+    suspended: number;
+  }> {
+    const scope = registrationType ? { registrationType } : {};
+
+    const total = await VendorModel.countDocuments(scope).exec();
+    const active = await VendorModel.countDocuments({ ...scope, status: 'ACTIVE' }).exec();
+    const pendingVerification = await VendorModel.countDocuments({
+      ...scope,
+      verificationStatus: 'PENDING',
+    }).exec();
+    const suspended = await VendorModel.countDocuments({ ...scope, status: 'SUSPENDED' }).exec();
+
+    return { total, active, pendingVerification, suspended };
+  }
+
+  async getVerificationRequestCounts(): Promise<{
+    pending: number;
+    association: number;
+    independent: number;
+  }> {
+    const pending = await VendorModel.countDocuments({ verificationStatus: 'PENDING' }).exec();
+    const association = await VendorModel.countDocuments({
+      verificationStatus: 'PENDING',
+      registrationType: 'ASSOCIATION',
+    }).exec();
+    const independent = await VendorModel.countDocuments({
+      verificationStatus: 'PENDING',
+      registrationType: 'INDEPENDENT',
+    }).exec();
+
+    return { pending, association, independent };
+  }
+
   async findAll(
     filter: Record<string, unknown>,
     page: number,
     limit: number,
   ): Promise<{ vendors: IVendor[]; total: number }> {
     const skip = (page - 1) * limit;
-    const vendors = await VendorModel.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
-    const total = await VendorModel.countDocuments(filter).exec();
+
+    const [result] = await VendorModel.aggregate<{
+      vendors: IVendor[];
+      totalCount: { count: number }[];
+    }>([
+      { $match: filter },
+      {
+        $facet: {
+          vendors: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
+          totalCount: [{ $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    const vendors = (result?.vendors ?? []) as unknown as IVendor[];
+    const total = result?.totalCount[0]?.count ?? 0;
 
     return { vendors, total };
   }

@@ -61,14 +61,19 @@ export class AdminController {
 
   listVendors = async (req: Request, res: Response): Promise<void> => {
     const validated = listVendorsSchema.parse(req.query);
+    const callerRole = req.user!.role;
 
-    const result = await this.adminService.listVendors({
-      page: validated.page,
-      limit: validated.limit,
-      status: validated.status,
-      verificationStatus: validated.verificationStatus,
-      search: validated.search,
-    });
+    const result = await this.adminService.listVendors(
+      {
+        page: validated.page,
+        limit: validated.limit,
+        status: validated.status,
+        verificationStatus: validated.verificationStatus,
+        registrationType: validated.registrationType,
+        search: validated.search,
+      },
+      callerRole,
+    );
 
     res.status(200).json({
       success: true,
@@ -112,6 +117,29 @@ export class AdminController {
     res.status(200).json({
       success: true,
       message: 'Vendor rejected successfully.',
+    });
+  };
+
+  getVendorRequestDetail = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+
+    const result = await this.adminService.getVendorRequestDetail(id);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getVendorDetail = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+    const callerRole = req.user!.role;
+
+    const result = await this.adminService.getVendorDetail(id, callerRole);
+
+    res.status(200).json({
+      success: true,
+      data: result,
     });
   };
 }

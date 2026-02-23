@@ -20,12 +20,20 @@ export interface IssueDTO {
   updatedAt: Date;
 }
 
+export interface IssueStatusCounts {
+  total: number;
+  open: number;
+  resolved: number;
+  rejected: number;
+}
+
 export interface ListIssuesResponse {
   issues: IssueDTO[];
   total: number;
   page: number;
   limit: number;
   totalPages: number;
+  counts: IssueStatusCounts;
 }
 
 export type IssueStatus = 'OPEN' | 'RESOLVED' | 'REJECTED';
