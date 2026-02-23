@@ -120,6 +120,17 @@ export class AdminController {
     });
   };
 
+  getVendorRequestDetail = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+
+    const result = await this.adminService.getVendorRequestDetail(id);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   getVendorDetail = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
     const callerRole = req.user!.role;

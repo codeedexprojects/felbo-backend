@@ -26,6 +26,12 @@ router.get(
 );
 
 router.get(
+  '/vendors/requests/:id',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.getVendorRequestDetail,
+);
+
+router.get(
   '/vendors/:id',
   authorize('SUPER_ADMIN', 'SUB_ADMIN', 'ASSOCIATION_ADMIN'),
   adminController.getVendorDetail,
