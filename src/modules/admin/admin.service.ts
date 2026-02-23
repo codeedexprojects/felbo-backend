@@ -10,6 +10,7 @@ import {
   ListVendorsResponse,
   ListVerificationRequestsResponse,
   VendorAdminDetail,
+  VendorRequestAdminDetail,
 } from '../vendor/vendor.types';
 import { comparePassword } from '../../shared/utils/password';
 
@@ -20,6 +21,10 @@ export class AdminService {
     private readonly vendorService: VendorService,
     private readonly logger: Logger,
   ) {}
+
+  async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {
+    return this.vendorService.getVendorRequestDetailForAdmin(vendorId);
+  }
 
   async getVendorDetail(vendorId: string, callerRole: string): Promise<VendorAdminDetail> {
     const detail = await this.vendorService.getVendorDetailForAdmin(vendorId);

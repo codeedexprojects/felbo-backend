@@ -18,7 +18,9 @@ import {
   ListVendorsFilter,
   ListVendorsResponse,
   ListVerificationRequestsResponse,
+  VerificationRequestItemDto,
   VendorAdminDetail,
+  VendorRequestAdminDetail,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -496,6 +498,40 @@ export default class VendorService {
     };
   }
 
+  async getVendorRequestDetailForAdmin(vendorId: string): Promise<VendorRequestAdminDetail> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+
+    return {
+      id: vendor._id.toString(),
+      phone: vendor.phone,
+      email: vendor.email || null,
+      ownerName: vendor.ownerName,
+      registrationType: vendor.registrationType,
+      registrationDate: vendor.createdAt,
+      verificationStatus: vendor.verificationStatus,
+      verificationNote: vendor.verificationNote,
+      associationMemberId: vendor.associationMemberId,
+      associationIdProofUrl: vendor.associationIdProofUrl,
+      registrationPayment: vendor.registrationPayment
+        ? {
+            amount: vendor.registrationPayment.amount,
+            paymentId: vendor.registrationPayment.paymentId,
+            paidAt: vendor.registrationPayment.paidAt,
+          }
+        : undefined,
+      documents: vendor.documents,
+      shopDetails: vendor.shopDetails
+        ? {
+            name: vendor.shopDetails.name,
+            type: vendor.shopDetails.type,
+            address: vendor.shopDetails.address,
+            location: vendor.shopDetails.location,
+          }
+        : undefined,
+    };
+  }
+
   async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
     const query: Record<string, unknown> = {};
 
@@ -564,26 +600,16 @@ export default class VendorService {
     const counts = await this.vendorRepository.getVerificationRequestCounts();
 
     return {
-      vendors: vendors.map((v) => ({
-        id: v._id.toString(),
-        phone: v.phone,
-        ownerName: v.ownerName,
-        email: v.email || null,
-        registrationType: v.registrationType,
-        verificationStatus: v.verificationStatus,
-        status: v.status,
-        createdAt: v.createdAt,
-        shopDetails: v.shopDetails
-          ? {
-              name: v.shopDetails.name,
-              type: v.shopDetails.type,
-              address: v.shopDetails.address,
-            }
-          : undefined,
-        documents: v.documents,
-        associationIdProofUrl: v.associationIdProofUrl,
-        associationMemberId: v.associationMemberId,
-      })),
+      vendors: vendors.map(
+        (v): VerificationRequestItemDto => ({
+          id: v._id.toString(),
+          shopName: v.shopDetails?.name ?? null,
+          ownerName: v.ownerName,
+          phone: v.phone,
+          type: v.registrationType,
+          submitted: v.createdAt,
+        }),
+      ),
       total,
       page,
       limit,

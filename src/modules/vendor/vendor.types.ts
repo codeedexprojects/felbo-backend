@@ -221,8 +221,17 @@ export interface VerificationRequestCounts {
   independent: number;
 }
 
+export interface VerificationRequestItemDto {
+  id: string;
+  shopName: string | null;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  submitted: Date;
+}
+
 export interface ListVerificationRequestsResponse {
-  vendors: VendorListItemDto[];
+  vendors: VerificationRequestItemDto[];
   total: number;
   page: number;
   limit: number;
@@ -279,4 +288,35 @@ export interface VendorAdminDetail {
   }[];
   serviceCount: number;
   recentBookings: unknown[];
+}
+
+export interface VendorRequestAdminDetail {
+  id: string;
+  phone: string;
+  email: string | null;
+  ownerName: string;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  registrationDate: Date;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationNote?: string;
+  associationMemberId?: string;
+  associationIdProofUrl?: string;
+  registrationPayment?: {
+    amount: number;
+    paymentId: string;
+    paidAt: Date;
+  };
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+  shopDetails?: {
+    name: string;
+    type: string;
+    address: AddressInput;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
 }
