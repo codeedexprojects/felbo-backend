@@ -87,9 +87,10 @@ export default class VendorService {
       // Return the least-progressed onboarding status across all shops
       const statusPriority: Record<string, number> = {
         PENDING_PROFILE: 0,
-        PENDING_SERVICES: 1,
-        PENDING_BARBERS: 2,
-        COMPLETED: 3,
+        PENDING_CATEGORIES: 1,
+        PENDING_SERVICES: 2,
+        PENDING_BARBERS: 3,
+        COMPLETED: 4,
       };
 
       const leastProgressed = shops.reduce((min, shop) =>
@@ -508,7 +509,7 @@ export default class VendorService {
             id: s.id.toString(),
             name: s.name,
             basePrice: s.basePrice,
-            baseDuration: s.baseDuration,
+            baseDurationMinutes: s.baseDurationMinutes,
             description: s.description,
           })),
           serviceCount: serviceList.length,

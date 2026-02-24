@@ -6,8 +6,10 @@ import {
   nearbyShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
+  shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
+  addCategorySchema,
   addServiceSchema,
   addBarberSchema,
 } from './shop.validators';
@@ -17,9 +19,6 @@ export default class ShopController {
 
   getMyShops = async (req: Request, res: Response): Promise<void> => {
     const result = await this.shopService.getMyShops(req.user!.userId);
-
-    // eslint-disable-next-line no-console
-    console.log('hello');
 
     res.status(200).json({
       success: true,
@@ -70,6 +69,17 @@ export default class ShopController {
     });
   };
 
+  addCategory = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = addCategorySchema.parse(req.body);
+    const result = await this.shopService.addCategory(shopId, req.user!.userId, validated);
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
+
   addService = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = addServiceSchema.parse(req.body);
@@ -112,9 +122,10 @@ export default class ShopController {
     });
   };
 
-  getShopById = async (req: Request, res: Response): Promise<void> => {
+  getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
-    const result = await this.shopService.getShopById(id);
+    const { latitude, longitude } = shopDetailsQuerySchema.parse(req.query);
+    const result = await this.shopService.getShopDetails(id, { latitude, longitude });
 
     res.status(200).json({
       success: true,

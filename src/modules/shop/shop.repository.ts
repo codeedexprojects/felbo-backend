@@ -1,7 +1,8 @@
-import { ClientSession, PipelineStage } from 'mongoose';
+import mongoose, { ClientSession, PipelineStage } from 'mongoose';
 import {
   ShopModel,
   IShop,
+  IEmbeddedCategory,
   ServiceModel,
   IService,
   BarberModel,
@@ -164,14 +165,62 @@ export default class ShopRepository {
     return ShopModel.find(matchFilter).skip(skip).limit(limit).exec();
   }
 
+  // --- Category operations ---
+
+  async createCategory(
+    data: { shopId: string; name: string; displayOrder: number },
+    session?: ClientSession,
+  ): Promise<IEmbeddedCategory> {
+    const categoryId = new mongoose.Types.ObjectId();
+    const now = new Date();
+    const shop = await ShopModel.findByIdAndUpdate(
+      data.shopId,
+      {
+        $push: {
+          categories: {
+            _id: categoryId,
+            name: data.name,
+            displayOrder: data.displayOrder,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      },
+      { new: true, session },
+    ).exec();
+
+    if (!shop) throw new Error('Shop not found when creating category.');
+    const added = shop.categories.find((c) => c._id.equals(categoryId));
+    if (!added) throw new Error('Category was not persisted.');
+    return added;
+  }
+
+  async countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
+    const query = ShopModel.findById(shopId);
+    if (session) query.session(session);
+    const shop = await query.exec();
+    return shop ? shop.categories.filter((c) => c.isActive).length : 0;
+  }
+
+  async findCategoriesByShopId(shopId: string): Promise<IEmbeddedCategory[]> {
+    const shop = await ShopModel.findById(shopId).exec();
+    if (!shop) return [];
+    return [...shop.categories]
+      .filter((c) => c.isActive)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
   // --- Service operations ---
 
   async createService(
     data: {
       shopId: string;
+      categoryId: string;
       name: string;
       basePrice: number;
-      baseDuration: number;
+      baseDurationMinutes: number;
+      applicableFor: 'MENS' | 'WOMENS' | 'ALL';
       description?: string;
     },
     session?: ClientSession,
@@ -180,10 +229,13 @@ export default class ShopRepository {
       [
         {
           shopId: data.shopId,
+          categoryId: data.categoryId,
           name: data.name,
           basePrice: data.basePrice,
-          baseDuration: data.baseDuration,
+          baseDurationMinutes: data.baseDurationMinutes,
+          applicableFor: data.applicableFor,
           description: data.description,
+          status: 'ACTIVE',
           isActive: true,
         },
       ],
@@ -205,16 +257,19 @@ export default class ShopRepository {
   // Barber operations
 
   async createBarber(
-    data: { shopId: string; name: string; phone: string; photo?: string },
+    data: { shopId: string; vendorId: string; name: string; phone: string; photo?: string },
     session?: ClientSession,
   ): Promise<IBarber> {
     const [barber] = await BarberModel.create(
       [
         {
           shopId: data.shopId,
+          vendorId: data.vendorId,
           name: data.name,
           phone: data.phone,
           photo: data.photo,
+          rating: { average: 0, count: 0 },
+          status: 'ACTIVE',
           isActive: true,
         },
       ],
@@ -235,7 +290,8 @@ export default class ShopRepository {
       barberId: string;
       serviceId: string;
       shopId: string;
-      duration: number;
+      price: number;
+      durationMinutes: number;
     }>,
     session?: ClientSession,
   ): Promise<IBarberService[]> {
@@ -244,7 +300,8 @@ export default class ShopRepository {
         barberId: d.barberId,
         serviceId: d.serviceId,
         shopId: d.shopId,
-        duration: d.duration,
+        price: d.price,
+        durationMinutes: d.durationMinutes,
         isActive: true,
       })),
       { session },
@@ -253,6 +310,10 @@ export default class ShopRepository {
 
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ barberId, isActive: true }).exec();
+  }
+
+  findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ shopId, isActive: true }).exec();
   }
 
   findBarbersByShopId(shopId: string): Promise<IBarber[]> {
