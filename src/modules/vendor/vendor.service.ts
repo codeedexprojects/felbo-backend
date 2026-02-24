@@ -80,29 +80,25 @@ export default class VendorService {
   private async getShopOnboardingStatus(
     vendorId: string,
   ): Promise<VendorProfileDto['onboardingStatus']> {
-    try {
-      const shops = await this.shopService.getMyShops(vendorId);
-      if (shops.length === 0) return null;
+    const shops = await this.shopService.getMyShops(vendorId);
+    if (shops.length === 0) return null;
 
-      // Return the least-progressed onboarding status across all shops
-      const statusPriority: Record<string, number> = {
-        PENDING_PROFILE: 0,
-        PENDING_CATEGORIES: 1,
-        PENDING_SERVICES: 2,
-        PENDING_BARBERS: 3,
-        COMPLETED: 4,
-      };
+    // Return the least-progressed onboarding status across all shops
+    const statusPriority: Record<string, number> = {
+      PENDING_PROFILE: 0,
+      PENDING_CATEGORIES: 1,
+      PENDING_SERVICES: 2,
+      PENDING_BARBERS: 3,
+      COMPLETED: 4,
+    };
 
-      const leastProgressed = shops.reduce((min, shop) =>
-        (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-          ? shop
-          : min,
-      );
+    const leastProgressed = shops.reduce((min, shop) =>
+      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+        ? shop
+        : min,
+    );
 
-      return leastProgressed.onboardingStatus;
-    } catch {
-      return null;
-    }
+    return leastProgressed.onboardingStatus;
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {

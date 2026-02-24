@@ -37,7 +37,6 @@ import { withTransaction } from '../../shared/database/transaction';
 
 const DEFAULT_MAX_DISTANCE = 10000; // 10 km
 const DEFAULT_PAGE_LIMIT = 20;
-const MONGO_DUPLICATE_KEY_CODE = 11000;
 
 export default class ShopService {
   constructor(
@@ -312,28 +311,15 @@ export default class ShopService {
       throw new NotFoundError('Category not found or does not belong to this shop.');
     }
 
-    let service: IService;
-    try {
-      service = await this.shopRepository.createService({
-        shopId,
-        categoryId: input.categoryId,
-        name: input.name,
-        basePrice: input.basePrice,
-        baseDurationMinutes: input.baseDurationMinutes,
-        applicableFor: input.applicableFor,
-        description: input.description,
-      });
-    } catch (error: unknown) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        (error as { code: number }).code === MONGO_DUPLICATE_KEY_CODE
-      ) {
-        throw new ConflictError('A service with this name already exists.');
-      }
-      throw error;
-    }
+    const service = await this.shopRepository.createService({
+      shopId,
+      categoryId: input.categoryId,
+      name: input.name,
+      basePrice: input.basePrice,
+      baseDurationMinutes: input.baseDurationMinutes,
+      applicableFor: input.applicableFor,
+      description: input.description,
+    });
 
     // Transition onboarding if this is the first service
     if (shop.onboardingStatus === 'PENDING_SERVICES') {
@@ -382,59 +368,44 @@ export default class ShopService {
       );
     }
 
-    let barber: IBarber;
-    let barberServices: IBarberService[];
-
-    try {
-      const result = await withTransaction(async (session) => {
-        const createdBarber = await this.shopRepository.createBarber(
-          {
-            shopId,
-            vendorId,
-            name: input.name,
-            phone: input.phone,
-            photo: input.photo,
-          },
-          session,
-        );
-
-        const barberServiceData = input.services.map((s) => ({
-          barberId: createdBarber._id.toString(),
-          serviceId: s.serviceId,
+    const result = await withTransaction(async (session) => {
+      const createdBarber = await this.shopRepository.createBarber(
+        {
           shopId,
-          price: s.price,
-          durationMinutes: s.durationMinutes,
-        }));
+          vendorId,
+          name: input.name,
+          phone: input.phone,
+          photo: input.photo,
+        },
+        session,
+      );
 
-        const createdBarberServices = await this.shopRepository.createBarberServices(
-          barberServiceData,
-          session,
-        );
+      const barberServiceData = input.services.map((s) => ({
+        barberId: createdBarber._id.toString(),
+        serviceId: s.serviceId,
+        shopId,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      }));
 
-        // Transition onboarding if this is the first barber
-        if (shop.onboardingStatus === 'PENDING_BARBERS') {
-          const barberCount = await this.shopRepository.countActiveBarbers(shopId, session);
-          if (barberCount === 1) {
-            await this.shopRepository.updateOnboardingStatus(shopId, 'COMPLETED', session);
-          }
+      const createdBarberServices = await this.shopRepository.createBarberServices(
+        barberServiceData,
+        session,
+      );
+
+      // Transition onboarding if this is the first barber
+      if (shop.onboardingStatus === 'PENDING_BARBERS') {
+        const barberCount = await this.shopRepository.countActiveBarbers(shopId, session);
+        if (barberCount === 1) {
+          await this.shopRepository.updateOnboardingStatus(shopId, 'COMPLETED', session);
         }
-
-        return { barber: createdBarber, barberServices: createdBarberServices };
-      });
-
-      barber = result.barber;
-      barberServices = result.barberServices;
-    } catch (error: unknown) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        (error as { code: number }).code === MONGO_DUPLICATE_KEY_CODE
-      ) {
-        throw new ConflictError('A barber with this phone number already exists in this shop.');
       }
-      throw error;
-    }
+
+      return { barber: createdBarber, barberServices: createdBarberServices };
+    });
+
+    const barber = result.barber;
+    const barberServices = result.barberServices;
 
     this.logger.info({
       action: 'BARBER_ADDED',

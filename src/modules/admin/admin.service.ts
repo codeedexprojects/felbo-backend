@@ -1,10 +1,27 @@
 import { Logger } from 'winston';
 import { AdminRepository } from './admin.repository';
-import { AdminLoginInput, AdminLoginResponse, AdminDTO } from './admin.types';
+import {
+  AdminLoginInput,
+  AdminLoginResponse,
+  AdminDTO,
+  ListUsersFilter,
+  ListUsersResponse,
+  UserDetailDto,
+  UserListItemDto,
+  UserIssueDto,
+} from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
+import {
+  UnauthorizedError,
+  ForbiddenError,
+  NotFoundError,
+  ConflictError,
+} from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
+import { IUser } from '../user/user.model';
+import UserRepository from '../user/user.repository';
 import VendorService from '../vendor/vendor.service';
+import { IssueService } from '../issue/issue.service';
 import {
   ListVendorsFilter,
   ListVendorsResponse,
@@ -19,6 +36,8 @@ export class AdminService {
     private readonly adminRepository: AdminRepository,
     private readonly jwtService: JwtService,
     private readonly vendorService: VendorService,
+    private readonly userRepository: UserRepository,
+    private readonly issueService: IssueService,
     private readonly logger: Logger,
   ) {}
 
@@ -163,6 +182,72 @@ export class AdminService {
   async logout(adminId: string): Promise<void> {
     await this.adminRepository.updateRefreshToken(adminId, null);
     this.logger.info('Admin logged out', { adminId });
+  }
+
+  async listUsers(filter: ListUsersFilter): Promise<ListUsersResponse> {
+    const [{ users, total }, counts] = await Promise.all([
+      this.userRepository.findAll(filter),
+      this.userRepository.getStatusCounts(),
+    ]);
+
+    return {
+      users: users.map((u) => this.mapUserToListItem(u)),
+      total,
+      page: filter.page,
+      limit: filter.limit,
+      totalPages: Math.ceil(total / filter.limit),
+      counts,
+    };
+  }
+
+  async getUserDetail(userId: string): Promise<UserDetailDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    const issuesReported: UserIssueDto[] = await this.issueService.getRecentIssuesByUserId(userId);
+
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      email: user.email ?? null,
+      status: user.status,
+      blockReason: user.blockReason ?? null,
+      walletBalance: user.walletBalance,
+      cancellationCount: user.cancellationCount,
+      registeredAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt ?? null,
+      issuesReported,
+      issueCount: issuesReported.length,
+    };
+  }
+
+  async blockUser(userId: string, reason: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
+    await this.userRepository.blockById(userId, reason);
+  }
+
+  async unblockUser(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
+    await this.userRepository.unblockById(userId);
+  }
+
+  private mapUserToListItem(user: IUser): UserListItemDto {
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      email: user.email ?? null,
+      status: user.status,
+      walletBalance: user.walletBalance,
+      cancellationCount: user.cancellationCount,
+      lastLoginAt: user.lastLoginAt ?? null,
+      registeredAt: user.createdAt,
+    };
   }
 
   private mapToDTO(admin: IAdmin): AdminDTO {

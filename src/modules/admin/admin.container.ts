@@ -6,8 +6,11 @@ import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 
 import { vendorService } from '../vendor/vendor.container';
+import { issueService } from '../issue/issue.container';
+import UserRepository from '../user/user.repository';
 
 const adminRepository = new AdminRepository();
+const userRepository = new UserRepository();
 
 const jwtService = new JwtService(
   config.jwt.secret,
@@ -16,7 +19,14 @@ const jwtService = new JwtService(
   config.jwt.adminRefreshExpiry,
 );
 
-const adminService = new AdminService(adminRepository, jwtService, vendorService, logger);
+const adminService = new AdminService(
+  adminRepository,
+  jwtService,
+  vendorService,
+  userRepository,
+  issueService,
+  logger,
+);
 
 const adminController = new AdminController(adminService);
 

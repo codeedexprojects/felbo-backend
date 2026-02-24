@@ -49,4 +49,13 @@ router.post(
   adminController.rejectVendor,
 );
 
+router.get('/users', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.listUsers);
+router.get('/users/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.getUserDetail);
+router.post('/users/:id/block', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.blockUser);
+router.post(
+  '/users/:id/unblock',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.unblockUser,
+);
+
 export const adminRoutes = router;
