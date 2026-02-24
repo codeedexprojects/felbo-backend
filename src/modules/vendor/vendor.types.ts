@@ -206,8 +206,18 @@ export interface VendorStatusCounts {
   suspended: number;
 }
 
+export interface VendorListSlimDto {
+  id: string;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  registered: Date;
+}
+
 export interface ListVendorsResponse {
-  vendors: VendorListItemDto[];
+  vendors: VendorListSlimDto[];
   total: number;
   page: number;
   limit: number;

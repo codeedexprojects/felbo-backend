@@ -136,6 +136,25 @@ export default class PaymentService {
     });
   }
 
+  async refundIssuePayment(razorpayPaymentId: string): Promise<string> {
+    const ISSUE_REFUND_PAISE = 1000; // ₹10
+
+    const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
+      amount: ISSUE_REFUND_PAISE,
+      notes: { reason: 'Issue refund' },
+    });
+
+    this.logger.info({
+      action: 'ISSUE_REFUND_INITIATED',
+      module: 'payment',
+      paymentId: razorpayPaymentId,
+      refundId: refund.id,
+      amountPaise: ISSUE_REFUND_PAISE,
+    });
+
+    return refund.id;
+  }
+
   async handleWebhook(rawBody: string, signature: string): Promise<void> {
     const isValid = Razorpay.validateWebhookSignature(rawBody, signature, this.webhookSecret);
     if (!isValid) {

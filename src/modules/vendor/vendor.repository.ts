@@ -136,4 +136,12 @@ export default class VendorRepository {
 
     return { vendors, total };
   }
+
+  flagById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { isFlagged: true, flaggedAt: new Date() },
+      { new: true },
+    ).exec();
+  }
 }
