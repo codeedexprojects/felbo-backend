@@ -18,7 +18,7 @@ const MAX_DISTANCE_METERS = 500;
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6_371_000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toRad = (deg: number): number => (deg * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
   const a =
@@ -179,5 +179,18 @@ export class IssueService {
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     };
+  }
+
+  async getRecentIssuesByUserId(
+    userId: string,
+  ): Promise<{ id: string; type: string; description: string; status: string; createdAt: Date }[]> {
+    const issues = await this.issueRepository.findRecentByUserId(userId, 20);
+    return issues.map((i) => ({
+      id: i._id.toString(),
+      type: i.type,
+      description: i.description,
+      status: i.status,
+      createdAt: i.createdAt,
+    }));
   }
 }

@@ -5,6 +5,9 @@ import {
   listVendorsSchema,
   rejectVendorSchema,
   vendorIdParamSchema,
+  listUsersSchema,
+  userIdParamSchema,
+  blockUserSchema,
 } from './admin.validators';
 import { AdminLoginInput } from './admin.types';
 import { UnauthorizedError } from '../../shared/errors/index';
@@ -142,5 +145,30 @@ export class AdminController {
       success: true,
       data: result,
     });
+  };
+
+  listUsers = async (req: Request, res: Response): Promise<void> => {
+    const validated = listUsersSchema.parse(req.query);
+    const result = await this.adminService.listUsers(validated);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  getUserDetail = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    const result = await this.adminService.getUserDetail(id);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  blockUser = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    const { reason } = blockUserSchema.parse(req.body);
+    await this.adminService.blockUser(id, reason);
+    res.status(200).json({ success: true, message: 'User blocked successfully.' });
+  };
+
+  unblockUser = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    await this.adminService.unblockUser(id);
+    res.status(200).json({ success: true, message: 'User unblocked successfully.' });
   };
 }

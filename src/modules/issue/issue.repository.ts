@@ -61,6 +61,10 @@ export class IssueRepository {
     return { issues, total };
   }
 
+  findRecentByUserId(userId: string, limit: number = 20): Promise<IBookingIssue[]> {
+    return BookingIssueModel.find({ userId }).sort({ createdAt: -1 }).limit(limit).exec();
+  }
+
   async getStatusCounts(): Promise<{
     total: number;
     open: number;

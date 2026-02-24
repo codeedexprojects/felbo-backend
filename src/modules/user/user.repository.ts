@@ -51,4 +51,59 @@ export default class UserRepository {
   ): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
   }
+
+  async findAll(filter: {
+    search?: string;
+    status?: 'ACTIVE' | 'BLOCKED';
+    page: number;
+    limit: number;
+  }): Promise<{ users: IUser[]; total: number }> {
+    const query: Record<string, unknown> = { status: { $ne: 'DELETED' } };
+
+    if (filter.status) {
+      query.status = filter.status;
+    }
+
+    if (filter.search) {
+      const escaped = filter.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { phone: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+
+    const skip = (filter.page - 1) * filter.limit;
+
+    const [users, total] = await Promise.all([
+      UserModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(filter.limit).exec(),
+      UserModel.countDocuments(query).exec(),
+    ]);
+
+    return { users, total };
+  }
+
+  async getStatusCounts(): Promise<{ total: number; active: number; blocked: number }> {
+    const [total, active, blocked] = await Promise.all([
+      UserModel.countDocuments({ status: { $ne: 'DELETED' } }).exec(),
+      UserModel.countDocuments({ status: 'ACTIVE' }).exec(),
+      UserModel.countDocuments({ status: 'BLOCKED' }).exec(),
+    ]);
+    return { total, active, blocked };
+  }
+
+  blockById(id: string, blockReason: string): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      id,
+      { status: 'BLOCKED', blockReason },
+      { new: true },
+    ).exec();
+  }
+
+  unblockById(id: string): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      id,
+      { status: 'ACTIVE', blockReason: null },
+      { new: true },
+    ).exec();
+  }
 }
