@@ -104,11 +104,34 @@ export interface NearbyShopsInput {
 }
 
 export interface SearchShopsInput {
-  query: string;
+  query?: string;
   city?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  minRating?: number;
+  serviceName?: string;
+  availableNow?: boolean;
+  latitude?: number;
+  longitude?: number;
+  maxDistanceMeters?: number;
   page?: number;
   limit?: number;
+}
+
+export interface ShopSearchResultDto {
+  id: string;
+  name: string;
+  photos: string[];
+  address: ShopAddress;
+  services: Array<{ id: string; name: string; basePrice: number }>;
+  distance?: number;
+}
+
+export interface SearchShopsResponse {
+  shops: ShopSearchResultDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface ShopDto {

@@ -139,30 +139,96 @@ export default class ShopRepository {
   }
 
   async searchByName(
-    query: string,
-    filter: { city?: string; shopType?: string },
+    query: string | undefined,
+    filter: {
+      city?: string;
+      shopType?: string;
+      minRating?: number;
+      serviceName?: string;
+      availableNow?: boolean;
+      latitude?: number;
+      longitude?: number;
+      maxDistanceMeters?: number;
+    },
     skip: number,
     limit: number,
-  ): Promise<IShop[]> {
+  ): Promise<{ shops: Array<IShop & { distance?: number }>; total: number }> {
     const matchFilter: Record<string, unknown> = {
       status: 'ACTIVE',
       isActive: true,
       onboardingStatus: 'COMPLETED',
     };
+
     if (filter.city) {
       matchFilter['address.city'] = { $regex: filter.city, $options: 'i' };
     }
     if (filter.shopType) {
       matchFilter.shopType = filter.shopType;
     }
+    if (filter.minRating !== undefined) {
+      matchFilter['rating.average'] = { $gte: filter.minRating };
+    }
 
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    matchFilter.$or = [
-      { name: { $regex: escapedQuery, $options: 'i' } },
-      { 'address.area': { $regex: escapedQuery, $options: 'i' } },
-    ];
+    if (filter.availableNow) {
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+      const istNow = new Date(Date.now() + IST_OFFSET_MS);
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const day = days[istNow.getUTCDay()];
+      const currentTime = `${String(istNow.getUTCHours()).padStart(2, '0')}:${String(istNow.getUTCMinutes()).padStart(2, '0')}`;
+      matchFilter[`workingHours.${day}.isOpen`] = true;
+      matchFilter[`workingHours.${day}.open`] = { $lte: currentTime };
+      matchFilter[`workingHours.${day}.close`] = { $gte: currentTime };
+    }
 
-    return ShopModel.find(matchFilter).skip(skip).limit(limit).exec();
+    if (filter.serviceName) {
+      const escapedName = filter.serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const shopIds = await ServiceModel.distinct('shopId', {
+        name: { $regex: escapedName, $options: 'i' },
+        isActive: true,
+      }).exec();
+      matchFilter._id = { $in: shopIds };
+    }
+
+    if (query) {
+      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      matchFilter.$or = [
+        { name: { $regex: escapedQuery, $options: 'i' } },
+        { 'address.area': { $regex: escapedQuery, $options: 'i' } },
+      ];
+    }
+
+    if (filter.latitude !== undefined && filter.longitude !== undefined) {
+      const maxDistance = filter.maxDistanceMeters ?? 10_000;
+
+      const pipeline: PipelineStage[] = [
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [filter.longitude, filter.latitude] },
+            distanceField: 'distance',
+            maxDistance,
+            query: matchFilter,
+            spherical: true,
+          },
+        },
+        {
+          $facet: {
+            shops: [{ $skip: skip }, { $limit: limit }],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ];
+
+      const [result] = await ShopModel.aggregate(pipeline).exec();
+      const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
+      return { shops: result.shops as Array<IShop & { distance: number }>, total };
+    }
+
+    const [shops, total] = await Promise.all([
+      ShopModel.find(matchFilter).sort({ 'rating.average': -1 }).skip(skip).limit(limit).exec(),
+      ShopModel.countDocuments(matchFilter).exec(),
+    ]);
+
+    return { shops, total };
   }
 
   // --- Category operations ---
