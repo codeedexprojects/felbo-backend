@@ -2,6 +2,8 @@ import { ClientSession, PipelineStage } from 'mongoose';
 import {
   ShopModel,
   IShop,
+  ServiceCategoryModel,
+  IServiceCategory,
   ServiceModel,
   IService,
   BarberModel,
@@ -164,14 +166,46 @@ export default class ShopRepository {
     return ShopModel.find(matchFilter).skip(skip).limit(limit).exec();
   }
 
+  // --- Category operations ---
+
+  async createCategory(
+    data: { shopId: string; name: string; displayOrder: number },
+    session?: ClientSession,
+  ): Promise<IServiceCategory> {
+    const [category] = await ServiceCategoryModel.create(
+      [
+        {
+          shopId: data.shopId,
+          name: data.name,
+          displayOrder: data.displayOrder,
+          isActive: true,
+        },
+      ],
+      { session },
+    );
+    return category;
+  }
+
+  countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
+    return ServiceCategoryModel.countDocuments({ shopId, isActive: true })
+      .session(session ?? null)
+      .exec();
+  }
+
+  findCategoriesByShopId(shopId: string): Promise<IServiceCategory[]> {
+    return ServiceCategoryModel.find({ shopId, isActive: true }).sort({ displayOrder: 1 }).exec();
+  }
+
   // --- Service operations ---
 
   async createService(
     data: {
       shopId: string;
+      categoryId: string;
       name: string;
       basePrice: number;
-      baseDuration: number;
+      baseDurationMinutes: number;
+      applicableFor: 'MENS' | 'WOMENS' | 'ALL';
       description?: string;
     },
     session?: ClientSession,
@@ -180,10 +214,13 @@ export default class ShopRepository {
       [
         {
           shopId: data.shopId,
+          categoryId: data.categoryId,
           name: data.name,
           basePrice: data.basePrice,
-          baseDuration: data.baseDuration,
+          baseDurationMinutes: data.baseDurationMinutes,
+          applicableFor: data.applicableFor,
           description: data.description,
+          status: 'ACTIVE',
           isActive: true,
         },
       ],
@@ -205,16 +242,19 @@ export default class ShopRepository {
   // Barber operations
 
   async createBarber(
-    data: { shopId: string; name: string; phone: string; photo?: string },
+    data: { shopId: string; vendorId: string; name: string; phone: string; photo?: string },
     session?: ClientSession,
   ): Promise<IBarber> {
     const [barber] = await BarberModel.create(
       [
         {
           shopId: data.shopId,
+          vendorId: data.vendorId,
           name: data.name,
           phone: data.phone,
           photo: data.photo,
+          rating: { average: 0, count: 0 },
+          status: 'ACTIVE',
           isActive: true,
         },
       ],
@@ -235,7 +275,8 @@ export default class ShopRepository {
       barberId: string;
       serviceId: string;
       shopId: string;
-      duration: number;
+      price: number;
+      durationMinutes: number;
     }>,
     session?: ClientSession,
   ): Promise<IBarberService[]> {
@@ -244,7 +285,8 @@ export default class ShopRepository {
         barberId: d.barberId,
         serviceId: d.serviceId,
         shopId: d.shopId,
-        duration: d.duration,
+        price: d.price,
+        durationMinutes: d.durationMinutes,
         isActive: true,
       })),
       { session },
@@ -253,6 +295,10 @@ export default class ShopRepository {
 
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ barberId, isActive: true }).exec();
+  }
+
+  findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ shopId, isActive: true }).exec();
   }
 
   findBarbersByShopId(shopId: string): Promise<IBarber[]> {

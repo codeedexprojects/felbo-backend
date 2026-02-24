@@ -1,5 +1,6 @@
 export type OnboardingStatus =
   | 'PENDING_PROFILE'
+  | 'PENDING_CATEGORIES'
   | 'PENDING_SERVICES'
   | 'PENDING_BARBERS'
   | 'COMPLETED';
@@ -66,16 +67,24 @@ export interface CompleteProfileInput {
   photos: string[];
 }
 
+export interface AddCategoryInput {
+  name: string;
+  displayOrder: number;
+}
+
 export interface AddServiceInput {
+  categoryId: string;
   name: string;
   basePrice: number;
-  baseDuration: number;
+  baseDurationMinutes: number;
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
 }
 
 export interface BarberServiceInput {
   serviceId: string;
-  duration: number;
+  price: number;
+  durationMinutes: number;
 }
 
 export interface AddBarberInput {
@@ -126,20 +135,32 @@ export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
 }
 
-export interface ServiceDto {
+export interface CategoryDto {
   id: string;
   shopId: string;
   name: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface ServiceDto {
+  id: string;
+  shopId: string;
+  categoryId: string;
+  name: string;
   basePrice: number;
-  baseDuration: number;
+  baseDurationMinutes: number;
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
+  status: 'ACTIVE' | 'INACTIVE';
   isActive: boolean;
 }
 
 export interface BarberServiceDto {
   id: string;
   serviceId: string;
-  duration: number;
+  price: number;
+  durationMinutes: number;
   isActive: boolean;
 }
 
@@ -149,6 +170,11 @@ export interface BarberDto {
   name: string;
   phone: string;
   photo?: string;
+  rating: {
+    average: number;
+    count: number;
+  };
+  status: 'ACTIVE' | 'INACTIVE';
   isActive: boolean;
   services: BarberServiceDto[];
 }
@@ -167,6 +193,52 @@ export interface AdminServiceSummaryDto {
   shopId: string;
   name: string;
   basePrice: number;
-  baseDuration: number;
+  baseDurationMinutes: number;
   description?: string;
+}
+
+// Public shop details DTOs (used by the user-facing shop details page)
+
+export interface PublicServiceDto {
+  id: string;
+  categoryId: string;
+  name: string;
+  basePrice: number;
+  minDuration: number; // minutes — min across barbers, falls back to baseDurationMinutes
+  maxDuration: number; // minutes — max across barbers, falls back to baseDurationMinutes
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
+  description?: string;
+}
+
+export interface PublicBarberDto {
+  id: string;
+  name: string;
+  photo?: string;
+  rating: {
+    average: number;
+    count: number;
+  };
+  isAvailableToday: boolean; // based on isActive; daily scheduling not yet modelled
+}
+
+export interface ShopDetailsDto {
+  id: string;
+  name: string;
+  description: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
+  distance?: number; // metres from caller, present only when lat/lng query params are sent
+  rating: {
+    average: number;
+    count: number;
+  };
+  workingHours?: WorkingHours;
+  photos: string[];
+  services: PublicServiceDto[];
+  barbers: PublicBarberDto[];
+}
+
+export interface GetShopDetailsOptions {
+  latitude?: number;
+  longitude?: number;
 }

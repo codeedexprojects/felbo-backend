@@ -31,6 +31,8 @@ const workingHoursSchema = z.object({
   sunday: dayHoursSchema,
 });
 
+const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID');
+
 export const updateShopSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -62,7 +64,12 @@ export const searchShopsSchema = z.object({
 });
 
 export const shopIdParamSchema = z.object({
-  id: z.string().min(1),
+  id: mongoIdSchema,
+});
+
+export const shopDetailsQuerySchema = z.object({
+  latitude: z.coerce.number().min(-90).max(90).optional(),
+  longitude: z.coerce.number().min(-180).max(180).optional(),
 });
 
 export const shopIdOnboardingParamSchema = z.object({
@@ -78,10 +85,17 @@ export const completeProfileSchema = z.object({
   photos: z.array(z.string().url()).min(1, 'At least one photo is required').max(10),
 });
 
+export const addCategorySchema = z.object({
+  name: z.string().min(1, 'Category name is required').max(100),
+  displayOrder: z.number().int().min(0).default(0),
+});
+
 export const addServiceSchema = z.object({
+  categoryId: mongoIdSchema,
   name: z.string().min(1, 'Service name is required').max(100),
   basePrice: z.number().positive('Base price must be positive'),
-  baseDuration: z.number().int().positive('Duration must be a positive integer (minutes)'),
+  baseDurationMinutes: z.number().int().positive('Duration must be a positive integer (minutes)'),
+  applicableFor: z.enum(['MENS', 'WOMENS', 'ALL']),
   description: z.string().max(500).optional(),
 });
 
@@ -95,8 +109,9 @@ export const addBarberSchema = z.object({
   services: z
     .array(
       z.object({
-        serviceId: z.string().min(1, 'Service ID is required'),
-        duration: z.number().int().positive('Duration must be a positive integer (minutes)'),
+        serviceId: mongoIdSchema,
+        price: z.number().positive('Price must be positive'),
+        durationMinutes: z.number().int().positive('Duration must be a positive integer (minutes)'),
       }),
     )
     .min(1, 'At least one service is required'),

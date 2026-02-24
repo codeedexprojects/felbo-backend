@@ -1,23 +1,29 @@
 import { ClientSession } from 'mongoose';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
-import { IShop, IService, IBarber, IBarberService } from './shop.model';
+import { IShop, IServiceCategory, IService, IBarber, IBarberService } from './shop.model';
 import {
   CreateShopInput,
   UpdateShopInput,
   UpdateWorkingHoursInput,
   CompleteProfileInput,
+  AddCategoryInput,
   AddServiceInput,
   AddBarberInput,
   NearbyShopsInput,
   SearchShopsInput,
   ShopDto,
   NearbyShopDto,
+  CategoryDto,
   ServiceDto,
   BarberDto,
   BarberServiceDto,
   AdminBarberSummaryDto,
   AdminServiceSummaryDto,
+  PublicServiceDto,
+  PublicBarberDto,
+  ShopDetailsDto,
+  GetShopDetailsOptions,
 } from './shop.types';
 import {
   NotFoundError,
@@ -63,14 +69,27 @@ export default class ShopService {
     };
   }
 
+  private toCategoryDto(category: IServiceCategory): CategoryDto {
+    return {
+      id: category._id.toString(),
+      shopId: category.shopId.toString(),
+      name: category.name,
+      displayOrder: category.displayOrder,
+      isActive: category.isActive,
+    };
+  }
+
   private toServiceDto(service: IService): ServiceDto {
     return {
       id: service._id.toString(),
       shopId: service.shopId.toString(),
+      categoryId: service.categoryId.toString(),
       name: service.name,
       basePrice: service.basePrice,
-      baseDuration: service.baseDuration,
+      baseDurationMinutes: service.baseDurationMinutes,
+      applicableFor: service.applicableFor,
       description: service.description,
+      status: service.status,
       isActive: service.isActive,
     };
   }
@@ -79,7 +98,8 @@ export default class ShopService {
     return {
       id: bs._id.toString(),
       serviceId: bs.serviceId.toString(),
-      duration: bs.duration,
+      price: bs.price,
+      durationMinutes: bs.durationMinutes,
       isActive: bs.isActive,
     };
   }
@@ -91,6 +111,8 @@ export default class ShopService {
       name: barber.name,
       phone: barber.phone,
       photo: barber.photo,
+      rating: barber.rating,
+      status: barber.status,
       isActive: barber.isActive,
       services: barberServices.map((bs) => this.toBarberServiceDto(bs)),
     };
@@ -189,6 +211,7 @@ export default class ShopService {
   }
 
   // Onboarding
+
   async completeProfile(
     shopId: string,
     vendorId: string,
@@ -207,7 +230,7 @@ export default class ShopService {
         workingHours: input.workingHours,
         photos: input.photos,
       },
-      'PENDING_SERVICES',
+      'PENDING_CATEGORIES',
     );
 
     if (!updated) {
@@ -224,20 +247,74 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async addService(shopId: string, vendorId: string, input: AddServiceInput): Promise<ServiceDto> {
+  async addCategory(
+    shopId: string,
+    vendorId: string,
+    input: AddCategoryInput,
+  ): Promise<CategoryDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
 
     if (shop.onboardingStatus === 'PENDING_PROFILE') {
-      throw new ConflictError('Complete your shop profile before adding services.');
+      throw new ConflictError('Complete your shop profile before adding categories.');
+    }
+
+    let category: IServiceCategory;
+    try {
+      category = await this.shopRepository.createCategory({
+        shopId,
+        name: input.name,
+        displayOrder: input.displayOrder,
+      });
+    } catch (error: unknown) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code: number }).code === MONGO_DUPLICATE_KEY_CODE
+      ) {
+        throw new ConflictError('A category with this name already exists.');
+      }
+      throw error;
+    }
+
+    // Transition onboarding if this is the first category
+    if (shop.onboardingStatus === 'PENDING_CATEGORIES') {
+      const count = await this.shopRepository.countActiveCategories(shopId);
+      if (count === 1) {
+        await this.shopRepository.updateOnboardingStatus(shopId, 'PENDING_SERVICES');
+      }
+    }
+
+    this.logger.info({
+      action: 'CATEGORY_ADDED',
+      module: 'shop',
+      shopId,
+      categoryId: category._id.toString(),
+      vendorId,
+    });
+
+    return this.toCategoryDto(category);
+  }
+
+  async addService(shopId: string, vendorId: string, input: AddServiceInput): Promise<ServiceDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    if (
+      shop.onboardingStatus === 'PENDING_PROFILE' ||
+      shop.onboardingStatus === 'PENDING_CATEGORIES'
+    ) {
+      throw new ConflictError('Add at least one category before adding services.');
     }
 
     let service: IService;
     try {
       service = await this.shopRepository.createService({
         shopId,
+        categoryId: input.categoryId,
         name: input.name,
         basePrice: input.basePrice,
-        baseDuration: input.baseDuration,
+        baseDurationMinutes: input.baseDurationMinutes,
+        applicableFor: input.applicableFor,
         description: input.description,
       });
     } catch (error: unknown) {
@@ -276,6 +353,7 @@ export default class ShopService {
 
     if (
       shop.onboardingStatus === 'PENDING_PROFILE' ||
+      shop.onboardingStatus === 'PENDING_CATEGORIES' ||
       shop.onboardingStatus === 'PENDING_SERVICES'
     ) {
       throw new ConflictError('Add at least one service before adding barbers.');
@@ -306,6 +384,7 @@ export default class ShopService {
         const createdBarber = await this.shopRepository.createBarber(
           {
             shopId,
+            vendorId,
             name: input.name,
             phone: input.phone,
             photo: input.photo,
@@ -317,7 +396,8 @@ export default class ShopService {
           barberId: createdBarber._id.toString(),
           serviceId: s.serviceId,
           shopId,
-          duration: s.duration,
+          price: s.price,
+          durationMinutes: s.durationMinutes,
         }));
 
         const createdBarberServices = await this.shopRepository.createBarberServices(
@@ -363,12 +443,80 @@ export default class ShopService {
 
   // --- Public discovery ---
 
-  async getShopById(shopId: string): Promise<ShopDto> {
+  private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6_371_000; // Earth radius in metres
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  }
+
+  async getShopDetails(shopId: string, options?: GetShopDetailsOptions): Promise<ShopDetailsDto> {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
-    return this.toShopDto(shop);
+
+    const [services, barbers, barberServices] = await Promise.all([
+      this.shopRepository.findServicesByShopId(shopId),
+      this.shopRepository.findBarbersByShopId(shopId),
+      this.shopRepository.findBarberServicesByShopId(shopId),
+    ]);
+
+    // Build a map of serviceId → list of barber-specific durations
+    const durationMap = new Map<string, number[]>();
+    for (const bs of barberServices) {
+      const sid = bs.serviceId.toString();
+      const existing = durationMap.get(sid) ?? [];
+      existing.push(bs.durationMinutes);
+      durationMap.set(sid, existing);
+    }
+
+    const publicServices: PublicServiceDto[] = services.map((s) => {
+      const durations = durationMap.get(s._id.toString()) ?? [];
+      const minDuration = durations.length > 0 ? Math.min(...durations) : s.baseDurationMinutes;
+      const maxDuration = durations.length > 0 ? Math.max(...durations) : s.baseDurationMinutes;
+      return {
+        id: s._id.toString(),
+        categoryId: s.categoryId.toString(),
+        name: s.name,
+        basePrice: s.basePrice,
+        minDuration,
+        maxDuration,
+        applicableFor: s.applicableFor,
+        description: s.description,
+      };
+    });
+
+    const publicBarbers: PublicBarberDto[] = barbers.map((b) => ({
+      id: b._id.toString(),
+      name: b.name,
+      photo: b.photo,
+      rating: b.rating,
+      isAvailableToday: b.isActive,
+    }));
+
+    let distance: number | undefined;
+    if (options?.latitude !== undefined && options?.longitude !== undefined) {
+      const [shopLon, shopLat] = shop.location.coordinates;
+      distance = this.computeDistanceMeters(options.latitude, options.longitude, shopLat, shopLon);
+    }
+
+    return {
+      id: shop._id.toString(),
+      name: shop.name,
+      description: shop.description,
+      shopType: shop.shopType,
+      address: shop.address,
+      distance,
+      rating: shop.rating,
+      workingHours: shop.workingHours,
+      photos: shop.photos,
+      services: publicServices,
+      barbers: publicBarbers,
+    };
   }
 
   async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopDto[]> {
@@ -435,7 +583,7 @@ export default class ShopService {
       shopId: s.shopId.toString(),
       name: s.name,
       basePrice: s.basePrice,
-      baseDuration: s.baseDuration,
+      baseDurationMinutes: s.baseDurationMinutes,
       description: s.description,
     }));
   }

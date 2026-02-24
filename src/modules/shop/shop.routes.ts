@@ -5,10 +5,12 @@ import { authorize } from '../../shared/middleware/authorize';
 
 const router = Router();
 
-// Onboarding routes
-router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
-router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
-router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
+// Public discovery routes — must be registered before vendor /:shopId to avoid shadowing
+router.get('/nearby', shopController.getNearbyShops);
+router.get('/search', shopController.searchShops);
+
+// Public shop details page (services + barbers + distance)
+router.get('/:id/details', shopController.getShopDetails);
 
 // Vendor-facing (protected)
 router.get('/my-shops', authenticate, authorize('VENDOR'), shopController.getMyShops);
@@ -21,9 +23,10 @@ router.patch(
   shopController.updateWorkingHours,
 );
 
-// Public discovery routes
-router.get('/nearby', shopController.getNearbyShops);
-router.get('/search', shopController.searchShops);
-router.get('/:id', shopController.getShopById);
+// Onboarding routes
+router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
+router.post('/:shopId/categories', authenticate, authorize('VENDOR'), shopController.addCategory);
+router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
+router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
 
 export const shopRoutes = router;
