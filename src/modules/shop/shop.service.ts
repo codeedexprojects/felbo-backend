@@ -12,6 +12,8 @@ import {
   AddBarberInput,
   NearbyShopsInput,
   SearchShopsInput,
+  SearchShopsResponse,
+  ShopSearchResultDto,
   ShopDto,
   NearbyShopDto,
   CategoryDto,
@@ -151,6 +153,12 @@ export default class ShopService {
 
   async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    return this.toShopDto(shop);
+  }
+
+  async getShopById(shopId: string): Promise<ShopDto> {
+    const shop = await this.shopRepository.findById(shopId);
+    if (!shop || shop.status === 'DELETED') throw new NotFoundError('Shop not found.');
     return this.toShopDto(shop);
   }
 
@@ -535,19 +543,61 @@ export default class ShopService {
     return results.map((r) => this.toNearbyShopDto(r.shop, r.distance));
   }
 
-  async searchShops(input: SearchShopsInput): Promise<ShopDto[]> {
+  async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
     const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const shops = await this.shopRepository.searchByName(
+    const { shops, total } = await this.shopRepository.searchByName(
       input.query,
-      { city: input.city, shopType: input.shopType },
+      {
+        city: input.city,
+        shopType: input.shopType,
+        minRating: input.minRating,
+        serviceName: input.serviceName,
+        availableNow: input.availableNow,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        maxDistanceMeters: input.maxDistanceMeters,
+      },
       skip,
       limit,
     );
 
-    return shops.map((s) => this.toShopDto(s));
+    const shopIds = shops.map((s) => s._id.toString());
+    const allServices = await this.shopRepository.findServicesByShopIds(shopIds);
+
+    const servicesByShopId = new Map<string, typeof allServices>();
+    for (const svc of allServices) {
+      const key = svc.shopId.toString();
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      servicesByShopId.get(key)!.push(svc);
+    }
+
+    const result: ShopSearchResultDto[] = shops.map((s) => {
+      const shopId = s._id.toString();
+      const shopServices = (servicesByShopId.get(shopId) ?? []).map((svc) => ({
+        id: svc._id.toString(),
+        name: svc.name,
+        basePrice: svc.basePrice,
+      }));
+
+      const dto: ShopSearchResultDto = {
+        id: shopId,
+        name: s.name,
+        photos: s.photos ?? [],
+        address: s.address,
+        services: shopServices,
+      };
+
+      if ('distance' in s && typeof s.distance === 'number') {
+        dto.distance = Math.round(s.distance);
+      }
+
+      return dto;
+    });
+
+    return { shops: result, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getBarbersByShopId(shopId: string): Promise<BarberDto[]> {
