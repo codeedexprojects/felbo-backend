@@ -440,6 +440,12 @@ export default class VendorService {
     });
   }
 
+  async flagVendor(vendorId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+    await this.vendorRepository.flagById(vendorId);
+  }
+
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
     const vendor = await this.vendorRepository.findById(vendorId);
 
@@ -597,23 +603,12 @@ export default class VendorService {
     return {
       vendors: vendors.map((v) => ({
         id: v._id.toString(),
-        phone: v.phone,
         ownerName: v.ownerName,
-        email: v.email || null,
-        registrationType: v.registrationType,
+        phone: v.phone,
+        type: v.registrationType,
         verificationStatus: v.verificationStatus,
         status: v.status,
-        createdAt: v.createdAt,
-        shopDetails: v.shopDetails
-          ? {
-              name: v.shopDetails.name,
-              type: v.shopDetails.type,
-              address: v.shopDetails.address,
-            }
-          : undefined,
-        documents: v.documents,
-        associationIdProofUrl: v.associationIdProofUrl,
-        associationMemberId: v.associationMemberId,
+        registered: v.createdAt,
       })),
       total,
       page: filter.page,
@@ -626,12 +621,16 @@ export default class VendorService {
   async listVerificationRequests(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<ListVerificationRequestsResponse> {
-    const { vendors, total } = await this.vendorRepository.findAll(
-      { verificationStatus: 'PENDING' },
-      page,
-      limit,
-    );
+    const query: Record<string, unknown> = { verificationStatus: 'PENDING' };
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
+    }
+
+    const { vendors, total } = await this.vendorRepository.findAll(query, page, limit);
     const counts = await this.vendorRepository.getVerificationRequestCounts();
 
     return {

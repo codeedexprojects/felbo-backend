@@ -87,6 +87,7 @@ export class AdminController {
     const result = await this.adminService.listVerificationRequests(
       validated.page,
       validated.limit,
+      validated.search,
     );
 
     res.status(200).json({

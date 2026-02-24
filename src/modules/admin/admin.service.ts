@@ -48,8 +48,9 @@ export class AdminService {
   async listVerificationRequests(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<ListVerificationRequestsResponse> {
-    return this.vendorService.listVerificationRequests(page, limit);
+    return this.vendorService.listVerificationRequests(page, limit, search);
   }
 
   async verifyVendor(vendorId: string, adminId: string): Promise<void> {
