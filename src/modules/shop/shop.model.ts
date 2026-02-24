@@ -31,6 +31,15 @@ export interface IWorkingHours {
   sunday: IDayHours;
 }
 
+export interface IEmbeddedCategory {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface IShop extends Document {
   vendorId: mongoose.Types.ObjectId;
   name: string;
@@ -53,6 +62,7 @@ export interface IShop extends Document {
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
     | 'COMPLETED';
+  categories: IEmbeddedCategory[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -100,6 +110,15 @@ const workingHoursSchema = new Schema(
   { _id: false },
 );
 
+const categorySchema = new Schema<IEmbeddedCategory>(
+  {
+    name: { type: String, required: true },
+    displayOrder: { type: Number, required: true, default: 0 },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+
 const shopSchema = new Schema<IShop>(
   {
     vendorId: {
@@ -140,6 +159,7 @@ const shopSchema = new Schema<IShop>(
       ],
       default: 'PENDING_PROFILE',
     },
+    categories: { type: [categorySchema], default: [] },
   },
   {
     timestamps: true,
@@ -155,35 +175,6 @@ shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });
 
 export const ShopModel = mongoose.model<IShop>('Shop', shopSchema);
-
-// ServiceCategory Model
-export interface IServiceCategory extends Document {
-  shopId: mongoose.Types.ObjectId;
-  name: string;
-  displayOrder: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const serviceCategorySchema = new Schema<IServiceCategory>(
-  {
-    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    name: { type: String, required: true },
-    displayOrder: { type: Number, required: true, default: 0 },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true },
-);
-
-serviceCategorySchema.index({ shopId: 1, isActive: 1 });
-serviceCategorySchema.index({ shopId: 1, name: 1 }, { unique: true });
-serviceCategorySchema.index({ shopId: 1, displayOrder: 1 });
-
-export const ServiceCategoryModel = mongoose.model<IServiceCategory>(
-  'ServiceCategory',
-  serviceCategorySchema,
-);
 
 // Service Model
 export interface IService extends Document {
@@ -203,7 +194,7 @@ export interface IService extends Document {
 const serviceSchema = new Schema<IService>(
   {
     shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    categoryId: { type: Schema.Types.ObjectId, ref: 'ServiceCategory', required: true },
+    categoryId: { type: Schema.Types.ObjectId, required: true },
     name: { type: String, required: true },
     basePrice: { type: Number, required: true },
     baseDurationMinutes: { type: Number, required: true },

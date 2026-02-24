@@ -1,9 +1,8 @@
-import { ClientSession, PipelineStage } from 'mongoose';
+import mongoose, { ClientSession, PipelineStage } from 'mongoose';
 import {
   ShopModel,
   IShop,
-  ServiceCategoryModel,
-  IServiceCategory,
+  IEmbeddedCategory,
   ServiceModel,
   IService,
   BarberModel,
@@ -171,29 +170,45 @@ export default class ShopRepository {
   async createCategory(
     data: { shopId: string; name: string; displayOrder: number },
     session?: ClientSession,
-  ): Promise<IServiceCategory> {
-    const [category] = await ServiceCategoryModel.create(
-      [
-        {
-          shopId: data.shopId,
-          name: data.name,
-          displayOrder: data.displayOrder,
-          isActive: true,
+  ): Promise<IEmbeddedCategory> {
+    const categoryId = new mongoose.Types.ObjectId();
+    const now = new Date();
+    const shop = await ShopModel.findByIdAndUpdate(
+      data.shopId,
+      {
+        $push: {
+          categories: {
+            _id: categoryId,
+            name: data.name,
+            displayOrder: data.displayOrder,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          },
         },
-      ],
-      { session },
-    );
-    return category;
+      },
+      { new: true, session },
+    ).exec();
+
+    if (!shop) throw new Error('Shop not found when creating category.');
+    const added = shop.categories.find((c) => c._id.equals(categoryId));
+    if (!added) throw new Error('Category was not persisted.');
+    return added;
   }
 
-  countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
-    return ServiceCategoryModel.countDocuments({ shopId, isActive: true })
-      .session(session ?? null)
-      .exec();
+  async countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
+    const query = ShopModel.findById(shopId);
+    if (session) query.session(session);
+    const shop = await query.exec();
+    return shop ? shop.categories.filter((c) => c.isActive).length : 0;
   }
 
-  findCategoriesByShopId(shopId: string): Promise<IServiceCategory[]> {
-    return ServiceCategoryModel.find({ shopId, isActive: true }).sort({ displayOrder: 1 }).exec();
+  async findCategoriesByShopId(shopId: string): Promise<IEmbeddedCategory[]> {
+    const shop = await ShopModel.findById(shopId).exec();
+    if (!shop) return [];
+    return [...shop.categories]
+      .filter((c) => c.isActive)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
   }
 
   // --- Service operations ---

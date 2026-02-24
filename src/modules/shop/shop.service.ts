@@ -1,7 +1,7 @@
 import { ClientSession } from 'mongoose';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
-import { IShop, IServiceCategory, IService, IBarber, IBarberService } from './shop.model';
+import { IShop, IEmbeddedCategory, IService, IBarber, IBarberService } from './shop.model';
 import {
   CreateShopInput,
   UpdateShopInput,
@@ -69,10 +69,10 @@ export default class ShopService {
     };
   }
 
-  private toCategoryDto(category: IServiceCategory): CategoryDto {
+  private toCategoryDto(category: IEmbeddedCategory, shopId: string): CategoryDto {
     return {
       id: category._id.toString(),
-      shopId: category.shopId.toString(),
+      shopId,
       name: category.name,
       displayOrder: category.displayOrder,
       isActive: category.isActive,
@@ -211,7 +211,6 @@ export default class ShopService {
   }
 
   // Onboarding
-
   async completeProfile(
     shopId: string,
     vendorId: string,
@@ -258,24 +257,16 @@ export default class ShopService {
       throw new ConflictError('Complete your shop profile before adding categories.');
     }
 
-    let category: IServiceCategory;
-    try {
-      category = await this.shopRepository.createCategory({
-        shopId,
-        name: input.name,
-        displayOrder: input.displayOrder,
-      });
-    } catch (error: unknown) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        (error as { code: number }).code === MONGO_DUPLICATE_KEY_CODE
-      ) {
-        throw new ConflictError('A category with this name already exists.');
-      }
-      throw error;
+    const isDuplicate = shop.categories.some((c) => c.name === input.name && c.isActive);
+    if (isDuplicate) {
+      throw new ConflictError('A category with this name already exists.');
     }
+
+    const category = await this.shopRepository.createCategory({
+      shopId,
+      name: input.name,
+      displayOrder: input.displayOrder,
+    });
 
     // Transition onboarding if this is the first category
     if (shop.onboardingStatus === 'PENDING_CATEGORIES') {
@@ -293,7 +284,7 @@ export default class ShopService {
       vendorId,
     });
 
-    return this.toCategoryDto(category);
+    return this.toCategoryDto(category, shopId);
   }
 
   async addService(shopId: string, vendorId: string, input: AddServiceInput): Promise<ServiceDto> {
@@ -304,6 +295,13 @@ export default class ShopService {
       shop.onboardingStatus === 'PENDING_CATEGORIES'
     ) {
       throw new ConflictError('Add at least one category before adding services.');
+    }
+
+    const categoryExists = shop.categories.some(
+      (c) => c._id.toString() === input.categoryId && c.isActive,
+    );
+    if (!categoryExists) {
+      throw new NotFoundError('Category not found or does not belong to this shop.');
     }
 
     let service: IService;
