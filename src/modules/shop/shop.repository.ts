@@ -1,15 +1,5 @@
 import mongoose, { ClientSession, PipelineStage } from 'mongoose';
-import {
-  ShopModel,
-  IShop,
-  IEmbeddedCategory,
-  ServiceModel,
-  IService,
-  BarberModel,
-  IBarber,
-  BarberServiceModel,
-  IBarberService,
-} from './shop.model';
+import { ShopModel, IShop, IEmbeddedCategory, ServiceModel, IService } from './shop.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
@@ -324,83 +314,8 @@ export default class ShopRepository {
     return ServiceModel.find({ _id: { $in: serviceIds }, shopId, isActive: true }).exec();
   }
 
-  // Barber operations
-
-  async createBarber(
-    data: { shopId: string; vendorId: string; name: string; phone: string; photo?: string },
-    session?: ClientSession,
-  ): Promise<IBarber> {
-    const [barber] = await BarberModel.create(
-      [
-        {
-          shopId: data.shopId,
-          vendorId: data.vendorId,
-          name: data.name,
-          phone: data.phone,
-          photo: data.photo,
-          rating: { average: 0, count: 0 },
-          status: 'ACTIVE',
-          isActive: true,
-        },
-      ],
-      { session },
-    );
-    return barber;
-  }
-
-  countActiveBarbers(shopId: string, session?: ClientSession): Promise<number> {
-    return BarberModel.countDocuments({ shopId, isActive: true })
-      .session(session ?? null)
-      .exec();
-  }
-
-  // BarberService operations
-  createBarberServices(
-    data: Array<{
-      barberId: string;
-      serviceId: string;
-      shopId: string;
-      price: number;
-      durationMinutes: number;
-    }>,
-    session?: ClientSession,
-  ): Promise<IBarberService[]> {
-    return BarberServiceModel.create(
-      data.map((d) => ({
-        barberId: d.barberId,
-        serviceId: d.serviceId,
-        shopId: d.shopId,
-        price: d.price,
-        durationMinutes: d.durationMinutes,
-        isActive: true,
-      })),
-      { session },
-    );
-  }
-
-  findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
-    return BarberServiceModel.find({ barberId, isActive: true }).exec();
-  }
-
-  findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
-    return BarberServiceModel.find({ shopId, isActive: true }).exec();
-  }
-
-  findBarbersByShopId(shopId: string): Promise<IBarber[]> {
-    return BarberModel.find({ shopId, isActive: true }).exec();
-  }
-
   findServicesByShopId(shopId: string): Promise<IService[]> {
     return ServiceModel.find({ shopId, isActive: true }).exec();
-  }
-
-  findBarbersByShopIds(shopIds: string[]): Promise<IBarber[]> {
-    return BarberModel.find({
-      shopId: { $in: shopIds },
-      isActive: true,
-    })
-      .lean()
-      .exec();
   }
 
   findServicesByShopIds(shopIds: string[]): Promise<IService[]> {

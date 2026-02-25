@@ -11,7 +11,6 @@ import {
   completeProfileSchema,
   addCategorySchema,
   addServiceSchema,
-  addBarberSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -84,17 +83,6 @@ export default class ShopController {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = addServiceSchema.parse(req.body);
     const result = await this.shopService.addService(shopId, req.user!.sub, validated);
-
-    res.status(201).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  addBarber = async (req: Request, res: Response): Promise<void> => {
-    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
-    const validated = addBarberSchema.parse(req.body);
-    const result = await this.shopService.addBarber(shopId, req.user!.sub, validated);
 
     res.status(201).json({
       success: true,

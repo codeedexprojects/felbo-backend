@@ -13,6 +13,7 @@ import { paymentRoutes } from './modules/payment/payment.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { issueRoutes } from './modules/issue/issue.routes';
 import { advertisementRoutes } from './modules/advertisement/advertisement.routes';
+import { barberRoutes } from './modules/barber/barber.routes';
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/issues', issueRoutes);
 app.use('/api/v1/advertisements', advertisementRoutes);
+app.use('/api/v1/barbers', barberRoutes);
 
 app.use(errorHandler);
 
