@@ -17,7 +17,11 @@ export default class UserRepository {
   }
 
   updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IUser | null> {
-    return UserModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
+    return UserModel.findByIdAndUpdate(
+      id,
+      { refreshTokenHash },
+      { returnDocument: 'after' },
+    ).exec();
   }
 
   async create(data: { phone: string; name?: string }, session?: ClientSession): Promise<IUser> {
@@ -29,7 +33,7 @@ export default class UserRepository {
     return UserModel.findByIdAndUpdate(
       id,
       { lastLoginAt: new Date() },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -39,7 +43,7 @@ export default class UserRepository {
     session?: ClientSession,
   ): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(id, data, {
-      new: true,
+      returnDocument: 'after',
       session,
     }).exec();
   }
@@ -49,7 +53,7 @@ export default class UserRepository {
     status: 'ACTIVE' | 'BLOCKED' | 'DELETED',
     session?: ClientSession,
   ): Promise<IUser | null> {
-    return UserModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
+    return UserModel.findByIdAndUpdate(id, { status }, { returnDocument: 'after', session }).exec();
   }
 
   async findAll(filter: {
@@ -94,8 +98,12 @@ export default class UserRepository {
   blockById(id: string, blockReason: string): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(
       id,
-      { status: 'BLOCKED', blockReason },
-      { new: true },
+      {
+        status: 'BLOCKED',
+        blockReason,
+        refreshTokenHash: null,
+      },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -103,7 +111,7 @@ export default class UserRepository {
     return UserModel.findByIdAndUpdate(
       id,
       { status: 'ACTIVE', blockReason: null },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 }
