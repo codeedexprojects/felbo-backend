@@ -20,8 +20,6 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
 
   const decoded = jwtService.verifyToken(token);
 
-  // eslint-disable-next-line no-console
-  console.log('decoded', decoded);
   req.user = decoded;
   next();
 }

@@ -1,24 +1,5 @@
 import { BookingIssueModel, IBookingIssue } from './issue.model';
-import { ListIssuesFilter, CreateIssueInput } from './issue.types';
-
-export interface PopulatedBookingIssue extends Omit<
-  IBookingIssue,
-  'userId' | 'vendorId' | 'shopId'
-> {
-  userId: { _id: { toString(): string }; name: string; phone: string } | null;
-  vendorId: {
-    _id: { toString(): string };
-    ownerName: string;
-    phone: string;
-    isFlagged: boolean;
-  } | null;
-  shopId: {
-    _id: { toString(): string };
-    name: string;
-    phone: string;
-    address: { area: string; city: string };
-  } | null;
-}
+import { ListIssuesFilter, CreateIssueInput, PopulatedBookingIssue } from './issue.types';
 
 export class IssueRepository {
   updateRefundStatus(
@@ -28,7 +9,7 @@ export class IssueRepository {
   ): Promise<IBookingIssue | null> {
     const update: Record<string, unknown> = { refundStatus };
     if (refundId) update.refundId = refundId;
-    return BookingIssueModel.findByIdAndUpdate(id, update, { new: true }).exec();
+    return BookingIssueModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
   }
 
   async create(data: {
@@ -86,7 +67,7 @@ export class IssueRepository {
     adminNote: string,
   ): Promise<IBookingIssue | null> {
     const update: Record<string, unknown> = { status, reviewedBy: adminId, adminNote };
-    return BookingIssueModel.findByIdAndUpdate(id, update, { new: true }).exec();
+    return BookingIssueModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
   }
 
   async findById(id: string): Promise<PopulatedBookingIssue | null> {

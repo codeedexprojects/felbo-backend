@@ -73,7 +73,7 @@ export default class VendorController {
   };
 
   getRegistrationStatus = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getRegistrationStatus(req.user!.userId);
+    const result = await this.vendorService.getRegistrationStatus(req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -82,7 +82,7 @@ export default class VendorController {
   };
 
   getProfile = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getProfile(req.user!.userId);
+    const result = await this.vendorService.getProfile(req.user!.sub);
 
     res.status(200).json({
       success: true,

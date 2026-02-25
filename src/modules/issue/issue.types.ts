@@ -1,3 +1,24 @@
+import { IBookingIssue } from './issue.model';
+
+export interface PopulatedBookingIssue extends Omit<
+  IBookingIssue,
+  'userId' | 'vendorId' | 'shopId'
+> {
+  userId: { _id: { toString(): string }; name: string; phone: string } | null;
+  vendorId: {
+    _id: { toString(): string };
+    ownerName: string;
+    phone: string;
+    isFlagged: boolean;
+  } | null;
+  shopId: {
+    _id: { toString(): string };
+    name: string;
+    phone: string;
+    address: { area: string; city: string };
+  } | null;
+}
+
 export interface ListIssuesFilter {
   status?: IssueStatus;
   type?: IssueType;

@@ -53,7 +53,11 @@ export default class ShopRepository {
     >,
     session?: ClientSession,
   ): Promise<IShop | null> {
-    return ShopModel.findByIdAndUpdate(id, { $set: data }, { new: true, session }).exec();
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { returnDocument: 'after', session },
+    ).exec();
   }
 
   updateWorkingHours(
@@ -64,7 +68,7 @@ export default class ShopRepository {
     return ShopModel.findByIdAndUpdate(
       id,
       { $set: { workingHours } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -83,7 +87,7 @@ export default class ShopRepository {
           onboardingStatus,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -95,7 +99,7 @@ export default class ShopRepository {
     return ShopModel.findByIdAndUpdate(
       id,
       { $set: { onboardingStatus } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -253,7 +257,7 @@ export default class ShopRepository {
           },
         },
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
 
     if (!shop) throw new Error('Shop not found when creating category.');

@@ -29,7 +29,7 @@ export default class PaymentRepository {
         paidAt: data.paidAt,
         status: 'PAID',
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -37,7 +37,7 @@ export default class PaymentRepository {
     return PaymentModel.findOneAndUpdate(
       { razorpayOrderId },
       { status: 'FAILED' },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -52,7 +52,7 @@ export default class PaymentRepository {
         $push: { refunds: refund },
         $set: { status: 'REFUNDED' },
       },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 }

@@ -1,5 +1,5 @@
 import { IssueRepository } from './issue.repository';
-import { PopulatedBookingIssue } from './issue.repository';
+import { PopulatedBookingIssue } from './issue.types';
 import { IBookingIssue } from './issue.model';
 import {
   ListIssuesFilter,

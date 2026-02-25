@@ -18,7 +18,11 @@ export class AdminRepository {
   }
 
   updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IAdmin | null> {
-    return AdminModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
+    return AdminModel.findByIdAndUpdate(
+      id,
+      { refreshTokenHash },
+      { returnDocument: 'after' },
+    ).exec();
   }
 
   async updateLastLogin(id: string, session?: ClientSession): Promise<void> {

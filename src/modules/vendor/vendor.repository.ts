@@ -24,7 +24,7 @@ export default class VendorRepository {
     return VendorModel.findOneAndUpdate(
       { phone },
       { $set: { ...data, phone } },
-      { upsert: true, new: true, session },
+      { upsert: true, returnDocument: 'after', session },
     ).exec();
   }
 
@@ -32,7 +32,7 @@ export default class VendorRepository {
     return VendorModel.findByIdAndUpdate(
       id,
       { lastLoginAt: new Date() },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -44,7 +44,7 @@ export default class VendorRepository {
     return VendorModel.findByIdAndUpdate(
       id,
       { registrationPayment: data },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -63,7 +63,7 @@ export default class VendorRepository {
     if (status === 'APPROVED') {
       update.verifiedAt = new Date();
     }
-    return VendorModel.findByIdAndUpdate(id, update, { new: true, session }).exec();
+    return VendorModel.findByIdAndUpdate(id, update, { returnDocument: 'after', session }).exec();
   }
 
   setStatus(
@@ -71,7 +71,11 @@ export default class VendorRepository {
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED',
     session?: ClientSession,
   ): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { status },
+      { returnDocument: 'after', session },
+    ).exec();
   }
 
   async getStatusCounts(registrationType?: 'ASSOCIATION' | 'INDEPENDENT'): Promise<{
@@ -141,7 +145,7 @@ export default class VendorRepository {
     return VendorModel.findByIdAndUpdate(
       id,
       { isFlagged: true, flaggedAt: new Date() },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 }

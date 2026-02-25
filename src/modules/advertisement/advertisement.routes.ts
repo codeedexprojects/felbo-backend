@@ -5,13 +5,35 @@ import { authorize } from '../../shared/middleware/authorize';
 
 const router = Router();
 
-router.use(authenticate);
-router.use(authorize('SUPER_ADMIN', 'SUB_ADMIN'));
-
-router.post('/', advertisementController.createAd);
-router.get('/', advertisementController.listAds);
-router.get('/:id', advertisementController.getAd);
-router.put('/:id', advertisementController.updateAd);
-router.delete('/:id', advertisementController.deleteAd);
+router.post(
+  '/',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  advertisementController.createAd,
+);
+router.get(
+  '/',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  advertisementController.listAds,
+);
+router.get(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  advertisementController.getAd,
+);
+router.put(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  advertisementController.updateAd,
+);
+router.delete(
+  '/:id',
+  authenticate,
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  advertisementController.deleteAd,
+);
 
 export const advertisementRoutes = router;

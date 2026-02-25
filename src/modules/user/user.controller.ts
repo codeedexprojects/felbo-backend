@@ -31,7 +31,7 @@ export default class UserController {
   };
 
   getProfile = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.userService.getProfile(req.user!.userId);
+    const result = await this.userService.getProfile(req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -41,7 +41,7 @@ export default class UserController {
 
   updateProfile = async (req: Request, res: Response): Promise<void> => {
     const validated = updateProfileSchema.parse(req.body);
-    const result = await this.userService.updateProfile(req.user!.userId, validated);
+    const result = await this.userService.updateProfile(req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
@@ -60,7 +60,7 @@ export default class UserController {
   };
 
   logout = async (req: Request, res: Response): Promise<void> => {
-    await this.userService.logout(req.user!.userId);
+    await this.userService.logout(req.user!.sub);
 
     res.status(200).json({
       success: true,
