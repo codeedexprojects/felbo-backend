@@ -113,8 +113,7 @@ export class AdminService {
     await this.adminRepository.updateLastLogin(admin._id.toString());
 
     const tokenPayload: TokenPayload = {
-      userId: admin._id.toString(),
-      phone: admin.phone,
+      sub: admin._id.toString(),
       role: admin.role,
     };
 
@@ -140,7 +139,7 @@ export class AdminService {
   async refreshAccessToken(refreshToken: string): Promise<AdminLoginResponse> {
     const decoded = this.jwtService.verifyRefreshToken(refreshToken);
 
-    const admin = await this.adminRepository.findByIdWithRefreshToken(decoded.userId);
+    const admin = await this.adminRepository.findByIdWithRefreshToken(decoded.sub);
 
     if (!admin || admin.status !== 'ACTIVE') {
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
@@ -161,8 +160,7 @@ export class AdminService {
     }
 
     const tokenPayload: TokenPayload = {
-      userId: admin._id.toString(),
-      phone: admin.phone,
+      sub: admin._id.toString(),
       role: admin.role,
     };
 

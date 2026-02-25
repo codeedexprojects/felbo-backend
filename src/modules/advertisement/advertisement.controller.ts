@@ -12,7 +12,7 @@ export class AdvertisementController {
 
   createAd = async (req: Request, res: Response): Promise<void> => {
     const validated = createAdSchema.parse(req.body);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
     const ad = await this.advertisementService.createAd(validated, adminId);
     res.status(201).json({ success: true, data: ad });
   };

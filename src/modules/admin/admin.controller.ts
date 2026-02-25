@@ -51,7 +51,7 @@ export class AdminController {
   };
 
   logout = async (req: Request, res: Response): Promise<void> => {
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
     await this.adminService.logout(adminId);
 
     res.clearCookie(config.admin.cookie.name, { path: config.admin.cookie.options.path });
@@ -101,7 +101,7 @@ export class AdminController {
 
   verifyVendor = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
 
     await this.adminService.verifyVendor(id, adminId);
 
@@ -113,7 +113,7 @@ export class AdminController {
 
   rejectVendor = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
     const validated = rejectVendorSchema.parse(req.body);
 
     await this.adminService.rejectVendor(id, adminId, validated.reason);

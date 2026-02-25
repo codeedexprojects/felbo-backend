@@ -12,7 +12,7 @@ export class IssueController {
 
   createIssue = async (req: Request, res: Response): Promise<void> => {
     const validated = createIssueSchema.parse(req.body);
-    const userId = req.user!.userId;
+    const userId = req.user!.sub;
 
     const issue = await this.issueService.createIssue(validated, userId);
 
@@ -28,7 +28,7 @@ export class IssueController {
   updateIssueStatus = async (req: Request, res: Response): Promise<void> => {
     const { id } = issueIdParamSchema.parse(req.params);
     const validated = updateIssueStatusSchema.parse(req.body);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
 
     await this.issueService.updateIssueStatus(
       id,

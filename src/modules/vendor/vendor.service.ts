@@ -156,8 +156,7 @@ export default class VendorService {
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
     const tokenPayload: TokenPayload = {
-      userId: vendor._id.toString(),
-      phone: vendor.phone,
+      sub: vendor._id.toString(),
       role: 'VENDOR',
     };
 
