@@ -45,7 +45,7 @@ app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/issues', issueRoutes);
 app.use('/api/v1/advertisements', advertisementRoutes);
-app.use('/api/v1/barbers', barberRoutes);
+app.use('/api/v1/barber', barberRoutes);
 
 app.use(errorHandler);
 

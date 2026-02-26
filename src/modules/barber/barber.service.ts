@@ -21,9 +21,13 @@ import ShopService from '../shop/shop.service';
 export class BarberService {
   constructor(
     private readonly barberRepository: BarberRepository,
-    private readonly shopService: ShopService,
+    private readonly getShopService: () => ShopService,
     private readonly logger: Logger,
   ) {}
+
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
 
   async listBarbers(
     shopId: string,

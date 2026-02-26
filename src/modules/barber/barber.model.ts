@@ -29,7 +29,7 @@ const barberSchema = new Schema<IBarber>(
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
     },
-    username: { type: String, sparse: true },
+    username: { type: String },
     passwordHash: { type: String, select: false },
     status: {
       type: String,
