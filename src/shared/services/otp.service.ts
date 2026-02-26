@@ -1,6 +1,5 @@
 import { Logger } from 'winston';
 import { getRedisClient } from '../redis/redis';
-import { config } from '../config/config.service';
 import { AppError, ServiceUnavailableError, TooManyRequestsError } from '../errors/index';
 
 export type OtpFlowType = 'USER' | 'VENDOR';
@@ -22,9 +21,9 @@ const DAILY_CAP_TTL = 86400; // 24 hours
 const VERIFY_CAP_TTL = 300; // 5 minutes
 const VERIFY_MAX_ATTEMPTS = 500;
 
-function getDailyLimit(flowType: OtpFlowType): number {
-  return flowType === 'USER' ? config.otp.dailyLimitUser : config.otp.dailyLimitVendor;
-}
+// function getDailyLimit(flowType: OtpFlowType): number {
+//   return flowType === 'USER' ? config.otp.dailyLimitUser : config.otp.dailyLimitVendor;
+// }
 
 export class TwoFactorOtpService {
   private readonly apiKey: string;
@@ -40,7 +39,7 @@ export class TwoFactorOtpService {
     this.apiKey = apiKey;
   }
 
-  async sendOtp(phone: string, flowType: OtpFlowType): Promise<SendOtpResult> {
+  async sendOtp(phone: string): Promise<SendOtpResult> {
     const redis = getRedisClient();
     const dailyKey = `otp:daily:${phone}`;
 
@@ -49,10 +48,10 @@ export class TwoFactorOtpService {
       await redis.expire(dailyKey, DAILY_CAP_TTL);
     }
 
-    const limit = getDailyLimit(flowType);
-    if (count > limit) {
-      throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
-    }
+    // const limit = getDailyLimit(flowType);
+    // if (count > limit) {
+    //   throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
+    // }
 
     const url = `${this.baseUrl}/${this.apiKey}/SMS/${phone}/AUTOGEN`;
 
@@ -128,7 +127,7 @@ export class DevOtpService {
     this.fixedOtp = fixedOtp;
   }
 
-  async sendOtp(phone: string, flowType: OtpFlowType): Promise<SendOtpResult> {
+  async sendOtp(phone: string): Promise<SendOtpResult> {
     const redis = getRedisClient();
     const dailyKey = `otp:daily:${phone}`;
 
@@ -137,10 +136,10 @@ export class DevOtpService {
       await redis.expire(dailyKey, DAILY_CAP_TTL);
     }
 
-    const limit = getDailyLimit(flowType);
-    if (count > limit) {
-      throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
-    }
+    // const limit = getDailyLimit(flowType);
+    // if (count > limit) {
+    //   throw new TooManyRequestsError('OTP limit reached. Please try again tomorrow.');
+    // }
 
     const sessionId = `dev-session-${Date.now()}`;
 
