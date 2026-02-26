@@ -20,7 +20,7 @@ interface TwoFactorApiResponse {
 
 const DAILY_CAP_TTL = 86400; // 24 hours
 const VERIFY_CAP_TTL = 300; // 5 minutes
-const VERIFY_MAX_ATTEMPTS = 5;
+const VERIFY_MAX_ATTEMPTS = 500;
 
 function getDailyLimit(flowType: OtpFlowType): number {
   return flowType === 'USER' ? config.otp.dailyLimitUser : config.otp.dailyLimitVendor;
