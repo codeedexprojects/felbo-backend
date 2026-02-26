@@ -53,7 +53,11 @@ export const listBarberQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
   search: z.string().optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  isAvailable: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  status: z.enum(['ACTIVE', 'DELETED']).optional(),
 });
 
 // Onboarding: add barber with service assignments during shop setup

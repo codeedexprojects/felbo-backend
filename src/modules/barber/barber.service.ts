@@ -79,7 +79,7 @@ export class BarberService {
 
   async getBarber(barberId: string, vendorId: string): Promise<BarberManagementDto> {
     const barber = await this.barberRepository.findById(barberId);
-    if (!barber || !barber.isActive) throw new NotFoundError('Barber not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
     return this.toDto(barber);
   }
@@ -90,7 +90,7 @@ export class BarberService {
     vendorId: string,
   ): Promise<BarberManagementDto> {
     const barber = await this.barberRepository.findById(barberId);
-    if (!barber || !barber.isActive) throw new NotFoundError('Barber not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
     if (input.phone && input.phone !== barber.phone) {
@@ -109,7 +109,7 @@ export class BarberService {
 
   async deleteBarber(barberId: string, vendorId: string): Promise<void> {
     const barber = await this.barberRepository.findById(barberId);
-    if (!barber || !barber.isActive) throw new NotFoundError('Barber not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
     // TODO: Check for future bookings when booking module is implemented.
@@ -120,13 +120,13 @@ export class BarberService {
     await this.barberRepository.softDelete(barberId);
   }
 
-  async toggleBarberStatus(barberId: string, vendorId: string): Promise<BarberManagementDto> {
+  async toggleBarberAvailability(barberId: string, vendorId: string): Promise<BarberManagementDto> {
     const barber = await this.barberRepository.findById(barberId);
-    if (!barber || !barber.isActive) throw new NotFoundError('Barber not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
-    const newStatus = barber.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const updated = await this.barberRepository.updateStatus(barberId, newStatus);
+    const newAvailability = !barber.isAvailable;
+    const updated = await this.barberRepository.updateAvailability(barberId, newAvailability);
     return this.toDto(updated!);
   }
 
@@ -136,7 +136,7 @@ export class BarberService {
     vendorId: string,
   ): Promise<void> {
     const barber = await this.barberRepository.findById(barberId);
-    if (!barber || !barber.isActive) throw new NotFoundError('Barber not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
     const update: { username?: string; passwordHash?: string } = {};
@@ -245,7 +245,7 @@ export class BarberService {
       photo: barber.photo,
       rating: barber.rating,
       status: barber.status,
-      isActive: barber.isActive,
+      isAvailable: barber.isAvailable,
       services,
     };
   }
@@ -261,7 +261,7 @@ export class BarberService {
       username: barber.username ?? '',
       rating: barber.rating,
       status: barber.status,
-      isActive: barber.isActive,
+      isAvailable: barber.isAvailable,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
     };

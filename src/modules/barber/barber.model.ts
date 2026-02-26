@@ -12,8 +12,8 @@ export interface IBarber extends Document {
     average: number;
     count: number;
   };
-  status: 'ACTIVE' | 'INACTIVE';
-  isActive: boolean;
+  status: 'ACTIVE' | 'DELETED';
+  isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,10 +33,10 @@ const barberSchema = new Schema<IBarber>(
     passwordHash: { type: String, select: false },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE'],
+      enum: ['ACTIVE', 'DELETED'],
       default: 'ACTIVE',
     },
-    isActive: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true },
   },
   { timestamps: true },
 );

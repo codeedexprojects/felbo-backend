@@ -45,9 +45,9 @@ export class BarberController {
     res.status(200).json({ success: true, message: 'Barber deleted successfully.' });
   };
 
-  toggleBarberStatus = async (req: Request, res: Response): Promise<void> => {
+  toggleBarberAvailability = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
-    const barber = await this.barberService.toggleBarberStatus(barberId, req.user!.sub);
+    const barber = await this.barberService.toggleBarberAvailability(barberId, req.user!.sub);
     res.status(200).json({ success: true, data: barber });
   };
 

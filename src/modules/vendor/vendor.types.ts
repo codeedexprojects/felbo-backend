@@ -299,7 +299,7 @@ export interface VendorAdminDetail {
       name: string;
       phone: string;
       photo?: string;
-      isActive: boolean;
+      isAvailable: boolean;
     }[];
     barberCount: number;
 

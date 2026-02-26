@@ -120,7 +120,7 @@ export default class ShopService {
       photo: barber.photo,
       rating: barber.rating,
       status: barber.status,
-      isActive: barber.isActive,
+      isAvailable: barber.isAvailable,
       services: barberServices.map((bs) => this.toBarberServiceDto(bs)),
     };
   }
@@ -400,7 +400,7 @@ export default class ShopService {
       name: b.name,
       photo: b.photo,
       rating: b.rating,
-      isAvailableToday: b.isActive,
+      isAvailableToday: b.isAvailable,
     }));
 
     let distance: number | undefined;
@@ -530,7 +530,7 @@ export default class ShopService {
       name: b.name,
       phone: b.phone,
       photo: b.photo,
-      isActive: b.isActive,
+      isAvailable: b.isAvailable,
       shopId: b.shopId,
     }));
   }

@@ -27,8 +27,8 @@ export interface BarberManagementDto {
   photo?: string;
   username: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'INACTIVE';
-  isActive: boolean;
+  status: 'ACTIVE' | 'DELETED';
+  isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,7 +37,8 @@ export interface ListBarbersFilter {
   page: number;
   limit: number;
   search?: string;
-  status?: 'ACTIVE' | 'INACTIVE';
+  isAvailable?: boolean;
+  status?: 'ACTIVE' | 'DELETED';
 }
 
 export interface ListBarbersResponse {
@@ -78,8 +79,8 @@ export interface OnboardBarberDto {
   phone: string;
   photo?: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'INACTIVE';
-  isActive: boolean;
+  status: 'ACTIVE' | 'DELETED';
+  isAvailable: boolean;
   services: OnboardBarberServiceDto[];
 }
 

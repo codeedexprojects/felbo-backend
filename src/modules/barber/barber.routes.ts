@@ -19,7 +19,7 @@ router.patch(
   '/:barberId/status',
   authenticate,
   authorize('VENDOR'),
-  barberController.toggleBarberStatus,
+  barberController.toggleBarberAvailability,
 );
 router.patch(
   '/:barberId/credentials',

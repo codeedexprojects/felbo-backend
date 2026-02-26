@@ -7,7 +7,7 @@ export class BarberRepository {
     shopId: string,
     filter: ListBarbersFilter,
   ): Promise<{ barbers: IBarber[]; total: number }> {
-    const query: Record<string, unknown> = { shopId, isActive: true };
+    const query: Record<string, unknown> = { shopId, status: 'ACTIVE' };
 
     if (filter.search) {
       const searchRegex = {
@@ -19,6 +19,10 @@ export class BarberRepository {
 
     if (filter.status) {
       query.status = filter.status;
+    }
+
+    if (filter.isAvailable !== undefined) {
+      query.isAvailable = filter.isAvailable;
     }
 
     const skip = (filter.page - 1) * filter.limit;
@@ -44,7 +48,7 @@ export class BarberRepository {
   }
 
   findByPhone(shopId: string, phone: string): Promise<IBarber | null> {
-    return BarberModel.findOne({ shopId, phone, isActive: true }).exec();
+    return BarberModel.findOne({ shopId, phone, status: 'ACTIVE' }).exec();
   }
 
   async create(data: {
@@ -73,7 +77,7 @@ export class BarberRepository {
           photo: data.photo,
           rating: { average: 0, count: 0 },
           status: 'ACTIVE',
-          isActive: true,
+          isAvailable: true,
         },
       ],
       { session },
@@ -82,7 +86,7 @@ export class BarberRepository {
   }
 
   countActiveBarbers(shopId: string, session?: ClientSession): Promise<number> {
-    return BarberModel.countDocuments({ shopId, isActive: true })
+    return BarberModel.countDocuments({ shopId, status: 'ACTIVE' })
       .session(session ?? null)
       .exec();
   }
@@ -119,13 +123,13 @@ export class BarberRepository {
   }
 
   findAllActiveByShopId(shopId: string): Promise<IBarber[]> {
-    return BarberModel.find({ shopId, isActive: true }).exec();
+    return BarberModel.find({ shopId, status: 'ACTIVE' }).exec();
   }
 
   findBarbersByShopIds(shopIds: string[]): Promise<IBarber[]> {
     return BarberModel.find({
       shopId: { $in: shopIds },
-      isActive: true,
+      status: 'ACTIVE',
     })
       .lean()
       .exec();
@@ -138,8 +142,8 @@ export class BarberRepository {
     return BarberModel.findByIdAndUpdate(id, data, { returnDocument: 'after' }).exec();
   }
 
-  updateStatus(id: string, status: 'ACTIVE' | 'INACTIVE'): Promise<IBarber | null> {
-    return BarberModel.findByIdAndUpdate(id, { status }, { returnDocument: 'after' }).exec();
+  updateAvailability(id: string, isAvailable: boolean): Promise<IBarber | null> {
+    return BarberModel.findByIdAndUpdate(id, { isAvailable }, { new: true }).exec();
   }
 
   updateCredentials(
@@ -150,6 +154,6 @@ export class BarberRepository {
   }
 
   async softDelete(id: string): Promise<void> {
-    await BarberModel.findByIdAndUpdate(id, { isActive: false }).exec();
+    await BarberModel.findByIdAndUpdate(id, { status: 'DELETED' }).exec();
   }
 }

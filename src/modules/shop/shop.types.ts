@@ -197,8 +197,8 @@ export interface BarberDto {
     average: number;
     count: number;
   };
-  status: 'ACTIVE' | 'INACTIVE';
-  isActive: boolean;
+  status: 'ACTIVE' | 'DELETED';
+  isAvailable: boolean;
   services: BarberServiceDto[];
 }
 
@@ -208,7 +208,7 @@ export interface AdminBarberSummaryDto {
   name: string;
   phone: string;
   photo?: string;
-  isActive: boolean;
+  isAvailable: boolean;
 }
 
 export interface AdminServiceSummaryDto {
