@@ -106,7 +106,7 @@ export default class VendorService {
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
     const phoneWithCode = `91${phone}`;
-    const result = await this.otpService.sendOtp(phoneWithCode, 'VENDOR');
+    const result = await this.otpService.sendOtp(phoneWithCode);
 
     await this.otpSessionService.storeSession(result.sessionId, phone);
 
