@@ -496,7 +496,7 @@ export default class VendorService {
             name: b.name,
             phone: b.phone,
             photo: b.photo,
-            isActive: b.isActive,
+            isAvailable: b.isAvailable,
           })),
           barberCount: barberList.length,
 

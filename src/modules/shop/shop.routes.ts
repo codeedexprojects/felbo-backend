@@ -27,6 +27,6 @@ router.patch(
 router.patch('/:shopId/profile', authenticate, authorize('VENDOR'), shopController.completeProfile);
 router.post('/:shopId/categories', authenticate, authorize('VENDOR'), shopController.addCategory);
 router.post('/:shopId/services', authenticate, authorize('VENDOR'), shopController.addService);
-router.post('/:shopId/barbers', authenticate, authorize('VENDOR'), shopController.addBarber);
+// POST /:shopId/barbers moved to POST /api/v1/barbers/shop/:shopId (barber module)
 
 export const shopRoutes = router;

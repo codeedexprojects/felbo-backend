@@ -1,7 +1,8 @@
 import { ClientSession } from 'mongoose';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
-import { IShop, IEmbeddedCategory, IService, IBarber, IBarberService } from './shop.model';
+import { IShop, IEmbeddedCategory, IService } from './shop.model';
+
 import {
   CreateShopInput,
   UpdateShopInput,
@@ -9,7 +10,6 @@ import {
   CompleteProfileInput,
   AddCategoryInput,
   AddServiceInput,
-  AddBarberInput,
   NearbyShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
@@ -26,14 +26,12 @@ import {
   PublicBarberDto,
   ShopDetailsDto,
   GetShopDetailsOptions,
+  OnboardingStatus,
 } from './shop.types';
-import {
-  NotFoundError,
-  ForbiddenError,
-  ConflictError,
-  ValidationError,
-} from '../../shared/errors/index';
-import { withTransaction } from '../../shared/database/transaction';
+import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
+
+import { BarberService } from '../barber/barber.service';
+import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 
 const DEFAULT_MAX_DISTANCE = 10000; // 10 km
 const DEFAULT_PAGE_LIMIT = 20;
@@ -42,7 +40,12 @@ export default class ShopService {
   constructor(
     private readonly shopRepository: ShopRepository,
     private readonly logger: Logger,
+    private readonly getBarberService: () => BarberService,
   ) {}
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
+  }
 
   private toShopDto(shop: IShop): ShopDto {
     return {
@@ -95,26 +98,29 @@ export default class ShopService {
     };
   }
 
-  private toBarberServiceDto(bs: IBarberService): BarberServiceDto {
+  private toBarberServiceDto(bs: BarberServiceLinkDto): BarberServiceDto {
     return {
-      id: bs._id.toString(),
-      serviceId: bs.serviceId.toString(),
+      id: bs.id,
+      serviceId: bs.serviceId,
       price: bs.price,
       durationMinutes: bs.durationMinutes,
       isActive: bs.isActive,
     };
   }
 
-  private toBarberDto(barber: IBarber, barberServices: IBarberService[]): BarberDto {
+  private toBarberDto(
+    barber: BarberManagementDto,
+    barberServices: BarberServiceLinkDto[],
+  ): BarberDto {
     return {
-      id: barber._id.toString(),
-      shopId: barber.shopId.toString(),
+      id: barber.id,
+      shopId: barber.shopId,
       name: barber.name,
       phone: barber.phone,
       photo: barber.photo,
       rating: barber.rating,
       status: barber.status,
-      isActive: barber.isActive,
+      isAvailable: barber.isAvailable,
       services: barberServices.map((bs) => this.toBarberServiceDto(bs)),
     };
   }
@@ -340,84 +346,6 @@ export default class ShopService {
     return this.toServiceDto(service);
   }
 
-  async addBarber(shopId: string, vendorId: string, input: AddBarberInput): Promise<BarberDto> {
-    const shop = await this.assertShopOwnership(shopId, vendorId);
-
-    if (
-      shop.onboardingStatus === 'PENDING_PROFILE' ||
-      shop.onboardingStatus === 'PENDING_CATEGORIES' ||
-      shop.onboardingStatus === 'PENDING_SERVICES'
-    ) {
-      throw new ConflictError('Add at least one service before adding barbers.');
-    }
-
-    // Validate serviceIds
-    const serviceIds = input.services.map((s) => s.serviceId);
-    const uniqueServiceIds = [...new Set(serviceIds)];
-    if (uniqueServiceIds.length !== serviceIds.length) {
-      throw new ValidationError('Duplicate service IDs are not allowed.');
-    }
-
-    const validServices = await this.shopRepository.findActiveServicesByIds(
-      uniqueServiceIds,
-      shopId,
-    );
-    if (validServices.length !== uniqueServiceIds.length) {
-      throw new ValidationError(
-        'One or more service IDs are invalid or do not belong to this shop.',
-      );
-    }
-
-    const result = await withTransaction(async (session) => {
-      const createdBarber = await this.shopRepository.createBarber(
-        {
-          shopId,
-          vendorId,
-          name: input.name,
-          phone: input.phone,
-          photo: input.photo,
-        },
-        session,
-      );
-
-      const barberServiceData = input.services.map((s) => ({
-        barberId: createdBarber._id.toString(),
-        serviceId: s.serviceId,
-        shopId,
-        price: s.price,
-        durationMinutes: s.durationMinutes,
-      }));
-
-      const createdBarberServices = await this.shopRepository.createBarberServices(
-        barberServiceData,
-        session,
-      );
-
-      // Transition onboarding if this is the first barber
-      if (shop.onboardingStatus === 'PENDING_BARBERS') {
-        const barberCount = await this.shopRepository.countActiveBarbers(shopId, session);
-        if (barberCount === 1) {
-          await this.shopRepository.updateOnboardingStatus(shopId, 'COMPLETED', session);
-        }
-      }
-
-      return { barber: createdBarber, barberServices: createdBarberServices };
-    });
-
-    const barber = result.barber;
-    const barberServices = result.barberServices;
-
-    this.logger.info({
-      action: 'BARBER_ADDED',
-      module: 'shop',
-      shopId,
-      barberId: barber._id.toString(),
-      vendorId,
-    });
-
-    return this.toBarberDto(barber, barberServices);
-  }
-
   // --- Public discovery ---
 
   private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -438,14 +366,14 @@ export default class ShopService {
 
     const [services, barbers, barberServices] = await Promise.all([
       this.shopRepository.findServicesByShopId(shopId),
-      this.shopRepository.findBarbersByShopId(shopId),
-      this.shopRepository.findBarberServicesByShopId(shopId),
+      this.barberService.getBarbersByShopId(shopId),
+      this.barberService.getBarberServicesByShopId(shopId),
     ]);
 
     // Build a map of serviceId → list of barber-specific durations
     const durationMap = new Map<string, number[]>();
     for (const bs of barberServices) {
-      const sid = bs.serviceId.toString();
+      const sid = bs.serviceId;
       const existing = durationMap.get(sid) ?? [];
       existing.push(bs.durationMinutes);
       durationMap.set(sid, existing);
@@ -468,11 +396,11 @@ export default class ShopService {
     });
 
     const publicBarbers: PublicBarberDto[] = barbers.map((b) => ({
-      id: b._id.toString(),
+      id: b.id,
       name: b.name,
       photo: b.photo,
       rating: b.rating,
-      isAvailableToday: b.isActive,
+      isAvailableToday: b.isAvailable,
     }));
 
     let distance: number | undefined;
@@ -572,7 +500,7 @@ export default class ShopService {
   }
 
   async getBarbersByShopId(shopId: string): Promise<BarberDto[]> {
-    const barbers = await this.shopRepository.findBarbersByShopId(shopId);
+    const barbers = await this.barberService.getBarbersByShopId(shopId);
     return barbers.map((b) => this.toBarberDto(b, []));
   }
 
@@ -581,16 +509,29 @@ export default class ShopService {
     return services.map((s) => this.toServiceDto(s));
   }
 
+  async getActiveServicesByIds(serviceIds: string[], shopId: string): Promise<ServiceDto[]> {
+    const services = await this.shopRepository.findActiveServicesByIds(serviceIds, shopId);
+    return services.map((s) => this.toServiceDto(s));
+  }
+
+  async updateOnboardingStatus(
+    shopId: string,
+    status: OnboardingStatus,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.shopRepository.updateOnboardingStatus(shopId, status, session);
+  }
+
   async getBarbersByShopIds(shopIds: string[]): Promise<AdminBarberSummaryDto[]> {
-    const barbers = await this.shopRepository.findBarbersByShopIds(shopIds);
+    const barbers = await this.barberService.getBarbersByShopIds(shopIds);
 
     return barbers.map((b) => ({
-      id: b._id.toString(),
+      id: b.id,
       name: b.name,
       phone: b.phone,
       photo: b.photo,
-      isActive: b.isActive,
-      shopId: b.shopId.toString(),
+      isAvailable: b.isAvailable,
+      shopId: b.shopId,
     }));
   }
 
