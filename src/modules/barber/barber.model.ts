@@ -47,35 +47,3 @@ barberSchema.index({ vendorId: 1, isActive: 1 });
 barberSchema.index({ shopId: 1, phone: 1 }, { unique: true });
 
 export const BarberModel = mongoose.model<IBarber>('Barber', barberSchema);
-
-export interface IBarberService extends Document {
-  barberId: mongoose.Types.ObjectId;
-  serviceId: mongoose.Types.ObjectId;
-  shopId: mongoose.Types.ObjectId;
-  price: number;
-  durationMinutes: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const barberServiceSchema = new Schema<IBarberService>(
-  {
-    barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
-    serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
-    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    price: { type: Number, required: true },
-    durationMinutes: { type: Number, required: true },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true },
-);
-
-barberServiceSchema.index({ barberId: 1, isActive: 1 });
-barberServiceSchema.index({ shopId: 1, isActive: 1 });
-barberServiceSchema.index({ barberId: 1, serviceId: 1 }, { unique: true });
-
-export const BarberServiceModel = mongoose.model<IBarberService>(
-  'BarberService',
-  barberServiceSchema,
-);

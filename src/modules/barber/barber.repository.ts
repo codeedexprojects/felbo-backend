@@ -1,5 +1,6 @@
 import { ClientSession } from 'mongoose';
-import { BarberModel, IBarber, BarberServiceModel, IBarberService } from './barber.model';
+import { BarberModel, IBarber } from './barber.model';
+import { BarberServiceModel, IBarberService } from '../service/service.model';
 import { ListBarbersFilter } from './barber.types';
 
 export class BarberRepository {
