@@ -1,79 +1,3 @@
-// ========================================
-// File: src/modules/upload/upload.constants.ts
-// ========================================
-export const MIME_TO_EXT = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-} as const;
-
-export type AllowedMimeType = keyof typeof MIME_TO_EXT;
-
-export const ALLOWED_MIME_TYPES = Object.keys(MIME_TO_EXT) as AllowedMimeType[];
-
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-
-export const PRESIGNED_PUT_EXPIRY_SECONDS = 300; // 5 minutes
-export const PRESIGNED_GET_EXPIRY_SECONDS = 3600; // 1 hour
-export const CLEANUP_AGE_HOURS = 24;
-
-export const S3_DELETE_BATCH_SIZE = 1000;
-export const S3_VENDORS_PREFIX = 'vendors/';
-
-
-
-// ========================================
-// File: src/modules/upload/upload.container.ts
-// ========================================
-import { config } from '../../shared/config/config.service';
-import { logger } from '../../shared/logger/logger';
-import { vendorService } from '../vendor/vendor.container';
-import UploadService from './upload.service';
-import UploadController from './upload.controller';
-
-const uploadService = new UploadService(
-  vendorService,
-  config.aws.bucket,
-  config.aws.region,
-  logger,
-);
-
-const uploadController = new UploadController(uploadService);
-
-export { uploadService, uploadController };
-
-
-
-// ========================================
-// File: src/modules/upload/upload.controller.ts
-// ========================================
-import { Request, Response } from 'express';
-import UploadService from './upload.service';
-import { generateUploadUrlSchema, verifyUploadSchema } from './upload.validators';
-
-export default class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
-
-  generateUploadUrl = async (req: Request, res: Response): Promise<void> => {
-    const validated = generateUploadUrlSchema.parse(req.body);
-    const result = await this.uploadService.generateUploadUrl(validated);
-
-    res.status(200).json({ success: true, data: result });
-  };
-
-  verifyUpload = async (req: Request, res: Response): Promise<void> => {
-    const validated = verifyUploadSchema.parse(req.body);
-    const result = await this.uploadService.verifyUpload(validated);
-
-    res.status(200).json({ success: true, data: result });
-  };
-}
-
-
-
-// ========================================
-// File: src/modules/upload/upload.service.ts
-// ========================================
 import { randomUUID } from 'crypto';
 import {
   S3Client,
@@ -123,7 +47,6 @@ export default class UploadService {
       Bucket: this.bucket,
       Key: key,
       ContentType: input.mimeType,
-      ContentLength: input.fileSizeBytes,
     });
 
     const uploadUrl = await withRetry(() =>
@@ -256,58 +179,3 @@ export default class UploadService {
     return results;
   }
 }
-
-
-
-// ========================================
-// File: src/modules/upload/upload.types.ts
-// ========================================
-export interface GenerateUploadUrlInput {
-  vendorId: string;
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
-  fileSizeBytes: number;
-}
-
-export interface GenerateUploadUrlResponse {
-  uploadUrl: string;
-  key: string;
-  expiresIn: number;
-}
-
-export interface VerifyUploadInput {
-  vendorId: string;
-  key: string;
-}
-
-export interface VerifyUploadResponse {
-  verified: true;
-  viewUrl: string;
-}
-
-
-
-// ========================================
-// File: src/modules/upload/upload.validators.ts
-// ========================================
-import { z } from 'zod';
-
-import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './upload.constants';
-
-export const generateUploadUrlSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
-  mimeType: z.enum(ALLOWED_MIME_TYPES, {
-    message: 'Only image/jpeg, image/png, and image/webp are allowed',
-  }),
-  fileSizeBytes: z
-    .number({ message: 'File size must be a number' })
-    .int('File size must be an integer')
-    .positive('File size must be positive')
-    .max(MAX_FILE_SIZE_BYTES, 'File size must not exceed 10MB'),
-});
-
-export const verifyUploadSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
-  key: z.string().min(1, 'Key is required'),
-});
-
-

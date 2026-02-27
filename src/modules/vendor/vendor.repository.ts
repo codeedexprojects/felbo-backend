@@ -148,4 +148,22 @@ export default class VendorRepository {
       { returnDocument: 'after' },
     ).exec();
   }
+
+  async getAllPhotoKeys(): Promise<string[]> {
+    const vendors = await VendorModel.find(
+      {},
+      { 'documents.shopLicense': 1, 'documents.ownerIdProof': 1, associationIdProofUrl: 1 },
+    )
+      .lean()
+      .exec();
+
+    const keys: string[] = [];
+    for (const v of vendors) {
+      if (v.documents?.shopLicense) keys.push(v.documents.shopLicense);
+      if (v.documents?.ownerIdProof) keys.push(v.documents.ownerIdProof);
+      if (v.associationIdProofUrl) keys.push(v.associationIdProofUrl);
+    }
+
+    return [...new Set(keys)];
+  }
 }
