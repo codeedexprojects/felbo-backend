@@ -1,5 +1,6 @@
 import mongoose, { ClientSession, PipelineStage } from 'mongoose';
-import { ShopModel, IShop, IEmbeddedCategory, ServiceModel, IService } from './shop.model';
+import { ShopModel, IShop, IEmbeddedCategory } from './shop.model';
+import { ServiceModel } from '../service/service.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
@@ -269,93 +270,5 @@ export default class ShopRepository {
     return [...shop.categories]
       .filter((c) => c.isActive)
       .sort((a, b) => a.displayOrder - b.displayOrder);
-  }
-
-  // --- Service operations ---
-
-  async createService(
-    data: {
-      shopId: string;
-      categoryId: string;
-      name: string;
-      basePrice: number;
-      baseDurationMinutes: number;
-      applicableFor: 'MENS' | 'WOMENS' | 'ALL';
-      description?: string;
-    },
-    session?: ClientSession,
-  ): Promise<IService> {
-    const [service] = await ServiceModel.create(
-      [
-        {
-          shopId: data.shopId,
-          categoryId: data.categoryId,
-          name: data.name,
-          basePrice: data.basePrice,
-          baseDurationMinutes: data.baseDurationMinutes,
-          applicableFor: data.applicableFor,
-          description: data.description,
-          status: 'ACTIVE',
-          isActive: true,
-        },
-      ],
-      { session },
-    );
-    return service;
-  }
-
-  countActiveServices(shopId: string, session?: ClientSession): Promise<number> {
-    return ServiceModel.countDocuments({ shopId, isActive: true })
-      .session(session ?? null)
-      .exec();
-  }
-
-  findActiveServicesByIds(serviceIds: string[], shopId: string): Promise<IService[]> {
-    return ServiceModel.find({ _id: { $in: serviceIds }, shopId, isActive: true }).exec();
-  }
-
-  findServicesByShopId(shopId: string): Promise<IService[]> {
-    return ServiceModel.find({ shopId, isActive: true }).exec();
-  }
-
-  findServicesByShopIds(shopIds: string[]): Promise<IService[]> {
-    return ServiceModel.find({
-      shopId: { $in: shopIds },
-    })
-      .lean()
-      .exec();
-  }
-
-  findServiceById(id: string): Promise<IService | null> {
-    return ServiceModel.findById(id).exec();
-  }
-
-  findServicesByIds(ids: string[]): Promise<IService[]> {
-    return ServiceModel.find({ _id: { $in: ids }, status: { $ne: 'DELETED' } }).exec();
-  }
-
-  updateService(
-    id: string,
-    data: Partial<
-      Pick<IService, 'name' | 'basePrice' | 'baseDurationMinutes' | 'applicableFor' | 'description'>
-    >,
-  ): Promise<IService | null> {
-    return ServiceModel.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after' }).exec();
-  }
-
-  softDeleteService(id: string): Promise<IService | null> {
-    return ServiceModel.findByIdAndUpdate(
-      id,
-      { $set: { status: 'DELETED', isActive: false } },
-      { returnDocument: 'after' },
-    ).exec();
-  }
-
-  toggleServiceActive(id: string, isActive: boolean): Promise<IService | null> {
-    return ServiceModel.findByIdAndUpdate(
-      id,
-      { $set: { isActive, status: isActive ? 'ACTIVE' : 'INACTIVE' } },
-      { returnDocument: 'after' },
-    ).exec();
   }
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { barberController } from '../../modules/barber/barber.container';
+import { serviceController } from '../../modules/service/service.container';
 
 const router = Router();
 
@@ -12,8 +13,8 @@ router.delete('/:barberId', barberController.deleteBarber);
 router.patch('/:barberId/status', barberController.toggleBarberAvailability);
 router.patch('/:barberId/credentials', barberController.updateCredentials);
 
-router.get('/:barberId/services', barberController.getBarberServices);
-router.put('/:barberId/services', barberController.assignServices);
-router.delete('/:barberId/services/:serviceId', barberController.removeBarberService);
+router.get('/:barberId/services', serviceController.getBarberServices);
+router.put('/:barberId/services', serviceController.assignServices);
+router.delete('/:barberId/services/:serviceId', serviceController.removeBarberService);
 
 export default router;
