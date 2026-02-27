@@ -10,6 +10,8 @@ import {
   OnboardBarberDto,
   OnboardBarberServiceDto,
   BarberServiceLinkDto,
+  AssignServicesInput,
+  BarberAssignedServiceDto,
 } from './barber.types';
 import { IBarber, IBarberService } from './barber.model';
 import { NotFoundError, ConflictError, ForbiddenError, ValidationError } from '../../shared/errors';
@@ -290,5 +292,102 @@ export class BarberService {
       createdAt: l.createdAt,
       updatedAt: l.updatedAt,
     }));
+  }
+
+  async assignServices(
+    barberId: string,
+    vendorId: string,
+    input: AssignServicesInput,
+  ): Promise<BarberAssignedServiceDto[]> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+    if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
+
+    const shopId = barber.shopId.toString();
+
+    const serviceIds = input.services.map((s) => s.serviceId);
+    const uniqueServiceIds = [...new Set(serviceIds)];
+    if (uniqueServiceIds.length !== serviceIds.length) {
+      throw new ValidationError('Duplicate service IDs are not allowed.');
+    }
+
+    const validServices = await this.shopService.getActiveServicesByIds(uniqueServiceIds, shopId);
+    if (validServices.length !== uniqueServiceIds.length) {
+      throw new ValidationError(
+        'One or more service IDs are invalid or do not belong to this shop.',
+      );
+    }
+
+    const newLinks = await withTransaction((session) =>
+      this.barberRepository.replaceBarberServices(barberId, shopId, input.services, session),
+    );
+
+    this.logger.info({
+      action: 'BARBER_SERVICES_ASSIGNED',
+      module: 'barber',
+      barberId,
+      vendorId,
+      serviceCount: newLinks.length,
+    });
+
+    const serviceNameMap = new Map(validServices.map((s) => [s.id, s.name]));
+
+    return newLinks.map((l) => ({
+      id: l._id.toString(),
+      barberId: l.barberId.toString(),
+      serviceId: l.serviceId.toString(),
+      shopId: l.shopId.toString(),
+      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
+      price: l.price,
+      durationMinutes: l.durationMinutes,
+      isActive: l.isActive,
+    }));
+  }
+
+  async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+    if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
+
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    if (links.length === 0) return [];
+
+    const serviceIds = links.map((l) => l.serviceId.toString());
+    const services = await this.shopService.getServicesByIds(serviceIds);
+    const serviceNameMap = new Map(services.map((s) => [s.id, s.name]));
+
+    return links.map((l) => ({
+      id: l._id.toString(),
+      barberId: l.barberId.toString(),
+      serviceId: l.serviceId.toString(),
+      shopId: l.shopId.toString(),
+      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
+      price: l.price,
+      durationMinutes: l.durationMinutes,
+      isActive: l.isActive,
+    }));
+  }
+
+  async removeBarberService(barberId: string, serviceId: string, vendorId: string): Promise<void> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+    if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
+
+    const link = await this.barberRepository.findBarberServiceByIds(barberId, serviceId);
+    if (!link) throw new NotFoundError('Service assignment not found.');
+
+    await this.barberRepository.removeBarberService(barberId, serviceId);
+
+    this.logger.info({
+      action: 'BARBER_SERVICE_REMOVED',
+      module: 'barber',
+      barberId,
+      serviceId,
+      vendorId,
+    });
+  }
+
+  async hasAnyAssignedBarber(serviceId: string): Promise<boolean> {
+    return this.barberRepository.existsByServiceId(serviceId);
   }
 }

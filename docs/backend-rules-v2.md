@@ -5,7 +5,7 @@
 
 **2. Architecture Rules:**
 * **Style:** Service + Repository Pattern. No DDD, Clean Arch, CQRS, or Microservices.
-* **Module Structure:** Under `src/modules/<name>/`. EXACTLY 7 files: `.controller.ts`, `.service.ts`, `.repository.ts`, `.model.ts`, `.types.ts`, `.validators.ts`, `.routes.ts`. *No sub-folders, no `index.ts` barrel files.*
+* **Module Structure:** Under `src/modules/<name>/`. EXACTLY 7 files: `.controller.ts`, `.service.ts`, `.repository.ts`, `.model.ts`, `.types.ts`, `.validators.ts`. *No sub-folders, no `index.ts` barrel files.*
 * **Shared (`src/shared/`):** Allowed cross-imports (db, redis, queue, middleware, errors, config, utils, constants, types, logger).
 
 **3. Layer Responsibility (STRICT):**

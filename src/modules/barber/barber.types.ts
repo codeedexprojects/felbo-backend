@@ -95,3 +95,24 @@ export interface BarberServiceLinkDto {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface AssignServiceItemInput {
+  serviceId: string;
+  price: number;
+  durationMinutes: number;
+}
+
+export interface AssignServicesInput {
+  services: AssignServiceItemInput[];
+}
+
+export interface BarberAssignedServiceDto {
+  id: string;
+  barberId: string;
+  serviceId: string;
+  shopId: string;
+  serviceName: string;
+  price: number;
+  durationMinutes: number;
+  isActive: boolean;
+}

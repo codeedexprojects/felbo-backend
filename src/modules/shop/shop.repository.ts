@@ -325,4 +325,37 @@ export default class ShopRepository {
       .lean()
       .exec();
   }
+
+  findServiceById(id: string): Promise<IService | null> {
+    return ServiceModel.findById(id).exec();
+  }
+
+  findServicesByIds(ids: string[]): Promise<IService[]> {
+    return ServiceModel.find({ _id: { $in: ids }, status: { $ne: 'DELETED' } }).exec();
+  }
+
+  updateService(
+    id: string,
+    data: Partial<
+      Pick<IService, 'name' | 'basePrice' | 'baseDurationMinutes' | 'applicableFor' | 'description'>
+    >,
+  ): Promise<IService | null> {
+    return ServiceModel.findByIdAndUpdate(id, { $set: data }, { returnDocument: 'after' }).exec();
+  }
+
+  softDeleteService(id: string): Promise<IService | null> {
+    return ServiceModel.findByIdAndUpdate(
+      id,
+      { $set: { status: 'DELETED', isActive: false } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  toggleServiceActive(id: string, isActive: boolean): Promise<IService | null> {
+    return ServiceModel.findByIdAndUpdate(
+      id,
+      { $set: { isActive, status: isActive ? 'ACTIVE' : 'INACTIVE' } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
 }

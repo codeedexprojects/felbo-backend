@@ -81,6 +81,14 @@ export interface AddServiceInput {
   description?: string;
 }
 
+export interface UpdateServiceInput {
+  name?: string;
+  basePrice?: number;
+  baseDurationMinutes?: number;
+  applicableFor?: 'MENS' | 'WOMENS' | 'ALL';
+  description?: string;
+}
+
 export interface BarberServiceInput {
   serviceId: string;
   price: number;
@@ -175,7 +183,7 @@ export interface ServiceDto {
   baseDurationMinutes: number;
   applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
   isActive: boolean;
 }
 
