@@ -185,7 +185,7 @@ export interface IService extends Document {
   baseDurationMinutes: number;
   applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -206,7 +206,7 @@ const serviceSchema = new Schema<IService>(
     description: { type: String },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE'],
+      enum: ['ACTIVE', 'INACTIVE', 'DELETED'],
       default: 'ACTIVE',
     },
     isActive: { type: Boolean, default: true },

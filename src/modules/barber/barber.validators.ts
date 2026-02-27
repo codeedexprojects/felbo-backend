@@ -60,6 +60,27 @@ export const listBarberQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'DELETED']).optional(),
 });
 
+export const assignServicesSchema = z.object({
+  services: z
+    .array(
+      z.object({
+        serviceId: mongoIdSchema,
+        price: z.number().positive('Enter valid price'),
+        durationMinutes: z
+          .number()
+          .int()
+          .min(5, 'Duration must be 5-180 minutes')
+          .max(180, 'Duration must be 5-180 minutes'),
+      }),
+    )
+    .min(1, 'At least one service is required'),
+});
+
+export const barberServiceParamSchema = z.object({
+  barberId: mongoIdSchema,
+  serviceId: mongoIdSchema,
+});
+
 // Onboarding: add barber with service assignments during shop setup
 export const onboardBarberSchema = z.object({
   name: z.string().min(2, 'Barber name must be at least 2 characters').max(100),

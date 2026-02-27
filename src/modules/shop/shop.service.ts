@@ -10,6 +10,7 @@ import {
   CompleteProfileInput,
   AddCategoryInput,
   AddServiceInput,
+  UpdateServiceInput,
   NearbyShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
@@ -35,6 +36,9 @@ import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.type
 
 const DEFAULT_MAX_DISTANCE = 10000; // 10 km
 const DEFAULT_PAGE_LIMIT = 20;
+
+// TODO: Replace with configService.get('limits.maxServicesPerShop') once config module is implemented
+const MAX_SERVICES_PER_SHOP = 50;
 
 export default class ShopService {
   constructor(
@@ -344,6 +348,148 @@ export default class ShopService {
     });
 
     return this.toServiceDto(service);
+  }
+
+  async createService(
+    shopId: string,
+    vendorId: string,
+    input: AddServiceInput,
+  ): Promise<ServiceDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    if (
+      shop.onboardingStatus === 'PENDING_PROFILE' ||
+      shop.onboardingStatus === 'PENDING_CATEGORIES'
+    ) {
+      throw new ConflictError('Add at least one category before adding services.');
+    }
+
+    const categoryExists = shop.categories.some(
+      (c) => c._id.toString() === input.categoryId && c.isActive,
+    );
+    if (!categoryExists) {
+      throw new NotFoundError('Category not found or does not belong to this shop.');
+    }
+
+    const currentCount = await this.shopRepository.countActiveServices(shopId);
+    if (currentCount >= MAX_SERVICES_PER_SHOP) {
+      throw new ConflictError(
+        `Shop cannot have more than ${MAX_SERVICES_PER_SHOP} active services.`,
+      );
+    }
+
+    const service = await this.shopRepository.createService({
+      shopId,
+      categoryId: input.categoryId,
+      name: input.name,
+      basePrice: input.basePrice,
+      baseDurationMinutes: input.baseDurationMinutes,
+      applicableFor: input.applicableFor,
+      description: input.description,
+    });
+
+    this.logger.info({
+      action: 'SERVICE_CREATED',
+      module: 'shop',
+      shopId,
+      serviceId: service._id.toString(),
+      vendorId,
+    });
+
+    return this.toServiceDto(service);
+  }
+
+  async listServices(shopId: string, vendorId: string): Promise<ServiceDto[]> {
+    await this.assertShopOwnership(shopId, vendorId);
+    const services = await this.shopRepository.findServicesByShopId(shopId);
+    return services.map((s) => this.toServiceDto(s));
+  }
+
+  async updateService(
+    shopId: string,
+    vendorId: string,
+    serviceId: string,
+    input: UpdateServiceInput,
+  ): Promise<ServiceDto> {
+    await this.assertShopOwnership(shopId, vendorId);
+
+    const service = await this.shopRepository.findServiceById(serviceId);
+    if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
+      throw new NotFoundError('Service not found.');
+    }
+
+    if (input.name && input.name !== service.name) {
+      const services = await this.shopRepository.findServicesByShopId(shopId);
+      const duplicate = services.some(
+        (s) => s.name === input.name && s._id.toString() !== serviceId,
+      );
+      if (duplicate) throw new ConflictError('A service with this name already exists.');
+    }
+
+    const updated = await this.shopRepository.updateService(serviceId, input);
+    if (!updated) throw new NotFoundError('Service not found.');
+
+    this.logger.info({
+      action: 'SERVICE_UPDATED',
+      module: 'shop',
+      shopId,
+      serviceId,
+      vendorId,
+    });
+
+    return this.toServiceDto(updated);
+  }
+
+  async deleteService(shopId: string, vendorId: string, serviceId: string): Promise<void> {
+    await this.assertShopOwnership(shopId, vendorId);
+
+    const service = await this.shopRepository.findServiceById(serviceId);
+    if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
+      throw new NotFoundError('Service not found.');
+    }
+
+    const hasAssigned = await this.barberService.hasAnyAssignedBarber(serviceId);
+    if (hasAssigned) {
+      throw new ConflictError('Cannot delete service assigned to barbers.');
+    }
+
+    await this.shopRepository.softDeleteService(serviceId);
+
+    this.logger.info({
+      action: 'SERVICE_DELETED',
+      module: 'shop',
+      shopId,
+      serviceId,
+      vendorId,
+    });
+  }
+
+  async toggleService(shopId: string, vendorId: string, serviceId: string): Promise<ServiceDto> {
+    await this.assertShopOwnership(shopId, vendorId);
+
+    const service = await this.shopRepository.findServiceById(serviceId);
+    if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
+      throw new NotFoundError('Service not found.');
+    }
+
+    const newIsActive = !service.isActive;
+    const updated = await this.shopRepository.toggleServiceActive(serviceId, newIsActive);
+    if (!updated) throw new NotFoundError('Service not found.');
+
+    this.logger.info({
+      action: newIsActive ? 'SERVICE_ENABLED' : 'SERVICE_DISABLED',
+      module: 'shop',
+      shopId,
+      serviceId,
+      vendorId,
+    });
+
+    return this.toServiceDto(updated);
+  }
+
+  async getServicesByIds(ids: string[]): Promise<ServiceDto[]> {
+    const services = await this.shopRepository.findServicesByIds(ids);
+    return services.map((s) => this.toServiceDto(s));
   }
 
   // --- Public discovery ---

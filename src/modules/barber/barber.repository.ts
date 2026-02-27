@@ -156,4 +156,42 @@ export class BarberRepository {
   async softDelete(id: string): Promise<void> {
     await BarberModel.findByIdAndUpdate(id, { status: 'DELETED' }).exec();
   }
+
+  async replaceBarberServices(
+    barberId: string,
+    shopId: string,
+    services: Array<{ serviceId: string; price: number; durationMinutes: number }>,
+    session?: ClientSession,
+  ): Promise<IBarberService[]> {
+    await BarberServiceModel.deleteMany({ barberId })
+      .session(session ?? null)
+      .exec();
+
+    if (services.length === 0) return [];
+
+    return BarberServiceModel.create(
+      services.map((s) => ({
+        barberId,
+        serviceId: s.serviceId,
+        shopId,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+        isActive: true,
+      })),
+      { session },
+    );
+  }
+
+  findBarberServiceByIds(barberId: string, serviceId: string): Promise<IBarberService | null> {
+    return BarberServiceModel.findOne({ barberId, serviceId }).exec();
+  }
+
+  async removeBarberService(barberId: string, serviceId: string): Promise<void> {
+    await BarberServiceModel.deleteOne({ barberId, serviceId }).exec();
+  }
+
+  async existsByServiceId(serviceId: string): Promise<boolean> {
+    const doc = await BarberServiceModel.exists({ serviceId }).exec();
+    return doc !== null;
+  }
 }

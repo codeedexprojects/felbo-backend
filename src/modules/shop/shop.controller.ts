@@ -11,6 +11,8 @@ import {
   completeProfileSchema,
   addCategorySchema,
   addServiceSchema,
+  updateServiceSchema,
+  serviceIdParamSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -85,6 +87,63 @@ export default class ShopController {
     const result = await this.shopService.addService(shopId, req.user!.sub, validated);
 
     res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  createService = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = addServiceSchema.parse(req.body);
+    const result = await this.shopService.createService(shopId, req.user!.sub, validated);
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  listServices = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.listServices(shopId, req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  updateService = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, serviceId } = serviceIdParamSchema.parse(req.params);
+    const validated = updateServiceSchema.parse(req.body);
+    const result = await this.shopService.updateService(
+      shopId,
+      req.user!.sub,
+      serviceId,
+      validated,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  deleteService = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, serviceId } = serviceIdParamSchema.parse(req.params);
+    await this.shopService.deleteService(shopId, req.user!.sub, serviceId);
+
+    res.status(200).json({
+      success: true,
+      data: null,
+    });
+  };
+
+  toggleService = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, serviceId } = serviceIdParamSchema.parse(req.params);
+    const result = await this.shopService.toggleService(shopId, req.user!.sub, serviceId);
+
+    res.status(200).json({
       success: true,
       data: result,
     });

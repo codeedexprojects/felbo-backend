@@ -108,6 +108,28 @@ export const addServiceSchema = z.object({
   description: z.string().max(500).optional(),
 });
 
+export const updateServiceSchema = z
+  .object({
+    name: z.string().min(1, 'Service name is required').max(100).optional(),
+    basePrice: z.number().positive('Enter valid price').optional(),
+    baseDurationMinutes: z
+      .number()
+      .int()
+      .min(5, 'Duration must be 5-180 minutes')
+      .max(180, 'Duration must be 5-180 minutes')
+      .optional(),
+    applicableFor: z.enum(['MENS', 'WOMENS', 'ALL']).optional(),
+    description: z.string().max(500).optional(),
+  })
+  .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    message: 'At least one field is required for update.',
+  });
+
+export const serviceIdParamSchema = z.object({
+  shopId: mongoIdSchema,
+  serviceId: mongoIdSchema,
+});
+
 export const addBarberSchema = z.object({
   name: z.string().min(2, 'Barber name must be at least 2 characters').max(100),
   phone: z
