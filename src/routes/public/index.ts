@@ -1,5 +1,3 @@
-// src/routes/public/index.ts
-
 import { Router } from 'express';
 import shopRoutes from './shop.routes';
 

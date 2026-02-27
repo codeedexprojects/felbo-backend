@@ -1,5 +1,3 @@
-// src/routes/user/index.ts
-
 import { Router } from 'express';
 import { authenticate } from '../../shared/middleware/authenticate';
 import { authorize } from '../../shared/middleware/authorize';
@@ -9,10 +7,8 @@ import profileRoutes from './profile.routes';
 
 const router = Router();
 
-// ==================== AUTH (mixed public/protected) ====================
 router.use('/auth', authRoutes);
 
-// ==================== PROTECTED ROUTES ====================
 router.use(authenticate);
 router.use(authorize('USER'));
 

@@ -1,5 +1,3 @@
-// src/routes/admin/user.routes.ts
-
 import { Router } from 'express';
 import { adminController } from '../../modules/admin/admin.container';
 import { authorize } from '../../shared/middleware/authorize';

@@ -1,5 +1,3 @@
-// src/routes/admin/issue.routes.ts
-
 import { Router } from 'express';
 import { issueController } from '../../modules/issue/issue.container';
 import { authorize } from '../../shared/middleware/authorize';

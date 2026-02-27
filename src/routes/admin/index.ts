@@ -1,5 +1,3 @@
-// src/routes/admin/index.ts
-
 import { Router } from 'express';
 import { authenticate } from '../../shared/middleware/authenticate';
 
@@ -11,12 +9,8 @@ import advertisementRoutes from './advertisement.routes';
 
 const router = Router();
 
-// ==================== AUTH (mixed public/protected) ====================
 router.use('/auth', authRoutes);
 
-// ==================== PROTECTED ROUTES ====================
-// authenticate is applied globally; each route file handles its own authorize()
-// because admin roles differ per endpoint (SUPER_ADMIN vs SUB_ADMIN vs ASSOCIATION_ADMIN)
 router.use(authenticate);
 
 router.use('/vendors', vendorRoutes);

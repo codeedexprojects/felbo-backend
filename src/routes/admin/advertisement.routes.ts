@@ -1,5 +1,3 @@
-// src/routes/admin/advertisement.routes.ts
-
 import { Router } from 'express';
 import { advertisementController } from '../../modules/advertisement/advertisement.container';
 import { authorize } from '../../shared/middleware/authorize';

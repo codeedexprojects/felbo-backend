@@ -1,12 +1,9 @@
-// src/routes/admin/vendor.routes.ts
-
 import { Router } from 'express';
 import { adminController } from '../../modules/admin/admin.container';
 import { authorize } from '../../shared/middleware/authorize';
 
 const router = Router();
 
-// /requests before /:id to prevent route shadowing
 router.get(
   '/requests',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),

@@ -1,5 +1,3 @@
-// src/routes/vendor/barber.routes.ts
-
 import { Router } from 'express';
 import { barberController } from '../../modules/barber/barber.container';
 

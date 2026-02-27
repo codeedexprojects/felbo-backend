@@ -1,5 +1,3 @@
-// src/routes/webhook/payment.routes.ts
-
 import { Router } from 'express';
 import { paymentController } from '../../modules/payment/payment.container';
 
