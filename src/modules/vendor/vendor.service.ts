@@ -647,4 +647,8 @@ export default class VendorService {
       counts,
     };
   }
+
+  async getAllPhotoKeys(): Promise<string[]> {
+    return this.vendorRepository.getAllPhotoKeys();
+  }
 }
