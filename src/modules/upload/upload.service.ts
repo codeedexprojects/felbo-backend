@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import {
   S3Client,
   PutObjectCommand,
@@ -10,22 +9,15 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Logger } from 'winston';
 import VendorService from '../vendor/vendor.service';
+import { VerifyUploadResponse, UploadUrlResponse } from './upload.types';
 import {
-  GenerateUploadUrlInput,
-  GenerateUploadUrlResponse,
-  VerifyUploadInput,
-  VerifyUploadResponse,
-} from './upload.types';
-import {
-  MIME_TO_EXT,
   PRESIGNED_GET_EXPIRY_SECONDS,
   PRESIGNED_PUT_EXPIRY_SECONDS,
   CLEANUP_AGE_HOURS,
   S3_DELETE_BATCH_SIZE,
-  S3_VENDORS_PREFIX,
 } from './upload.constants';
 import { withRetry, isS3ClientError, chunkArray } from '@shared/utils/retry';
-import { ValidationError, NotFoundError } from '@shared/errors';
+import { NotFoundError } from '@shared/errors';
 
 export default class UploadService {
   private readonly s3: S3Client;
@@ -39,41 +31,26 @@ export default class UploadService {
     this.s3 = new S3Client({ region });
   }
 
-  async generateUploadUrl(input: GenerateUploadUrlInput): Promise<GenerateUploadUrlResponse> {
-    const ext = MIME_TO_EXT[input.mimeType];
-    const key = `${S3_VENDORS_PREFIX}${input.vendorId}/${randomUUID()}.${ext}`;
-
+  private async _generatePresignedPutUrl(
+    key: string,
+    mimeType: string,
+  ): Promise<{ uploadUrl: string }> {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
-      ContentType: input.mimeType,
+      ContentType: mimeType,
     });
 
     const uploadUrl = await withRetry(() =>
       getSignedUrl(this.s3, command, { expiresIn: PRESIGNED_PUT_EXPIRY_SECONDS }),
     );
 
-    this.logger.info({
-      action: 'UPLOAD_URL_GENERATED',
-      module: 'upload',
-      vendorId: input.vendorId,
-      key,
-      mimeType: input.mimeType,
-    });
-
-    return { uploadUrl, key, expiresIn: PRESIGNED_PUT_EXPIRY_SECONDS };
+    return { uploadUrl };
   }
 
-  async verifyUpload(input: VerifyUploadInput): Promise<VerifyUploadResponse> {
-    const expectedPrefix = `vendors/${input.vendorId}/`;
-    if (!input.key.startsWith(expectedPrefix)) {
-      throw new ValidationError('Invalid key: does not belong to this vendor.');
-    }
-
+  private async _verifyAndGetPresignedGetUrl(key: string): Promise<{ viewUrl: string }> {
     try {
-      await withRetry(() =>
-        this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: input.key })),
-      );
+      await withRetry(() => this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })));
     } catch (err: unknown) {
       if (isS3ClientError(err) && err.$metadata.httpStatusCode === 404) {
         throw new NotFoundError('File not found in storage. Please upload again.');
@@ -82,16 +59,34 @@ export default class UploadService {
     }
 
     const viewUrl = await withRetry(() =>
-      getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: input.key }), {
+      getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
         expiresIn: PRESIGNED_GET_EXPIRY_SECONDS,
       }),
     );
 
+    return { viewUrl };
+  }
+
+  async generateUploadUrlForKey(key: string, mimeType: string): Promise<UploadUrlResponse> {
+    const { uploadUrl } = await this._generatePresignedPutUrl(key, mimeType);
+
+    this.logger.info({
+      action: 'UPLOAD_URL_GENERATED',
+      module: 'upload',
+      key,
+      mimeType,
+    });
+
+    return { uploadUrl, key, expiresIn: PRESIGNED_PUT_EXPIRY_SECONDS };
+  }
+
+  async verifyUploadByKey(key: string): Promise<VerifyUploadResponse> {
+    const { viewUrl } = await this._verifyAndGetPresignedGetUrl(key);
+
     this.logger.info({
       action: 'UPLOAD_VERIFIED',
       module: 'upload',
-      vendorId: input.vendorId,
-      key: input.key,
+      key,
     });
 
     return { verified: true, viewUrl };

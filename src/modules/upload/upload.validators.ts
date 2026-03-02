@@ -1,9 +1,8 @@
 import { z } from 'zod';
-
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './upload.constants';
 
-export const generateUploadUrlSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
+// Upload URL request: just mimeType + fileSizeBytes — no vendorId needed (taken from JWT)
+export const uploadBodySchema = z.object({
   mimeType: z.enum(ALLOWED_MIME_TYPES, {
     message: 'Only image/jpeg, image/png, and image/webp are allowed',
   }),
@@ -14,7 +13,7 @@ export const generateUploadUrlSchema = z.object({
     .max(MAX_FILE_SIZE_BYTES, 'File size must not exceed 10MB'),
 });
 
-export const verifyUploadSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
+// Verify request: just the S3 key — prefix ownership is validated in the controller
+export const verifyKeySchema = z.object({
   key: z.string().min(1, 'Key is required'),
 });
