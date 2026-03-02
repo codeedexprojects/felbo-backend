@@ -21,7 +21,13 @@ export interface LoginVerifyOtpResponse {
     ownerName: string;
     email: string | null;
   };
-  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_CATEGORIES'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'COMPLETED'
+    | null;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -115,7 +121,13 @@ export interface VendorProfileDto {
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_CATEGORIES'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'COMPLETED'
+    | null;
 }
 
 export interface CreateVendorData {
@@ -206,8 +218,18 @@ export interface VendorStatusCounts {
   suspended: number;
 }
 
+export interface VendorListSlimDto {
+  id: string;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  registered: Date;
+}
+
 export interface ListVendorsResponse {
-  vendors: VendorListItemDto[];
+  vendors: VendorListSlimDto[];
   total: number;
   page: number;
   limit: number;
@@ -277,7 +299,7 @@ export interface VendorAdminDetail {
       name: string;
       phone: string;
       photo?: string;
-      isActive: boolean;
+      isAvailable: boolean;
     }[];
     barberCount: number;
 
@@ -285,7 +307,7 @@ export interface VendorAdminDetail {
       id: string;
       name: string;
       basePrice: number;
-      baseDuration: number;
+      baseDurationMinutes: number;
       description?: string;
     }[];
     serviceCount: number;

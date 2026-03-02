@@ -33,3 +33,20 @@ export const refreshTokenSchema = z.object({
 export const vendorIdParamSchema = z.object({
   id: z.string().min(1),
 });
+
+const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID');
+
+export const userIdParamSchema = z.object({
+  id: mongoIdSchema,
+});
+
+export const listUsersSchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(10),
+  status: z.enum(['ACTIVE', 'BLOCKED']).optional(),
+  search: z.string().min(1).optional(),
+});
+
+export const blockUserSchema = z.object({
+  reason: z.string().min(1, 'Block reason is required').max(500, 'Reason too long'),
+});

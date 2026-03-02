@@ -6,20 +6,17 @@ import {
   nearbyShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
+  shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
-  addServiceSchema,
-  addBarberSchema,
+  addCategorySchema,
 } from './shop.validators';
 
 export default class ShopController {
   constructor(private readonly shopService: ShopService) {}
 
   getMyShops = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.shopService.getMyShops(req.user!.userId);
-
-    // eslint-disable-next-line no-console
-    console.log('hello');
+    const result = await this.shopService.getMyShops(req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -29,7 +26,7 @@ export default class ShopController {
 
   getShop = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
-    const result = await this.shopService.getShop(shopId, req.user!.userId);
+    const result = await this.shopService.getShop(shopId, req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -40,7 +37,7 @@ export default class ShopController {
   updateShop = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = updateShopSchema.parse(req.body);
-    const result = await this.shopService.updateShop(shopId, req.user!.userId, validated);
+    const result = await this.shopService.updateShop(shopId, req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
@@ -51,7 +48,7 @@ export default class ShopController {
   updateWorkingHours = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = updateWorkingHoursSchema.parse(req.body);
-    const result = await this.shopService.updateWorkingHours(shopId, req.user!.userId, validated);
+    const result = await this.shopService.updateWorkingHours(shopId, req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
@@ -62,7 +59,7 @@ export default class ShopController {
   completeProfile = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const validated = completeProfileSchema.parse(req.body);
-    const result = await this.shopService.completeProfile(shopId, req.user!.userId, validated);
+    const result = await this.shopService.completeProfile(shopId, req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
@@ -70,21 +67,10 @@ export default class ShopController {
     });
   };
 
-  addService = async (req: Request, res: Response): Promise<void> => {
+  addCategory = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
-    const validated = addServiceSchema.parse(req.body);
-    const result = await this.shopService.addService(shopId, req.user!.userId, validated);
-
-    res.status(201).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  addBarber = async (req: Request, res: Response): Promise<void> => {
-    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
-    const validated = addBarberSchema.parse(req.body);
-    const result = await this.shopService.addBarber(shopId, req.user!.userId, validated);
+    const validated = addCategorySchema.parse(req.body);
+    const result = await this.shopService.addCategory(shopId, req.user!.sub, validated);
 
     res.status(201).json({
       success: true,
@@ -112,9 +98,10 @@ export default class ShopController {
     });
   };
 
-  getShopById = async (req: Request, res: Response): Promise<void> => {
+  getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
-    const result = await this.shopService.getShopById(id);
+    const { latitude, longitude } = shopDetailsQuerySchema.parse(req.query);
+    const result = await this.shopService.getShopDetails(id, { latitude, longitude });
 
     res.status(200).json({
       success: true,

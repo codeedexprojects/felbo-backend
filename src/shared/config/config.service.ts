@@ -65,6 +65,11 @@ export const config = {
     registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
   },
 
+  aws: {
+    region: getEnv('AWS_REGION', 'ap-south-1'),
+    bucket: getEnv('AWS_S3_BUCKET', ''),
+  },
+
   admin: {
     cookie: {
       name: 'adminRefreshToken',

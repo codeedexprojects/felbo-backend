@@ -11,6 +11,9 @@ export interface IBookingIssue extends Document {
   description: string;
   status: IssueStatus;
   reviewedBy?: mongoose.Types.ObjectId | null;
+  adminNote?: string | null;
+  razorpayPaymentId?: string | null;
+  refundId?: string | null;
   userLocation?: { lat: number; lng: number } | null;
   photoUrl?: string | null;
   refundStatus: RefundStatus;
@@ -27,7 +30,14 @@ const bookingIssueSchema = new Schema<IBookingIssue>(
     barberId: { type: Schema.Types.ObjectId, ref: 'Barber', default: null },
     type: {
       type: String,
-      enum: ['SHOP_CLOSED', 'BARBER_UNAVAILABLE', 'SERVICE_NOT_PROVIDED', 'QUALITY_ISSUE', 'OTHER'],
+      enum: [
+        'SHOP_CLOSED',
+        'BARBER_UNAVAILABLE',
+        'EXCESSIVE_WAIT',
+        'SERVICE_NOT_PROVIDED',
+        'QUALITY_ISSUE',
+        'OTHER',
+      ],
       required: true,
     },
     description: { type: String, required: true },
@@ -37,6 +47,9 @@ const bookingIssueSchema = new Schema<IBookingIssue>(
       default: 'OPEN',
     },
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'Admin', default: null },
+    adminNote: { type: String, default: null },
+    razorpayPaymentId: { type: String, default: null },
+    refundId: { type: String, default: null },
     userLocation: {
       type: { lat: Number, lng: Number },
       default: null,

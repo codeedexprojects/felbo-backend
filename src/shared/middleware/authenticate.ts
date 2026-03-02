@@ -19,6 +19,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   }
 
   const decoded = jwtService.verifyToken(token);
+
   req.user = decoded;
   next();
 }

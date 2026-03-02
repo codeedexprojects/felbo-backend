@@ -5,6 +5,9 @@ import {
   listVendorsSchema,
   rejectVendorSchema,
   vendorIdParamSchema,
+  listUsersSchema,
+  userIdParamSchema,
+  blockUserSchema,
 } from './admin.validators';
 import { AdminLoginInput } from './admin.types';
 import { UnauthorizedError } from '../../shared/errors/index';
@@ -48,7 +51,7 @@ export class AdminController {
   };
 
   logout = async (req: Request, res: Response): Promise<void> => {
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
     await this.adminService.logout(adminId);
 
     res.clearCookie(config.admin.cookie.name, { path: config.admin.cookie.options.path });
@@ -87,6 +90,7 @@ export class AdminController {
     const result = await this.adminService.listVerificationRequests(
       validated.page,
       validated.limit,
+      validated.search,
     );
 
     res.status(200).json({
@@ -97,7 +101,7 @@ export class AdminController {
 
   verifyVendor = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
 
     await this.adminService.verifyVendor(id, adminId);
 
@@ -109,7 +113,7 @@ export class AdminController {
 
   rejectVendor = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
-    const adminId = req.user!.userId;
+    const adminId = req.user!.sub;
     const validated = rejectVendorSchema.parse(req.body);
 
     await this.adminService.rejectVendor(id, adminId, validated.reason);
@@ -141,5 +145,30 @@ export class AdminController {
       success: true,
       data: result,
     });
+  };
+
+  listUsers = async (req: Request, res: Response): Promise<void> => {
+    const validated = listUsersSchema.parse(req.query);
+    const result = await this.adminService.listUsers(validated);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  getUserDetail = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    const result = await this.adminService.getUserDetail(id);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  blockUser = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    const { reason } = blockUserSchema.parse(req.body);
+    await this.adminService.blockUser(id, reason);
+    res.status(200).json({ success: true, message: 'User blocked successfully.' });
+  };
+
+  unblockUser = async (req: Request, res: Response): Promise<void> => {
+    const { id } = userIdParamSchema.parse(req.params);
+    await this.adminService.unblockUser(id);
+    res.status(200).json({ success: true, message: 'User unblocked successfully.' });
   };
 }

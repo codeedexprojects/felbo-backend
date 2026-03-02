@@ -80,28 +80,25 @@ export default class VendorService {
   private async getShopOnboardingStatus(
     vendorId: string,
   ): Promise<VendorProfileDto['onboardingStatus']> {
-    try {
-      const shops = await this.shopService.getMyShops(vendorId);
-      if (shops.length === 0) return null;
+    const shops = await this.shopService.getMyShops(vendorId);
+    if (shops.length === 0) return null;
 
-      // Return the least-progressed onboarding status across all shops
-      const statusPriority: Record<string, number> = {
-        PENDING_PROFILE: 0,
-        PENDING_SERVICES: 1,
-        PENDING_BARBERS: 2,
-        COMPLETED: 3,
-      };
+    // Return the least-progressed onboarding status across all shops
+    const statusPriority: Record<string, number> = {
+      PENDING_PROFILE: 0,
+      PENDING_CATEGORIES: 1,
+      PENDING_SERVICES: 2,
+      PENDING_BARBERS: 3,
+      COMPLETED: 4,
+    };
 
-      const leastProgressed = shops.reduce((min, shop) =>
-        (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-          ? shop
-          : min,
-      );
+    const leastProgressed = shops.reduce((min, shop) =>
+      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+        ? shop
+        : min,
+    );
 
-      return leastProgressed.onboardingStatus;
-    } catch {
-      return null;
-    }
+    return leastProgressed.onboardingStatus;
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
@@ -159,8 +156,7 @@ export default class VendorService {
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
     const tokenPayload: TokenPayload = {
-      userId: vendor._id.toString(),
-      phone: vendor.phone,
+      sub: vendor._id.toString(),
       role: 'VENDOR',
     };
 
@@ -440,6 +436,12 @@ export default class VendorService {
     });
   }
 
+  async flagVendor(vendorId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+    await this.vendorRepository.flagById(vendorId);
+  }
+
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
     const vendor = await this.vendorRepository.findById(vendorId);
 
@@ -494,7 +496,7 @@ export default class VendorService {
             name: b.name,
             phone: b.phone,
             photo: b.photo,
-            isActive: b.isActive,
+            isAvailable: b.isAvailable,
           })),
           barberCount: barberList.length,
 
@@ -502,7 +504,7 @@ export default class VendorService {
             id: s.id.toString(),
             name: s.name,
             basePrice: s.basePrice,
-            baseDuration: s.baseDuration,
+            baseDurationMinutes: s.baseDurationMinutes,
             description: s.description,
           })),
           serviceCount: serviceList.length,
@@ -597,23 +599,12 @@ export default class VendorService {
     return {
       vendors: vendors.map((v) => ({
         id: v._id.toString(),
-        phone: v.phone,
         ownerName: v.ownerName,
-        email: v.email || null,
-        registrationType: v.registrationType,
+        phone: v.phone,
+        type: v.registrationType,
         verificationStatus: v.verificationStatus,
         status: v.status,
-        createdAt: v.createdAt,
-        shopDetails: v.shopDetails
-          ? {
-              name: v.shopDetails.name,
-              type: v.shopDetails.type,
-              address: v.shopDetails.address,
-            }
-          : undefined,
-        documents: v.documents,
-        associationIdProofUrl: v.associationIdProofUrl,
-        associationMemberId: v.associationMemberId,
+        registered: v.createdAt,
       })),
       total,
       page: filter.page,
@@ -626,12 +617,16 @@ export default class VendorService {
   async listVerificationRequests(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<ListVerificationRequestsResponse> {
-    const { vendors, total } = await this.vendorRepository.findAll(
-      { verificationStatus: 'PENDING' },
-      page,
-      limit,
-    );
+    const query: Record<string, unknown> = { verificationStatus: 'PENDING' };
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
+    }
+
+    const { vendors, total } = await this.vendorRepository.findAll(query, page, limit);
     const counts = await this.vendorRepository.getVerificationRequestCounts();
 
     return {
@@ -651,5 +646,9 @@ export default class VendorService {
       totalPages: Math.ceil(total / limit),
       counts,
     };
+  }
+
+  async getAllPhotoKeys(): Promise<string[]> {
+    return this.vendorRepository.getAllPhotoKeys();
   }
 }

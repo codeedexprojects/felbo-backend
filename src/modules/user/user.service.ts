@@ -115,8 +115,7 @@ export default class UserService {
     await this.userRepository.updateLastLogin(user._id.toString());
 
     const tokenPayload: TokenPayload = {
-      userId: user._id.toString(),
-      phone: user.phone,
+      sub: user._id.toString(),
       role: 'USER',
     };
 
@@ -145,7 +144,7 @@ export default class UserService {
   async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
     const decoded = this.jwtService.verifyRefreshToken(refreshToken);
 
-    const user = await this.userRepository.findByIdWithRefreshToken(decoded.userId);
+    const user = await this.userRepository.findByIdWithRefreshToken(decoded.sub);
 
     if (!user || user.status === 'BLOCKED' || user.status === 'DELETED') {
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
@@ -166,8 +165,7 @@ export default class UserService {
     }
 
     const tokenPayload: TokenPayload = {
-      userId: user._id.toString(),
-      phone: user.phone,
+      sub: user._id.toString(),
       role: 'USER',
     };
 
