@@ -15,13 +15,20 @@ export interface LoginVerifyOtpInput {
 
 export interface LoginVerifyOtpResponse {
   token: string;
+  refreshToken: string;
   vendor: {
     id: string;
     phone: string;
     ownerName: string;
     email: string | null;
   };
-  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
+    | 'COMPLETED'
+    | null;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -115,7 +122,13 @@ export interface VendorProfileDto {
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED' | null;
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
+    | 'COMPLETED'
+    | null;
 }
 
 export interface CreateVendorData {
@@ -206,8 +219,18 @@ export interface VendorStatusCounts {
   suspended: number;
 }
 
+export interface VendorListSlimDto {
+  id: string;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  registered: Date;
+}
+
 export interface ListVendorsResponse {
-  vendors: VendorListItemDto[];
+  vendors: VendorListSlimDto[];
   total: number;
   page: number;
   limit: number;
@@ -221,8 +244,17 @@ export interface VerificationRequestCounts {
   independent: number;
 }
 
+export interface VerificationRequestItemDto {
+  id: string;
+  shopName: string | null;
+  ownerName: string;
+  phone: string;
+  type: 'ASSOCIATION' | 'INDEPENDENT';
+  submitted: Date;
+}
+
 export interface ListVerificationRequestsResponse {
-  vendors: VendorListItemDto[];
+  vendors: VerificationRequestItemDto[];
   total: number;
   page: number;
   limit: number;
@@ -251,7 +283,8 @@ export interface VendorAdminDetail {
   associationIdProofUrl?: string;
   cancellationCount: number;
   cancellationsThisWeek: number;
-  shop: {
+
+  shops: {
     id: string;
     name: string;
     shopType: string;
@@ -261,22 +294,61 @@ export interface VendorAdminDetail {
     onboardingStatus: string;
     status: string;
     isActive: boolean;
-  } | null;
-  barbers: {
-    id: string;
-    name: string;
-    phone: string;
-    photo?: string;
-    isActive: boolean;
+
+    barbers: {
+      id: string;
+      name: string;
+      phone: string;
+      photo?: string;
+      isAvailable: boolean;
+    }[];
+    barberCount: number;
+
+    services: {
+      id: string;
+      name: string;
+      basePrice: number;
+      baseDurationMinutes: number;
+      description?: string;
+    }[];
+    serviceCount: number;
   }[];
-  barberCount: number;
-  services: {
-    id: string;
-    name: string;
-    basePrice: number;
-    baseDuration: number;
-    description?: string;
-  }[];
-  serviceCount: number;
+
   recentBookings: unknown[];
+}
+
+export interface VendorRequestAdminDetail {
+  id: string;
+  phone: string;
+  email: string | null;
+  ownerName: string;
+  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+  registrationDate: Date;
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationNote?: string;
+  associationMemberId?: string;
+  associationIdProofUrl?: string;
+  registrationPayment?: {
+    amount: number;
+    paymentId: string;
+    paidAt: Date;
+  };
+  documents?: {
+    shopLicense?: string;
+    ownerIdProof?: string;
+  };
+  shopDetails?: {
+    name: string;
+    type: string;
+    address: AddressInput;
+    location?: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+  };
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
 }

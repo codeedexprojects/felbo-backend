@@ -64,6 +64,11 @@ export const config = {
     registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
   },
 
+  aws: {
+    region: getEnv('AWS_REGION', 'ap-south-1'),
+    bucket: getEnv('AWS_S3_BUCKET', ''),
+  },
+
   admin: {
     cookie: {
       name: 'adminRefreshToken',
@@ -71,7 +76,7 @@ export const config = {
         httpOnly: true,
         secure: isProduction,
         sameSite: 'strict' as const,
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days — matches JWT_ADMIN_REFRESH_EXPIRY
+        maxAge: 7 * 24 * 60 * 60 * 1000,
         path: '/api/v1/admin',
       },
     },

@@ -18,7 +18,10 @@ import {
   ListVendorsFilter,
   ListVendorsResponse,
   ListVerificationRequestsResponse,
+  VerificationRequestItemDto,
   VendorAdminDetail,
+  VendorRequestAdminDetail,
+  RefreshTokenResponse,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -78,12 +81,25 @@ export default class VendorService {
   private async getShopOnboardingStatus(
     vendorId: string,
   ): Promise<VendorProfileDto['onboardingStatus']> {
-    try {
-      const shop = await this.shopService.getMyShop(vendorId);
-      return shop.onboardingStatus;
-    } catch {
-      return null;
-    }
+    const shops = await this.shopService.getMyShops(vendorId);
+    if (shops.length === 0) return null;
+
+    // Return the least-progressed onboarding status across all shops
+    const statusPriority: Record<string, number> = {
+      PENDING_PROFILE: 0,
+      PENDING_SERVICES: 1,
+      PENDING_BARBERS: 2,
+      PENDING_BARBER_SERVICES: 3,
+      COMPLETED: 4,
+    };
+
+    const leastProgressed = shops.reduce((min, shop) =>
+      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+        ? shop
+        : min,
+    );
+
+    return leastProgressed.onboardingStatus;
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
@@ -141,12 +157,15 @@ export default class VendorService {
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
     const tokenPayload: TokenPayload = {
-      userId: vendor._id.toString(),
-      phone: vendor.phone,
+      sub: vendor._id.toString(),
       role: 'VENDOR',
     };
 
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
 
     const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
 
@@ -157,7 +176,49 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, vendor: this.toVendorDto(vendor), onboardingStatus };
+    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
+
+    const vendor = await this.vendorRepository.findByIdWithRefreshToken(decoded.sub);
+
+    if (!vendor || vendor.status === 'SUSPENDED' || vendor.status === 'DELETED') {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    if (!vendor.refreshTokenHash) {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const isValid = this.jwtService.compareTokenHash(refreshToken, vendor.refreshTokenHash);
+
+    if (!isValid) {
+      await this.vendorRepository.updateRefreshToken(vendor._id.toString(), null);
+      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+        vendorId: vendor._id,
+      });
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const tokenPayload: TokenPayload = {
+      sub: vendor._id.toString(),
+      role: 'VENDOR',
+    };
+
+    const newToken = this.jwtService.signToken(tokenPayload);
+    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), newRefreshTokenHash);
+
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(vendorId: string): Promise<void> {
+    await this.vendorRepository.updateRefreshToken(vendorId, null);
+    this.logger.info('Vendor logged out', { vendorId });
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -422,51 +483,80 @@ export default class VendorService {
     });
   }
 
+  async flagVendor(vendorId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+    await this.vendorRepository.flagById(vendorId);
+  }
+
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
     const vendor = await this.vendorRepository.findById(vendorId);
+
     if (!vendor) {
       throw new NotFoundError('Vendor not found.');
     }
 
-    let shop: VendorAdminDetail['shop'] = null;
-    let barbers: VendorAdminDetail['barbers'] = [];
-    let services: VendorAdminDetail['services'] = [];
+    const shopDtos = await this.shopService.getMyShops(vendorId);
 
-    const shopDto = await this.shopService.findShopByVendorId(vendorId);
+    const shopIds = shopDtos.map((shop) => shop.id);
 
-    if (shopDto) {
-      shop = {
-        id: shopDto.id,
-        name: shopDto.name,
-        shopType: shopDto.shopType,
-        phone: shopDto.phone,
-        address: shopDto.address,
-        rating: shopDto.rating,
-        onboardingStatus: shopDto.onboardingStatus,
-        status: shopDto.status,
-        isActive: shopDto.isActive,
-      };
+    let shops: VendorAdminDetail['shops'] = [];
 
-      const [barberDtos, serviceDtos] = await Promise.all([
-        this.shopService.getBarbersByShopId(shopDto.id),
-        this.shopService.getServicesByShopId(shopDto.id),
+    if (shopIds.length > 0) {
+      const [allBarbers, allServices] = await Promise.all([
+        this.shopService.getBarbersByShopIds(shopIds),
+        this.shopService.getServicesByShopIds(shopIds),
       ]);
 
-      barbers = barberDtos.map((b) => ({
-        id: b.id,
-        name: b.name,
-        phone: b.phone,
-        photo: b.photo,
-        isActive: b.isActive,
-      }));
+      const barbersByShop = new Map<string, typeof allBarbers>();
+      const servicesByShop = new Map<string, typeof allServices>();
 
-      services = serviceDtos.map((s) => ({
-        id: s.id,
-        name: s.name,
-        basePrice: s.basePrice,
-        baseDuration: s.baseDuration,
-        description: s.description,
-      }));
+      for (const barber of allBarbers) {
+        const key = barber.shopId.toString();
+        if (!barbersByShop.has(key)) barbersByShop.set(key, []);
+        barbersByShop.get(key)!.push(barber);
+      }
+
+      for (const service of allServices) {
+        const key = service.shopId.toString();
+        if (!servicesByShop.has(key)) servicesByShop.set(key, []);
+        servicesByShop.get(key)!.push(service);
+      }
+
+      shops = shopDtos.map((shopDto) => {
+        const barberList = barbersByShop.get(shopDto.id) ?? [];
+        const serviceList = servicesByShop.get(shopDto.id) ?? [];
+
+        return {
+          id: shopDto.id,
+          name: shopDto.name,
+          shopType: shopDto.shopType,
+          phone: shopDto.phone,
+          address: shopDto.address,
+          rating: shopDto.rating,
+          onboardingStatus: shopDto.onboardingStatus,
+          status: shopDto.status,
+          isActive: shopDto.isActive,
+
+          barbers: barberList.map((b) => ({
+            id: b.id.toString(),
+            name: b.name,
+            phone: b.phone,
+            photo: b.photo,
+            isAvailable: b.isAvailable,
+          })),
+          barberCount: barberList.length,
+
+          services: serviceList.map((s) => ({
+            id: s.id.toString(),
+            name: s.name,
+            basePrice: s.basePrice,
+            baseDurationMinutes: s.baseDurationMinutes,
+            description: s.description,
+          })),
+          serviceCount: serviceList.length,
+        };
+      });
     }
 
     return {
@@ -487,12 +577,42 @@ export default class VendorService {
       associationIdProofUrl: vendor.associationIdProofUrl,
       cancellationCount: vendor.cancellationCount,
       cancellationsThisWeek: vendor.cancellationsThisWeek,
-      shop,
-      barbers,
-      barberCount: barbers.length,
-      services,
-      serviceCount: services.length,
+      shops,
       recentBookings: [],
+    };
+  }
+
+  async getVendorRequestDetailForAdmin(vendorId: string): Promise<VendorRequestAdminDetail> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) throw new NotFoundError('Vendor not found.');
+
+    return {
+      id: vendor._id.toString(),
+      phone: vendor.phone,
+      email: vendor.email || null,
+      ownerName: vendor.ownerName,
+      registrationType: vendor.registrationType,
+      registrationDate: vendor.createdAt,
+      verificationStatus: vendor.verificationStatus,
+      verificationNote: vendor.verificationNote,
+      associationMemberId: vendor.associationMemberId,
+      associationIdProofUrl: vendor.associationIdProofUrl,
+      registrationPayment: vendor.registrationPayment
+        ? {
+            amount: vendor.registrationPayment.amount,
+            paymentId: vendor.registrationPayment.paymentId,
+            paidAt: vendor.registrationPayment.paidAt,
+          }
+        : undefined,
+      documents: vendor.documents,
+      shopDetails: vendor.shopDetails
+        ? {
+            name: vendor.shopDetails.name,
+            type: vendor.shopDetails.type,
+            address: vendor.shopDetails.address,
+            location: vendor.shopDetails.location,
+          }
+        : undefined,
     };
   }
 
@@ -526,23 +646,12 @@ export default class VendorService {
     return {
       vendors: vendors.map((v) => ({
         id: v._id.toString(),
-        phone: v.phone,
         ownerName: v.ownerName,
-        email: v.email || null,
-        registrationType: v.registrationType,
+        phone: v.phone,
+        type: v.registrationType,
         verificationStatus: v.verificationStatus,
         status: v.status,
-        createdAt: v.createdAt,
-        shopDetails: v.shopDetails
-          ? {
-              name: v.shopDetails.name,
-              type: v.shopDetails.type,
-              address: v.shopDetails.address,
-            }
-          : undefined,
-        documents: v.documents,
-        associationIdProofUrl: v.associationIdProofUrl,
-        associationMemberId: v.associationMemberId,
+        registered: v.createdAt,
       })),
       total,
       page: filter.page,
@@ -555,40 +664,38 @@ export default class VendorService {
   async listVerificationRequests(
     page: number,
     limit: number,
+    search?: string,
   ): Promise<ListVerificationRequestsResponse> {
-    const { vendors, total } = await this.vendorRepository.findAll(
-      { verificationStatus: 'PENDING' },
-      page,
-      limit,
-    );
+    const query: Record<string, unknown> = { verificationStatus: 'PENDING' };
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
+    }
+
+    const { vendors, total } = await this.vendorRepository.findAll(query, page, limit);
     const counts = await this.vendorRepository.getVerificationRequestCounts();
 
     return {
-      vendors: vendors.map((v) => ({
-        id: v._id.toString(),
-        phone: v.phone,
-        ownerName: v.ownerName,
-        email: v.email || null,
-        registrationType: v.registrationType,
-        verificationStatus: v.verificationStatus,
-        status: v.status,
-        createdAt: v.createdAt,
-        shopDetails: v.shopDetails
-          ? {
-              name: v.shopDetails.name,
-              type: v.shopDetails.type,
-              address: v.shopDetails.address,
-            }
-          : undefined,
-        documents: v.documents,
-        associationIdProofUrl: v.associationIdProofUrl,
-        associationMemberId: v.associationMemberId,
-      })),
+      vendors: vendors.map(
+        (v): VerificationRequestItemDto => ({
+          id: v._id.toString(),
+          shopName: v.shopDetails?.name ?? null,
+          ownerName: v.ownerName,
+          phone: v.phone,
+          type: v.registrationType,
+          submitted: v.createdAt,
+        }),
+      ),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
       counts,
     };
+  }
+
+  async getAllPhotoKeys(): Promise<string[]> {
+    return this.vendorRepository.getAllPhotoKeys();
   }
 }

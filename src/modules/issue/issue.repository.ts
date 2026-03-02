@@ -1,21 +1,32 @@
 import { BookingIssueModel, IBookingIssue } from './issue.model';
-import { ListIssuesFilter } from './issue.types';
-
-export interface PopulatedBookingIssue extends Omit<
-  IBookingIssue,
-  'userId' | 'vendorId' | 'shopId'
-> {
-  userId: { _id: { toString(): string }; name: string; phone: string } | null;
-  vendorId: { _id: { toString(): string }; ownerName: string; phone: string } | null;
-  shopId: {
-    _id: { toString(): string };
-    name: string;
-    phone: string;
-    address: { area: string; city: string };
-  } | null;
-}
+import { ListIssuesFilter, CreateIssueInput, PopulatedBookingIssue } from './issue.types';
 
 export class IssueRepository {
+  updateRefundStatus(
+    id: string,
+    refundStatus: 'ISSUED' | 'FAILED',
+    refundId?: string,
+  ): Promise<IBookingIssue | null> {
+    const update: Record<string, unknown> = { refundStatus };
+    if (refundId) update.refundId = refundId;
+    return BookingIssueModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
+  }
+
+  async create(data: {
+    bookingId: string;
+    userId: string;
+    shopId: string;
+    vendorId: string;
+    type: CreateIssueInput['type'];
+    description: string;
+    userLocation: { lat: number; lng: number };
+    photoUrl?: string;
+    razorpayPaymentId?: string;
+  }): Promise<IBookingIssue> {
+    const issue = await BookingIssueModel.create(data);
+    return issue;
+  }
+
   async findAll(filter: ListIssuesFilter): Promise<{ issues: IBookingIssue[]; total: number }> {
     const query: Record<string, unknown> = {};
     if (filter.status) query.status = filter.status;
@@ -29,6 +40,10 @@ export class IssueRepository {
     ]);
 
     return { issues, total };
+  }
+
+  findRecentByUserId(userId: string, limit: number = 20): Promise<IBookingIssue[]> {
+    return BookingIssueModel.find({ userId }).sort({ createdAt: -1 }).limit(limit).exec();
   }
 
   async getStatusCounts(): Promise<{
@@ -45,10 +60,23 @@ export class IssueRepository {
     return { total, open, resolved, rejected };
   }
 
+  updateStatus(
+    id: string,
+    status: 'RESOLVED' | 'REJECTED',
+    adminId: string,
+    adminNote: string,
+  ): Promise<IBookingIssue | null> {
+    const update: Record<string, unknown> = { status, reviewedBy: adminId, adminNote };
+    return BookingIssueModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
+  }
+
   async findById(id: string): Promise<PopulatedBookingIssue | null> {
     return BookingIssueModel.findById(id)
       .populate<{ userId: PopulatedBookingIssue['userId'] }>('userId', 'name phone')
-      .populate<{ vendorId: PopulatedBookingIssue['vendorId'] }>('vendorId', 'ownerName phone')
+      .populate<{ vendorId: PopulatedBookingIssue['vendorId'] }>(
+        'vendorId',
+        'ownerName phone isFlagged',
+      )
       .populate<{
         shopId: PopulatedBookingIssue['shopId'];
       }>('shopId', 'name phone address.area address.city')

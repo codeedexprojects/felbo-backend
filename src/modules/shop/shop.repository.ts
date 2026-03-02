@@ -1,14 +1,6 @@
 import { ClientSession, PipelineStage } from 'mongoose';
-import {
-  ShopModel,
-  IShop,
-  ServiceModel,
-  IService,
-  BarberModel,
-  IBarber,
-  BarberServiceModel,
-  IBarberService,
-} from './shop.model';
+import { ShopModel, IShop } from './shop.model';
+import { ServiceModel } from '../service/service.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
@@ -41,8 +33,8 @@ export default class ShopRepository {
     return ShopModel.findById(id).exec();
   }
 
-  findByVendorId(vendorId: string): Promise<IShop | null> {
-    return ShopModel.findOne({ vendorId }).exec();
+  findAllByVendorId(vendorId: string): Promise<IShop[]> {
+    return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
   }
 
   updateById(
@@ -52,7 +44,11 @@ export default class ShopRepository {
     >,
     session?: ClientSession,
   ): Promise<IShop | null> {
-    return ShopModel.findByIdAndUpdate(id, { $set: data }, { new: true, session }).exec();
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { returnDocument: 'after', session },
+    ).exec();
   }
 
   updateWorkingHours(
@@ -63,7 +59,7 @@ export default class ShopRepository {
     return ShopModel.findByIdAndUpdate(
       id,
       { $set: { workingHours } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -82,7 +78,7 @@ export default class ShopRepository {
           onboardingStatus,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -94,7 +90,7 @@ export default class ShopRepository {
     return ShopModel.findByIdAndUpdate(
       id,
       { $set: { onboardingStatus } },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -138,128 +134,95 @@ export default class ShopRepository {
   }
 
   async searchByName(
-    query: string,
-    filter: { city?: string; shopType?: string },
+    query: string | undefined,
+    filter: {
+      city?: string;
+      shopType?: string;
+      minRating?: number;
+      serviceName?: string;
+      availableNow?: boolean;
+      latitude?: number;
+      longitude?: number;
+      maxDistanceMeters?: number;
+    },
     skip: number,
     limit: number,
-  ): Promise<IShop[]> {
+  ): Promise<{ shops: Array<IShop & { distance?: number }>; total: number }> {
     const matchFilter: Record<string, unknown> = {
       status: 'ACTIVE',
       isActive: true,
       onboardingStatus: 'COMPLETED',
     };
+
     if (filter.city) {
       matchFilter['address.city'] = { $regex: filter.city, $options: 'i' };
     }
     if (filter.shopType) {
       matchFilter.shopType = filter.shopType;
     }
+    if (filter.minRating !== undefined) {
+      matchFilter['rating.average'] = { $gte: filter.minRating };
+    }
 
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    matchFilter.$or = [
-      { name: { $regex: escapedQuery, $options: 'i' } },
-      { 'address.area': { $regex: escapedQuery, $options: 'i' } },
-    ];
+    if (filter.availableNow) {
+      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+      const istNow = new Date(Date.now() + IST_OFFSET_MS);
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const day = days[istNow.getUTCDay()];
+      const currentTime = `${String(istNow.getUTCHours()).padStart(2, '0')}:${String(istNow.getUTCMinutes()).padStart(2, '0')}`;
+      matchFilter[`workingHours.${day}.isOpen`] = true;
+      matchFilter[`workingHours.${day}.open`] = { $lte: currentTime };
+      matchFilter[`workingHours.${day}.close`] = { $gte: currentTime };
+    }
 
-    return ShopModel.find(matchFilter).skip(skip).limit(limit).exec();
-  }
-
-  // --- Service operations ---
-
-  async createService(
-    data: {
-      shopId: string;
-      name: string;
-      basePrice: number;
-      baseDuration: number;
-      description?: string;
-    },
-    session?: ClientSession,
-  ): Promise<IService> {
-    const [service] = await ServiceModel.create(
-      [
-        {
-          shopId: data.shopId,
-          name: data.name,
-          basePrice: data.basePrice,
-          baseDuration: data.baseDuration,
-          description: data.description,
-          isActive: true,
-        },
-      ],
-      { session },
-    );
-    return service;
-  }
-
-  countActiveServices(shopId: string, session?: ClientSession): Promise<number> {
-    return ServiceModel.countDocuments({ shopId, isActive: true })
-      .session(session ?? null)
-      .exec();
-  }
-
-  findActiveServicesByIds(serviceIds: string[], shopId: string): Promise<IService[]> {
-    return ServiceModel.find({ _id: { $in: serviceIds }, shopId, isActive: true }).exec();
-  }
-
-  // Barber operations
-
-  async createBarber(
-    data: { shopId: string; name: string; phone: string; photo?: string },
-    session?: ClientSession,
-  ): Promise<IBarber> {
-    const [barber] = await BarberModel.create(
-      [
-        {
-          shopId: data.shopId,
-          name: data.name,
-          phone: data.phone,
-          photo: data.photo,
-          isActive: true,
-        },
-      ],
-      { session },
-    );
-    return barber;
-  }
-
-  countActiveBarbers(shopId: string, session?: ClientSession): Promise<number> {
-    return BarberModel.countDocuments({ shopId, isActive: true })
-      .session(session ?? null)
-      .exec();
-  }
-
-  // BarberService operations
-  createBarberServices(
-    data: Array<{
-      barberId: string;
-      serviceId: string;
-      shopId: string;
-      duration: number;
-    }>,
-    session?: ClientSession,
-  ): Promise<IBarberService[]> {
-    return BarberServiceModel.create(
-      data.map((d) => ({
-        barberId: d.barberId,
-        serviceId: d.serviceId,
-        shopId: d.shopId,
-        duration: d.duration,
+    if (filter.serviceName) {
+      const escapedName = filter.serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const shopIds = await ServiceModel.distinct('shopId', {
+        name: { $regex: escapedName, $options: 'i' },
         isActive: true,
-      })),
-      { session },
-    );
-  }
+      }).exec();
+      matchFilter._id = { $in: shopIds };
+    }
 
-  findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
-    return BarberServiceModel.find({ barberId, isActive: true }).exec();
-  }
+    if (query) {
+      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      matchFilter.$or = [
+        { name: { $regex: escapedQuery, $options: 'i' } },
+        { 'address.area': { $regex: escapedQuery, $options: 'i' } },
+      ];
+    }
 
-  findBarbersByShopId(shopId: string): Promise<IBarber[]> {
-    return BarberModel.find({ shopId, isActive: true }).exec();
-  }
+    if (filter.latitude !== undefined && filter.longitude !== undefined) {
+      const maxDistance = filter.maxDistanceMeters ?? 10_000;
 
-  findServicesByShopId(shopId: string): Promise<IService[]> {
-    return ServiceModel.find({ shopId, isActive: true }).exec();
+      const pipeline: PipelineStage[] = [
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [filter.longitude, filter.latitude] },
+            distanceField: 'distance',
+            maxDistance,
+            query: matchFilter,
+            spherical: true,
+          },
+        },
+        {
+          $facet: {
+            shops: [{ $skip: skip }, { $limit: limit }],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ];
+
+      const [result] = await ShopModel.aggregate(pipeline).exec();
+      const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
+      return { shops: result.shops as Array<IShop & { distance: number }>, total };
+    }
+
+    const [shops, total] = await Promise.all([
+      ShopModel.find(matchFilter).sort({ 'rating.average': -1 }).skip(skip).limit(limit).exec(),
+      ShopModel.countDocuments(matchFilter).exec(),
+    ]);
+
+    return { shops, total };
   }
 }

@@ -6,12 +6,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { requestId } from './shared/middleware/requestId';
 import { errorHandler } from './shared/middleware/errorHandler';
-import { userRoutes } from './modules/user/user.routes';
-import { vendorRoutes } from './modules/vendor/vendor.routes';
-import { shopRoutes } from './modules/shop/shop.routes';
-import { paymentRoutes } from './modules/payment/payment.routes';
-import { adminRoutes } from './modules/admin/admin.routes';
-import { issueRoutes } from './modules/issue/issue.routes';
+import router from './routes';
 
 const app = express();
 
@@ -36,12 +31,7 @@ app.get('/api/v1', (_req, res) => {
 });
 
 // Routes
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/vendors', vendorRoutes);
-app.use('/api/v1/shops', shopRoutes);
-app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/issues', issueRoutes);
+app.use('/api/v1/', router);
 
 app.use(errorHandler);
 

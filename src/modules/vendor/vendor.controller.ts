@@ -7,6 +7,7 @@ import {
   registerAssociationSchema,
   registerIndependentInitiateSchema,
   registerIndependentConfirmSchema,
+  refreshTokenSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -73,7 +74,7 @@ export default class VendorController {
   };
 
   getRegistrationStatus = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getRegistrationStatus(req.user!.userId);
+    const result = await this.vendorService.getRegistrationStatus(req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -82,11 +83,30 @@ export default class VendorController {
   };
 
   getProfile = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getProfile(req.user!.userId);
+    const result = await this.vendorService.getProfile(req.user!.sub);
 
     res.status(200).json({
       success: true,
       data: result,
+    });
+  };
+
+  refreshToken = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = refreshTokenSchema.parse(req.body);
+    const result = await this.vendorService.refreshAccessToken(refreshToken);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  logout = async (req: Request, res: Response): Promise<void> => {
+    await this.vendorService.logout(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully.',
     });
   };
 }

@@ -24,7 +24,7 @@ export default class VendorRepository {
     return VendorModel.findOneAndUpdate(
       { phone },
       { $set: { ...data, phone } },
-      { upsert: true, new: true, session },
+      { upsert: true, returnDocument: 'after', session },
     ).exec();
   }
 
@@ -32,7 +32,7 @@ export default class VendorRepository {
     return VendorModel.findByIdAndUpdate(
       id,
       { lastLoginAt: new Date() },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -44,7 +44,7 @@ export default class VendorRepository {
     return VendorModel.findByIdAndUpdate(
       id,
       { registrationPayment: data },
-      { new: true, session },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -55,13 +55,15 @@ export default class VendorRepository {
     session?: ClientSession,
   ): Promise<IVendor | null> {
     const update: Record<string, unknown> = { verificationStatus: status };
+
     if (note !== undefined) {
       update.verificationNote = note;
     }
+
     if (status === 'APPROVED') {
       update.verifiedAt = new Date();
     }
-    return VendorModel.findByIdAndUpdate(id, update, { new: true, session }).exec();
+    return VendorModel.findByIdAndUpdate(id, update, { returnDocument: 'after', session }).exec();
   }
 
   setStatus(
@@ -69,7 +71,11 @@ export default class VendorRepository {
     status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED',
     session?: ClientSession,
   ): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(id, { status }, { new: true, session }).exec();
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { status },
+      { returnDocument: 'after', session },
+    ).exec();
   }
 
   async getStatusCounts(registrationType?: 'ASSOCIATION' | 'INDEPENDENT'): Promise<{
@@ -133,5 +139,43 @@ export default class VendorRepository {
     const total = result?.totalCount[0]?.count ?? 0;
 
     return { vendors, total };
+  }
+
+  flagById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { isFlagged: true, flaggedAt: new Date() },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  async getAllPhotoKeys(): Promise<string[]> {
+    const vendors = await VendorModel.find(
+      {},
+      { 'documents.shopLicense': 1, 'documents.ownerIdProof': 1, associationIdProofUrl: 1 },
+    )
+      .lean()
+      .exec();
+
+    const keys: string[] = [];
+    for (const v of vendors) {
+      if (v.documents?.shopLicense) keys.push(v.documents.shopLicense);
+      if (v.documents?.ownerIdProof) keys.push(v.documents.ownerIdProof);
+      if (v.associationIdProofUrl) keys.push(v.associationIdProofUrl);
+    }
+
+    return [...new Set(keys)];
+  }
+
+  updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { refreshTokenHash },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  findByIdWithRefreshToken(id: string): Promise<IVendor | null> {
+    return VendorModel.findById(id).select('+refreshTokenHash').exec();
   }
 }

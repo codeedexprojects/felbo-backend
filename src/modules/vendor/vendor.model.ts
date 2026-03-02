@@ -79,6 +79,7 @@ export interface IVendor extends Document {
   blockReason?: string;
 
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  refreshTokenHash?: string | null;
   lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -190,6 +191,7 @@ const vendorSchema = new Schema<IVendor>(
       enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED'],
       default: 'PENDING',
     },
+    refreshTokenHash: { type: String, default: null },
     lastLoginAt: { type: Date },
   },
   {
@@ -198,7 +200,6 @@ const vendorSchema = new Schema<IVendor>(
 );
 
 // Indexes
-vendorSchema.index({ phone: 1 }, { unique: true });
 vendorSchema.index({ verificationStatus: 1 });
 vendorSchema.index({ status: 1 });
 vendorSchema.index({ isBlocked: 1 });
