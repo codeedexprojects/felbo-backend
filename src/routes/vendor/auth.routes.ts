@@ -20,4 +20,7 @@ router.get(
   vendorController.getRegistrationStatus,
 );
 
+router.post('/refresh-token', vendorController.refreshToken);
+router.post('/logout', authenticate, authorize('VENDOR'), vendorController.logout);
+
 export default router;

@@ -86,3 +86,7 @@ export const registerIndependentConfirmSchema = z.object({
   paymentId: z.string().min(1, 'Payment ID is required'),
   signature: z.string().min(1, 'Signature is required'),
 });
+
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
