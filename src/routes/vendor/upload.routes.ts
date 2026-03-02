@@ -18,7 +18,7 @@ const uploadLimiter = rateLimit({
   },
 });
 
-router.post('/url', uploadLimiter, uploadController.generateUploadUrl);
-router.post('/verify', uploadLimiter, uploadController.verifyUpload);
+router.post('/url', uploadLimiter, uploadController.generateUploadUrl('vendors/', true));
+router.post('/verify', uploadLimiter, uploadController.verifyUpload('vendors/', true));
 
 export default router;
