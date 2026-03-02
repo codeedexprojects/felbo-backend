@@ -51,23 +51,12 @@ export interface ListBarbersResponse {
 
 // Onboarding: add barber during shop setup
 
-export interface OnboardBarberServiceInput {
-  serviceId: string;
-  durationMinutes: number;
-}
-
 export interface OnboardBarberInput {
   name: string;
   phone: string;
   photo?: string;
-  services: OnboardBarberServiceInput[];
-}
-
-export interface OnboardBarberServiceDto {
-  id: string;
-  serviceId: string;
-  durationMinutes: number;
-  isActive: boolean;
+  username: string;
+  password: string;
 }
 
 export interface OnboardBarberDto {
@@ -79,7 +68,30 @@ export interface OnboardBarberDto {
   rating: { average: number; count: number };
   status: 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
-  services: OnboardBarberServiceDto[];
+}
+
+// Onboarding: assign services to a barber
+
+export interface AddBarberServiceItemInput {
+  serviceId: string;
+  durationMinutes: number;
+}
+
+export interface AddBarberServicesInput {
+  services: AddBarberServiceItemInput[];
+}
+
+export interface AddBarberServiceItemDto {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  durationMinutes: number;
+  isActive: boolean;
+}
+
+export interface AddBarberServicesDto {
+  barberId: string;
+  services: AddBarberServiceItemDto[];
 }
 
 export interface BarberServiceLinkDto {

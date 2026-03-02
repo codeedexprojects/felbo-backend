@@ -8,6 +8,8 @@ import {
   updateCredentialsSchema,
   listBarberQuerySchema,
   onboardBarberSchema,
+  addBarberServicesSchema,
+  barberShopParamSchema,
 } from './barber.validators';
 
 export class BarberController {
@@ -62,6 +64,18 @@ export class BarberController {
     const { shopId } = shopIdParamSchema.parse(req.params);
     const validated = onboardBarberSchema.parse(req.body);
     const result = await this.barberService.addBarber(shopId, req.user!.sub, validated);
+    res.status(201).json({ success: true, data: result });
+  };
+
+  addBarberServices = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, barberId } = barberShopParamSchema.parse(req.params);
+    const validated = addBarberServicesSchema.parse(req.body);
+    const result = await this.barberService.addBarberServices(
+      shopId,
+      barberId,
+      req.user!.sub,
+      validated,
+    );
     res.status(201).json({ success: true, data: result });
   };
 }

@@ -64,6 +64,11 @@ export const onboardBarberSchema = z.object({
   name: z.string().min(2, 'Barber name must be at least 2 characters').max(100),
   phone: phoneSchema,
   photo: z.string().optional(),
+  username: usernameSchema,
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+export const addBarberServicesSchema = z.object({
   services: z
     .array(
       z.object({
@@ -72,4 +77,9 @@ export const onboardBarberSchema = z.object({
       }),
     )
     .min(1, 'At least one service is required'),
+});
+
+export const barberShopParamSchema = z.object({
+  shopId: mongoIdSchema,
+  barberId: mongoIdSchema,
 });

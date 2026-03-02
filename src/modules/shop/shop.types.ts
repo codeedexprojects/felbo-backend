@@ -2,6 +2,7 @@ export type OnboardingStatus =
   | 'PENDING_PROFILE'
   | 'PENDING_SERVICES'
   | 'PENDING_BARBERS'
+  | 'PENDING_BARBER_SERVICES'
   | 'COMPLETED';
 
 export interface ShopAddress {

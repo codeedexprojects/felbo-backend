@@ -86,9 +86,9 @@ export default class VendorService {
     // Return the least-progressed onboarding status across all shops
     const statusPriority: Record<string, number> = {
       PENDING_PROFILE: 0,
-      PENDING_CATEGORIES: 1,
-      PENDING_SERVICES: 2,
-      PENDING_BARBERS: 3,
+      PENDING_SERVICES: 1,
+      PENDING_BARBERS: 2,
+      PENDING_BARBER_SERVICES: 3,
       COMPLETED: 4,
     };
 

@@ -47,7 +47,12 @@ export interface IShop extends Document {
   };
   isActive: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
-  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED';
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
+    | 'COMPLETED';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,7 +131,13 @@ const shopSchema = new Schema<IShop>(
     },
     onboardingStatus: {
       type: String,
-      enum: ['PENDING_PROFILE', 'PENDING_SERVICES', 'PENDING_BARBERS', 'COMPLETED'],
+      enum: [
+        'PENDING_PROFILE',
+        'PENDING_SERVICES',
+        'PENDING_BARBERS',
+        'PENDING_BARBER_SERVICES',
+        'COMPLETED',
+      ],
       default: 'PENDING_PROFILE',
     },
   },
