@@ -199,7 +199,6 @@ export class BarberService {
         barberId: createdBarber._id.toString(),
         serviceId: s.serviceId,
         shopId,
-        price: s.price,
         durationMinutes: s.durationMinutes,
       }));
 
@@ -233,7 +232,6 @@ export class BarberService {
     const services: OnboardBarberServiceDto[] = barberServices.map((bs) => ({
       id: bs._id.toString(),
       serviceId: bs.serviceId.toString(),
-      price: bs.price,
       durationMinutes: bs.durationMinutes,
       isActive: bs.isActive,
     }));
@@ -285,7 +283,6 @@ export class BarberService {
       barberId: l.barberId.toString(),
       serviceId: l.serviceId.toString(),
       shopId: l.shopId.toString(),
-      price: l.price,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
       createdAt: l.createdAt,

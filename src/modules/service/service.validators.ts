@@ -45,7 +45,6 @@ export const assignServicesSchema = z.object({
     .array(
       z.object({
         serviceId: mongoIdSchema,
-        price: z.number().positive('Enter valid price'),
         durationMinutes: z
           .number()
           .int()

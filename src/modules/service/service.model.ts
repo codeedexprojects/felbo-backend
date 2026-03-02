@@ -4,7 +4,6 @@ export interface IBarberService extends Document {
   barberId: mongoose.Types.ObjectId;
   serviceId: mongoose.Types.ObjectId;
   shopId: mongoose.Types.ObjectId;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
   createdAt: Date;
@@ -16,7 +15,6 @@ const barberServiceSchema = new Schema<IBarberService>(
     barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
     serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
     shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    price: { type: Number, required: true },
     durationMinutes: { type: Number, required: true },
     isActive: { type: Boolean, default: true },
   },

@@ -7,7 +7,6 @@ export class ServiceRepository {
       barberId: string;
       serviceId: string;
       shopId: string;
-      price: number;
       durationMinutes: number;
     }>,
     session?: ClientSession,
@@ -17,7 +16,6 @@ export class ServiceRepository {
         barberId: d.barberId,
         serviceId: d.serviceId,
         shopId: d.shopId,
-        price: d.price,
         durationMinutes: d.durationMinutes,
         isActive: true,
       })),
@@ -43,7 +41,7 @@ export class ServiceRepository {
   async replaceBarberServicesForBarber(
     barberId: string,
     shopId: string,
-    services: Array<{ serviceId: string; price: number; durationMinutes: number }>,
+    services: Array<{ serviceId: string; durationMinutes: number }>,
     session?: ClientSession,
   ): Promise<IBarberService[]> {
     await BarberServiceModel.deleteMany({ barberId })
@@ -57,7 +55,6 @@ export class ServiceRepository {
         barberId,
         serviceId: s.serviceId,
         shopId,
-        price: s.price,
         durationMinutes: s.durationMinutes,
         isActive: true,
       })),

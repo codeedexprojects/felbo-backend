@@ -53,7 +53,6 @@ export interface ListBarbersResponse {
 
 export interface OnboardBarberServiceInput {
   serviceId: string;
-  price: number;
   durationMinutes: number;
 }
 
@@ -67,7 +66,6 @@ export interface OnboardBarberInput {
 export interface OnboardBarberServiceDto {
   id: string;
   serviceId: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
 }
@@ -89,7 +87,6 @@ export interface BarberServiceLinkDto {
   barberId: string;
   serviceId: string;
   shopId: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
   createdAt: Date;
@@ -98,7 +95,6 @@ export interface BarberServiceLinkDto {
 
 export interface AssignServiceItemInput {
   serviceId: string;
-  price: number;
   durationMinutes: number;
 }
 
@@ -112,7 +108,6 @@ export interface BarberAssignedServiceDto {
   serviceId: string;
   shopId: string;
   serviceName: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
 }
