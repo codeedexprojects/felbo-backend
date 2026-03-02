@@ -9,7 +9,6 @@ import {
   shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
-  addCategorySchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -62,17 +61,6 @@ export default class ShopController {
     const result = await this.shopService.completeProfile(shopId, req.user!.sub, validated);
 
     res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  addCategory = async (req: Request, res: Response): Promise<void> => {
-    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
-    const validated = addCategorySchema.parse(req.body);
-    const result = await this.shopService.addCategory(shopId, req.user!.sub, validated);
-
-    res.status(201).json({
       success: true,
       data: result,
     });

@@ -1,21 +1,19 @@
 import { ClientSession } from 'mongoose';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
-import { IShop, IEmbeddedCategory } from './shop.model';
+import { IShop } from './shop.model';
 
 import {
   CreateShopInput,
   UpdateShopInput,
   UpdateWorkingHoursInput,
   CompleteProfileInput,
-  AddCategoryInput,
   NearbyShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
   ShopSearchResultDto,
   ShopDto,
   NearbyShopDto,
-  CategoryDto,
   ServiceDto,
   BarberDto,
   BarberServiceDto,
@@ -75,16 +73,6 @@ export default class ShopService {
     return {
       ...this.toShopDto(shop),
       distance: Math.round(distance),
-    };
-  }
-
-  private toCategoryDto(category: IEmbeddedCategory, shopId: string): CategoryDto {
-    return {
-      id: category._id.toString(),
-      shopId,
-      name: category.name,
-      displayOrder: category.displayOrder,
-      isActive: category.isActive,
     };
   }
 
@@ -212,12 +200,6 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async hasCategory(shopId: string, categoryId: string): Promise<boolean> {
-    const shop = await this.shopRepository.findById(shopId);
-    if (!shop) return false;
-    return shop.categories.some((c) => c._id.toString() === categoryId && c.isActive);
-  }
-
   // Onboarding
   async completeProfile(
     shopId: string,
@@ -237,7 +219,7 @@ export default class ShopService {
         workingHours: input.workingHours,
         photos: input.photos,
       },
-      'PENDING_CATEGORIES',
+      'PENDING_SERVICES',
     );
 
     if (!updated) {
@@ -254,49 +236,7 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async addCategory(
-    shopId: string,
-    vendorId: string,
-    input: AddCategoryInput,
-  ): Promise<CategoryDto> {
-    const shop = await this.assertShopOwnership(shopId, vendorId);
-
-    if (shop.onboardingStatus === 'PENDING_PROFILE') {
-      throw new ConflictError('Complete your shop profile before adding categories.');
-    }
-
-    const isDuplicate = shop.categories.some((c) => c.name === input.name && c.isActive);
-    if (isDuplicate) {
-      throw new ConflictError('A category with this name already exists.');
-    }
-
-    const category = await this.shopRepository.createCategory({
-      shopId,
-      name: input.name,
-      displayOrder: input.displayOrder,
-    });
-
-    // Transition onboarding if this is the first category
-    if (shop.onboardingStatus === 'PENDING_CATEGORIES') {
-      const count = await this.shopRepository.countActiveCategories(shopId);
-      if (count === 1) {
-        await this.shopRepository.updateOnboardingStatus(shopId, 'PENDING_SERVICES');
-      }
-    }
-
-    this.logger.info({
-      action: 'CATEGORY_ADDED',
-      module: 'shop',
-      shopId,
-      categoryId: category._id.toString(),
-      vendorId,
-    });
-
-    return this.toCategoryDto(category, shopId);
-  }
-
   // --- Public discovery ---
-
   private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6_371_000; // Earth radius in metres
     const φ1 = (lat1 * Math.PI) / 180;

@@ -109,7 +109,7 @@ export class BarberRepository {
         durationMinutes: d.durationMinutes,
         isActive: true,
       })),
-      { session },
+      { session, ordered: true },
     );
   }
 
@@ -176,7 +176,7 @@ export class BarberRepository {
         durationMinutes: s.durationMinutes,
         isActive: true,
       })),
-      { session },
+      { session, ordered: true },
     );
   }
 

@@ -23,9 +23,9 @@ export interface LoginVerifyOtpResponse {
   };
   onboardingStatus:
     | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
 }
@@ -123,9 +123,9 @@ export interface VendorProfileDto {
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
 }

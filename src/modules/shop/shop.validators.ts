@@ -94,11 +94,6 @@ export const completeProfileSchema = z.object({
   photos: z.array(z.string().url()).min(1, 'At least one photo is required').max(10),
 });
 
-export const addCategorySchema = z.object({
-  name: z.string().min(1, 'Category name is required').max(100),
-  displayOrder: z.number().int().min(0).default(0),
-});
-
 export const addServiceSchema = z.object({
   categoryId: mongoIdSchema,
   name: z.string().min(1, 'Service name is required').max(100),
