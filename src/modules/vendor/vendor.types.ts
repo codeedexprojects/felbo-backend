@@ -15,6 +15,7 @@ export interface LoginVerifyOtpInput {
 
 export interface LoginVerifyOtpResponse {
   token: string;
+  refreshToken: string;
   vendor: {
     id: string;
     phone: string;
@@ -345,4 +346,9 @@ export interface VendorRequestAdminDetail {
       coordinates: [number, number];
     };
   };
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
 }

@@ -21,6 +21,7 @@ import {
   VerificationRequestItemDto,
   VendorAdminDetail,
   VendorRequestAdminDetail,
+  RefreshTokenResponse,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -161,6 +162,10 @@ export default class VendorService {
     };
 
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
 
     const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
 
@@ -171,7 +176,49 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, vendor: this.toVendorDto(vendor), onboardingStatus };
+    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
+
+    const vendor = await this.vendorRepository.findByIdWithRefreshToken(decoded.sub);
+
+    if (!vendor || vendor.status === 'SUSPENDED' || vendor.status === 'DELETED') {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    if (!vendor.refreshTokenHash) {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const isValid = this.jwtService.compareTokenHash(refreshToken, vendor.refreshTokenHash);
+
+    if (!isValid) {
+      await this.vendorRepository.updateRefreshToken(vendor._id.toString(), null);
+      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+        vendorId: vendor._id,
+      });
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const tokenPayload: TokenPayload = {
+      sub: vendor._id.toString(),
+      role: 'VENDOR',
+    };
+
+    const newToken = this.jwtService.signToken(tokenPayload);
+    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), newRefreshTokenHash);
+
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(vendorId: string): Promise<void> {
+    await this.vendorRepository.updateRefreshToken(vendorId, null);
+    this.logger.info('Vendor logged out', { vendorId });
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
