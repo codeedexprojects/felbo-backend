@@ -1,6 +1,5 @@
 export type OnboardingStatus =
   | 'PENDING_PROFILE'
-  | 'PENDING_CATEGORIES'
   | 'PENDING_SERVICES'
   | 'PENDING_BARBERS'
   | 'COMPLETED';
@@ -65,11 +64,6 @@ export interface CompleteProfileInput {
   description: string;
   workingHours: WorkingHours;
   photos: string[];
-}
-
-export interface AddCategoryInput {
-  name: string;
-  displayOrder: number;
 }
 
 export interface AddServiceInput {
@@ -163,14 +157,6 @@ export interface ShopDto {
 
 export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
-}
-
-export interface CategoryDto {
-  id: string;
-  shopId: string;
-  name: string;
-  displayOrder: number;
-  isActive: boolean;
 }
 
 export interface ServiceDto {

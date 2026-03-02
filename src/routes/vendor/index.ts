@@ -12,14 +12,13 @@ import barberRoutes from './barber.routes';
 const router = Router();
 
 router.use('/auth', authRoutes);
-// Upload routes are accessible without JWT — vendors upload during registration
 router.use('/upload', uploadRoutes);
 
 router.use(authenticate);
 router.use(authorize('VENDOR'));
 
 router.use('/shops', shopRoutes);
-router.use('/shops/:shopId/categories', categoryRoutes);
+router.use('/categories', categoryRoutes);
 router.use('/shops/:shopId/services', serviceRoutes);
 router.use('/barbers', barberRoutes);
 

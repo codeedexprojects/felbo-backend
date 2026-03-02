@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/shop/:shopId', barberController.listBarbers);
 router.post('/shop/:shopId', barberController.addBarber);
+
 router.post('/', barberController.createBarber);
 router.get('/:barberId', barberController.getBarber);
 router.put('/:barberId', barberController.updateBarber);

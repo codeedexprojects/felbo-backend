@@ -31,15 +31,6 @@ export interface IWorkingHours {
   sunday: IDayHours;
 }
 
-export interface IEmbeddedCategory {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-  displayOrder: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface IShop extends Document {
   vendorId: mongoose.Types.ObjectId;
   name: string;
@@ -56,13 +47,7 @@ export interface IShop extends Document {
   };
   isActive: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
-  onboardingStatus:
-    | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
-    | 'PENDING_SERVICES'
-    | 'PENDING_BARBERS'
-    | 'COMPLETED';
-  categories: IEmbeddedCategory[];
+  onboardingStatus: 'PENDING_PROFILE' | 'PENDING_SERVICES' | 'PENDING_BARBERS' | 'COMPLETED';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,15 +95,6 @@ const workingHoursSchema = new Schema(
   { _id: false },
 );
 
-const categorySchema = new Schema<IEmbeddedCategory>(
-  {
-    name: { type: String, required: true },
-    displayOrder: { type: Number, required: true, default: 0 },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true },
-);
-
 const shopSchema = new Schema<IShop>(
   {
     vendorId: {
@@ -150,16 +126,9 @@ const shopSchema = new Schema<IShop>(
     },
     onboardingStatus: {
       type: String,
-      enum: [
-        'PENDING_PROFILE',
-        'PENDING_CATEGORIES',
-        'PENDING_SERVICES',
-        'PENDING_BARBERS',
-        'COMPLETED',
-      ],
+      enum: ['PENDING_PROFILE', 'PENDING_SERVICES', 'PENDING_BARBERS', 'COMPLETED'],
       default: 'PENDING_PROFILE',
     },
-    categories: { type: [categorySchema], default: [] },
   },
   {
     timestamps: true,

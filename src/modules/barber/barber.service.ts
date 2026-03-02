@@ -170,7 +170,6 @@ export class BarberService {
 
     if (
       shop.onboardingStatus === 'PENDING_PROFILE' ||
-      shop.onboardingStatus === 'PENDING_CATEGORIES' ||
       shop.onboardingStatus === 'PENDING_SERVICES'
     ) {
       throw new ConflictError('Add at least one service before adding barbers.');

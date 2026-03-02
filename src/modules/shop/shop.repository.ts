@@ -1,5 +1,5 @@
-import mongoose, { ClientSession, PipelineStage } from 'mongoose';
-import { ShopModel, IShop, IEmbeddedCategory } from './shop.model';
+import { ClientSession, PipelineStage } from 'mongoose';
+import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
@@ -224,51 +224,5 @@ export default class ShopRepository {
     ]);
 
     return { shops, total };
-  }
-
-  // --- Category operations ---
-
-  async createCategory(
-    data: { shopId: string; name: string; displayOrder: number },
-    session?: ClientSession,
-  ): Promise<IEmbeddedCategory> {
-    const categoryId = new mongoose.Types.ObjectId();
-    const now = new Date();
-    const shop = await ShopModel.findByIdAndUpdate(
-      data.shopId,
-      {
-        $push: {
-          categories: {
-            _id: categoryId,
-            name: data.name,
-            displayOrder: data.displayOrder,
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          },
-        },
-      },
-      { returnDocument: 'after', session },
-    ).exec();
-
-    if (!shop) throw new Error('Shop not found when creating category.');
-    const added = shop.categories.find((c) => c._id.equals(categoryId));
-    if (!added) throw new Error('Category was not persisted.');
-    return added;
-  }
-
-  async countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
-    const query = ShopModel.findById(shopId);
-    if (session) query.session(session);
-    const shop = await query.exec();
-    return shop ? shop.categories.filter((c) => c.isActive).length : 0;
-  }
-
-  async findCategoriesByShopId(shopId: string): Promise<IEmbeddedCategory[]> {
-    const shop = await ShopModel.findById(shopId).exec();
-    if (!shop) return [];
-    return [...shop.categories]
-      .filter((c) => c.isActive)
-      .sort((a, b) => a.displayOrder - b.displayOrder);
   }
 }
