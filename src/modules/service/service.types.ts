@@ -1,6 +1,5 @@
 export interface AssignServiceItemInput {
   serviceId: string;
-  price: number;
   durationMinutes: number;
 }
 
@@ -14,7 +13,6 @@ export interface BarberAssignedServiceDto {
   serviceId: string;
   shopId: string;
   serviceName: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
 }
@@ -24,7 +22,6 @@ export interface BarberServiceLinkDto {
   barberId: string;
   serviceId: string;
   shopId: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
   createdAt: Date;

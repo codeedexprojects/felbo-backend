@@ -38,7 +38,6 @@ export class ServiceService {
       barberId: l.barberId.toString(),
       serviceId: l.serviceId.toString(),
       shopId: l.shopId.toString(),
-      price: l.price,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
       createdAt: l.createdAt,
@@ -92,7 +91,6 @@ export class ServiceService {
       serviceId: l.serviceId.toString(),
       shopId: l.shopId.toString(),
       serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
-      price: l.price,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
     }));
@@ -114,7 +112,6 @@ export class ServiceService {
       serviceId: l.serviceId.toString(),
       shopId: l.shopId.toString(),
       serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
-      price: l.price,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
     }));
@@ -147,7 +144,7 @@ export class ServiceService {
   createForOnboarding(
     barberId: string,
     shopId: string,
-    services: Array<{ serviceId: string; price: number; durationMinutes: number }>,
+    services: Array<{ serviceId: string; durationMinutes: number }>,
     session?: ClientSession,
   ): Promise<IBarberService[]> {
     return this.serviceRepository.createBarberService(

@@ -92,7 +92,6 @@ export default class ShopService {
     return {
       id: bs.id,
       serviceId: bs.serviceId,
-      price: bs.price,
       durationMinutes: bs.durationMinutes,
       isActive: bs.isActive,
     };

@@ -91,7 +91,6 @@ export interface UpdateServiceInput {
 
 export interface BarberServiceInput {
   serviceId: string;
-  price: number;
   durationMinutes: number;
 }
 
@@ -190,7 +189,6 @@ export interface ServiceDto {
 export interface BarberServiceDto {
   id: string;
   serviceId: string;
-  price: number;
   durationMinutes: number;
   isActive: boolean;
 }

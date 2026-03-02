@@ -68,7 +68,6 @@ export const onboardBarberSchema = z.object({
     .array(
       z.object({
         serviceId: mongoIdSchema,
-        price: z.number().positive('Price must be positive'),
         durationMinutes: z.number().int().positive('Duration must be a positive integer (minutes)'),
       }),
     )
