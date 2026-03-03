@@ -86,6 +86,12 @@ export class BarberService {
     return this.toDto(barber);
   }
 
+  async getBarberById(barberId: string): Promise<BarberManagementDto> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+    return this.toDto(barber);
+  }
+
   async updateBarber(
     barberId: string,
     input: UpdateBarberInput,

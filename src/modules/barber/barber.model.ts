@@ -41,9 +41,9 @@ const barberSchema = new Schema<IBarber>(
   { timestamps: true },
 );
 
-barberSchema.index({ shopId: 1, isActive: 1 });
+barberSchema.index({ shopId: 1, isAvailable: 1 });
 barberSchema.index({ username: 1 }, { unique: true, sparse: true });
-barberSchema.index({ vendorId: 1, isActive: 1 });
+barberSchema.index({ vendorId: 1, isAvailable: 1 });
 barberSchema.index({ shopId: 1, phone: 1 }, { unique: true });
 
 export const BarberModel = mongoose.model<IBarber>('Barber', barberSchema);
