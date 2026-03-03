@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import ShopService from './shop.service';
 import {
+  createShopSchema,
   updateShopSchema,
+  toggleAvailableSchema,
   updateWorkingHoursSchema,
   nearbyShopsSchema,
   searchShopsSchema,
@@ -13,6 +15,23 @@ import {
 
 export default class ShopController {
   constructor(private readonly shopService: ShopService) {}
+
+  createShop = async (req: Request, res: Response): Promise<void> => {
+    const { location, ...rest } = createShopSchema.parse(req.body);
+    const result = await this.shopService.createShopForVendor({
+      ...rest,
+      vendorId: req.user!.sub,
+      location: {
+        type: 'Point',
+        coordinates: [location.longitude, location.latitude],
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
 
   getMyShops = async (req: Request, res: Response): Promise<void> => {
     const result = await this.shopService.getMyShops(req.user!.sub);
@@ -90,6 +109,27 @@ export default class ShopController {
     const { id } = shopIdParamSchema.parse(req.params);
     const { latitude, longitude } = shopDetailsQuerySchema.parse(req.query);
     const result = await this.shopService.getShopDetails(id, { latitude, longitude });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  deleteShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.deleteShop(shopId, req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  toggleShopAvailable = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = toggleAvailableSchema.parse(req.body);
+    const result = await this.shopService.toggleShopAvailable(shopId, req.user!.sub, validated);
 
     res.status(200).json({
       success: true,

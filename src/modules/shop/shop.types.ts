@@ -61,6 +61,14 @@ export interface UpdateWorkingHoursInput {
   workingHours: WorkingHours;
 }
 
+export interface UpdateShopStatusInput {
+  status: 'ACTIVE' | 'DELETED';
+}
+
+export interface ToggleShopAvailableInput {
+  isAvailable: boolean;
+}
+
 export interface CompleteProfileInput {
   description: string;
   workingHours: WorkingHours;
@@ -151,8 +159,8 @@ export interface ShopDto {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  status: 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
 }
 

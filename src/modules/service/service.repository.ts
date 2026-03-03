@@ -1,6 +1,10 @@
 import { ClientSession } from 'mongoose';
 import { BarberServiceModel, IBarberService, ServiceModel, IService } from './service.model';
 
+export interface IBarberServicePopulated extends Omit<IBarberService, 'serviceId'> {
+  serviceId: Pick<IService, '_id' | 'name'>;
+}
+
 export class ServiceRepository {
   createBarberService(
     data: Array<{
@@ -25,6 +29,13 @@ export class ServiceRepository {
 
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ barberId, isActive: true }).lean().exec();
+  }
+
+  findBarberServicesByBarberIdPopulated(barberId: string): Promise<IBarberServicePopulated[]> {
+    return BarberServiceModel.find({ barberId, isActive: true })
+      .populate<Pick<IBarberServicePopulated, 'serviceId'>>('serviceId', 'name')
+      .lean()
+      .exec() as unknown as Promise<IBarberServicePopulated[]>;
   }
 
   findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {

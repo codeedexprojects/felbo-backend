@@ -19,7 +19,7 @@ export default class ShopRepository {
           phone: data.phone,
           address: data.address,
           location: data.location,
-          isActive: true,
+          isAvailable: true,
           status: 'ACTIVE',
           onboardingStatus: 'PENDING_PROFILE',
         },
@@ -94,6 +94,30 @@ export default class ShopRepository {
     ).exec();
   }
 
+  updateStatus(
+    id: string,
+    status: 'ACTIVE' | 'DELETED',
+    session?: ClientSession,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: { status } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  updateIsAvailable(
+    id: string,
+    isAvailable: boolean,
+    session?: ClientSession,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: { isAvailable } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
   async findNearby(
     longitude: number,
     latitude: number,
@@ -104,7 +128,7 @@ export default class ShopRepository {
   ): Promise<NearbyShopResult[]> {
     const matchStage: Record<string, unknown> = {
       status: 'ACTIVE',
-      isActive: true,
+      isAvailable: true,
       onboardingStatus: 'COMPLETED',
     };
     if (filter.shopType) {
@@ -150,7 +174,7 @@ export default class ShopRepository {
   ): Promise<{ shops: Array<IShop & { distance?: number }>; total: number }> {
     const matchFilter: Record<string, unknown> = {
       status: 'ACTIVE',
-      isActive: true,
+      isAvailable: true,
       onboardingStatus: 'COMPLETED',
     };
 

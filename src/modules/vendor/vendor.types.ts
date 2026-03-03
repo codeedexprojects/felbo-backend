@@ -293,7 +293,7 @@ export interface VendorAdminDetail {
     rating: { average: number; count: number };
     onboardingStatus: string;
     status: string;
-    isActive: boolean;
+    isAvailable: boolean;
 
     barbers: {
       id: string;

@@ -536,7 +536,7 @@ export default class VendorService {
           rating: shopDto.rating,
           onboardingStatus: shopDto.onboardingStatus,
           status: shopDto.status,
-          isActive: shopDto.isActive,
+          isAvailable: shopDto.isAvailable,
 
           barbers: barberList.map((b) => ({
             id: b.id.toString(),
