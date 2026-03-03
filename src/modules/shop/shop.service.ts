@@ -7,6 +7,7 @@ import {
   CreateShopInput,
   UpdateShopInput,
   UpdateWorkingHoursInput,
+  ToggleShopAvailableInput,
   CompleteProfileInput,
   NearbyShopsInput,
   SearchShopsInput,
@@ -63,7 +64,7 @@ export default class ShopService {
       workingHours: shop.workingHours,
       photos: shop.photos,
       rating: shop.rating,
-      isActive: shop.isActive,
+      isAvailable: shop.isAvailable,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
     };
@@ -142,6 +143,48 @@ export default class ShopService {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') throw new NotFoundError('Shop not found.');
     return this.toShopDto(shop);
+  }
+
+  // --- Soft delete (status) ---
+  async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_DELETED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+    });
+
+    return this.toShopDto(updated);
+  }
+
+  // --- Availability toggle ---
+  async toggleShopAvailable(
+    shopId: string,
+    vendorId: string,
+    input: ToggleShopAvailableInput,
+  ): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    const updated = await this.shopRepository.updateIsAvailable(
+      shop._id.toString(),
+      input.isAvailable,
+    );
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_AVAILABILITY_TOGGLED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+      isAvailable: input.isAvailable,
+    });
+
+    return this.toShopDto(updated);
   }
 
   async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {

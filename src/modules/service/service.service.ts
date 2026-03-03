@@ -105,19 +105,14 @@ export class ServiceService {
   async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
     await this.barberService.getBarber(barberId, vendorId);
 
-    const links = await this.serviceRepository.findBarberServicesByBarberId(barberId);
-    if (links.length === 0) return [];
-
-    const serviceIds = links.map((l) => l.serviceId.toString());
-    const services = await this.getServicesByIds(serviceIds);
-    const serviceNameMap = new Map<string, string>(services.map((s) => [s.id, s.name]));
+    const links = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);
 
     return links.map((l) => ({
       id: l._id.toString(),
       barberId: l.barberId.toString(),
-      serviceId: l.serviceId.toString(),
+      serviceId: l.serviceId._id.toString(),
       shopId: l.shopId.toString(),
-      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
+      serviceName: l.serviceId.name,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
     }));

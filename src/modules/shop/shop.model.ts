@@ -45,8 +45,8 @@ export interface IShop extends Document {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  status: 'ACTIVE' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
     | 'PENDING_SERVICES'
@@ -123,10 +123,10 @@ const shopSchema = new Schema<IShop>(
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
     },
-    isActive: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE', 'DELETED'],
+      enum: ['ACTIVE', 'DELETED'],
       default: 'ACTIVE',
     },
     onboardingStatus: {
@@ -149,7 +149,7 @@ const shopSchema = new Schema<IShop>(
 shopSchema.index({ vendorId: 1 });
 shopSchema.index({ location: '2dsphere' });
 shopSchema.index({ shopType: 1 });
-shopSchema.index({ status: 1, isActive: 1 });
+shopSchema.index({ status: 1, isAvailable: 1 });
 shopSchema.index({ 'rating.average': -1 });
 shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });

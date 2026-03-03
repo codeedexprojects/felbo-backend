@@ -33,6 +33,17 @@ const workingHoursSchema = z.object({
 
 const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID');
 
+export const createShopSchema = z.object({
+  name: z.string().min(1, 'Shop name is required').max(100),
+  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  phone: z
+    .string()
+    .length(10, 'Enter a valid 10-digit mobile number')
+    .regex(/^[6-9]\d{9}$/),
+  address: addressSchema,
+  location: locationSchema,
+});
+
 export const updateShopSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -40,6 +51,10 @@ export const updateShopSchema = z.object({
   address: addressSchema.optional(),
   location: locationSchema.optional(),
   photos: z.array(z.string().url()).max(10).optional(),
+});
+
+export const toggleAvailableSchema = z.object({
+  isAvailable: z.boolean(),
 });
 
 export const updateWorkingHoursSchema = z.object({
