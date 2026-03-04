@@ -10,6 +10,8 @@ router.delete('/availability/presets/:presetId', availabilityController.deletePr
 router.post('/availability/presets/:presetId/apply', availabilityController.applyPreset);
 
 // --- Daily Availability ---
+
+// need check booking conflict before update ( not implimented yet waiting for booking module completion)
 router.put('/availability/today', availabilityController.setAvailability);
 router.get('/availability/today/default', availabilityController.getDefault);
 router.get('/availability/today', availabilityController.getAvailability);

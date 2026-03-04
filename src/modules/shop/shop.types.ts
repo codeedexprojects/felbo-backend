@@ -43,6 +43,7 @@ export interface CreateShopInput {
   phone: string;
   address: ShopAddress;
   location: ShopLocation;
+  photos?: string[];
 }
 
 export interface UpdateShopInput {

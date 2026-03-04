@@ -19,6 +19,7 @@ export default class ShopRepository {
           phone: data.phone,
           address: data.address,
           location: data.location,
+          photos: data.photos ?? [],
           isAvailable: true,
           status: 'ACTIVE',
           onboardingStatus: 'PENDING_PROFILE',
