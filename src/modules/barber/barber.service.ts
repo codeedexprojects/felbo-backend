@@ -55,15 +55,6 @@ export class BarberService {
     if (shop.vendorId !== vendorId)
       throw new ForbiddenError('You do not have access to this shop.');
 
-    const [existingUsername, existingPhone] = await Promise.all([
-      this.barberRepository.findByUsername(input.username),
-      this.barberRepository.findByPhone(input.shopId, input.phone),
-    ]);
-
-    if (existingUsername) throw new ConflictError('Username is already taken.');
-    if (existingPhone)
-      throw new ConflictError('A barber with this phone already exists in this shop.');
-
     const passwordHash = await hashPassword(input.password);
 
     const barber = await this.barberRepository.create({
@@ -86,6 +77,12 @@ export class BarberService {
     return this.toDto(barber);
   }
 
+  async getBarberById(barberId: string): Promise<BarberManagementDto> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+    return this.toDto(barber);
+  }
+
   async updateBarber(
     barberId: string,
     input: UpdateBarberInput,
@@ -94,15 +91,6 @@ export class BarberService {
     const barber = await this.barberRepository.findById(barberId);
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
-
-    if (input.phone && input.phone !== barber.phone) {
-      const existing = await this.barberRepository.findByPhone(
-        barber.shopId.toString(),
-        input.phone,
-      );
-      if (existing)
-        throw new ConflictError('A barber with this phone already exists in this shop.');
-    }
 
     const updated = await this.barberRepository.updateById(barberId, input);
     if (!updated) throw new NotFoundError('Barber not found.');
@@ -144,10 +132,6 @@ export class BarberService {
     const update: { username?: string; passwordHash?: string } = {};
 
     if (input.username) {
-      if (input.username !== barber.username) {
-        const existing = await this.barberRepository.findByUsername(input.username);
-        if (existing) throw new ConflictError('Username is already taken.');
-      }
       update.username = input.username;
     }
 
@@ -174,17 +158,6 @@ export class BarberService {
       shop.onboardingStatus === 'PENDING_SERVICES'
     ) {
       throw new ConflictError('Add at least one service before adding barbers.');
-    }
-
-    const [existingPhone, existingUsername] = await Promise.all([
-      this.barberRepository.findByPhone(shopId, input.phone),
-      this.barberRepository.findByUsername(input.username),
-    ]);
-    if (existingPhone) {
-      throw new ConflictError('A barber with this phone already exists in this shop.');
-    }
-    if (existingUsername) {
-      throw new ConflictError('Username is already taken.');
     }
 
     const passwordHash = await hashPassword(input.password);
