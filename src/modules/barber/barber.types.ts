@@ -105,23 +105,6 @@ export interface BarberServiceLinkDto {
   updatedAt: Date;
 }
 
-// Vendor-barber dual role: vendor adds themselves as barber in their own shop
-
-export interface AddSelfAsBarberInput {
-  name: string;
-  phone: string;
-  photo?: string;
-}
-
-export interface SelfBarberDto {
-  id: string;
-  shopId: string;
-  name: string;
-  phone: string;
-  photo?: string;
-  isAvailable: boolean;
-}
-
 export interface AssignServiceItemInput {
   serviceId: string;
   durationMinutes: number;

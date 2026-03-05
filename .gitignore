@@ -7,4 +7,3 @@ coverage/
 *.log
 .DS_Store
 .idea/
-felbo-app-firebase-adminsdk.json

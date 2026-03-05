@@ -6,7 +6,6 @@ import { JwtService } from '../../shared/services/jwt.service';
 import { paymentService } from '../payment/payment.container';
 import { shopService } from '../shop/shop.container';
 import { barberService } from '../barber/barber.container';
-import { BarberService } from '../barber/barber.service';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -31,7 +30,6 @@ const vendorService = new VendorService(
   () => barberService,
   config.vendor.registrationFee,
   logger,
-  (): BarberService => barberService,
 );
 
 const vendorController = new VendorController(vendorService);

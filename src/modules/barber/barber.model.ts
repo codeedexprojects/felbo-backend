@@ -13,7 +13,6 @@ export interface IBarber extends Document {
     average: number;
     count: number;
   };
-  isVendorBarber: boolean;
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   createdAt: Date;
@@ -34,7 +33,6 @@ const barberSchema = new Schema<IBarber>(
     },
     username: { type: String },
     passwordHash: { type: String, select: false },
-    isVendorBarber: { type: Boolean, default: false },
     status: {
       type: String,
       enum: ['INACTIVE', 'ACTIVE', 'DELETED'],
@@ -58,7 +56,6 @@ barberSchema.index(
   },
 );
 barberSchema.index({ vendorId: 1, isAvailable: 1 });
-barberSchema.index({ vendorId: 1, isVendorBarber: 1 });
 barberSchema.index({ shopId: 1, phone: 1 }, { unique: true });
 barberSchema.index({ vendorId: 1, status: 1 });
 

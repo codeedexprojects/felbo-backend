@@ -145,12 +145,6 @@ export interface SearchShopsResponse {
   totalPages: number;
 }
 
-export interface MyBarberProfile {
-  id: string;
-  name: string;
-  isAvailable: boolean;
-}
-
 export interface ShopDto {
   id: string;
   vendorId: string;
@@ -169,10 +163,6 @@ export interface ShopDto {
   isAvailable: boolean;
   status: 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
-}
-
-export interface VendorShopDto extends ShopDto {
-  myBarberProfile: MyBarberProfile | null;
 }
 
 export interface NearbyShopDto extends ShopDto {

@@ -3,10 +3,13 @@ import { availabilityController } from '../../modules/barberAvailability/barberA
 
 const router = Router();
 
+// --- Presets ---
 router.post('/availability/presets', availabilityController.createPreset);
 router.get('/availability/presets', availabilityController.listPresets);
 router.delete('/availability/presets/:presetId', availabilityController.deletePreset);
 router.post('/availability/presets/:presetId/apply', availabilityController.applyPreset);
+
+// --- Daily Availability ---
 
 // need check booking conflict before update ( not implimented yet waiting for booking module completion)
 router.put('/availability/today', availabilityController.setAvailability);
