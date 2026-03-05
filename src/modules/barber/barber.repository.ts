@@ -85,12 +85,19 @@ export class BarberRepository {
 
   async createBarber(
     data: {
+     
       shopId: string;
+     
       vendorId: string;
+     
       name: string;
+     
       phone: string;
       email: string;
+     
       photo?: string;
+   
+      isVendorBarber?: boolean;
     },
     session?: ClientSession,
   ): Promise<IBarber> {
@@ -103,6 +110,7 @@ export class BarberRepository {
           phone: data.phone,
           email: data.email,
           photo: data.photo,
+          isVendorBarber: data.isVendorBarber ?? false,
           rating: { average: 0, count: 0 },
           status: 'INACTIVE',
           isAvailable: true,
@@ -111,6 +119,10 @@ export class BarberRepository {
       { session },
     );
     return barber;
+  }
+
+  findVendorBarberProfile(vendorId: string): Promise<IBarber | null> {
+    return BarberModel.findOne({ vendorId, isVendorBarber: true, status: 'ACTIVE' }).exec();
   }
 
   countActiveBarbers(shopId: string, session?: ClientSession): Promise<number> {

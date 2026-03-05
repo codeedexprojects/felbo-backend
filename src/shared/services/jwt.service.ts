@@ -4,7 +4,16 @@ import { UnauthorizedError } from '../errors/index';
 
 export interface TokenPayload {
   sub: string;
-  role: 'USER' | 'VENDOR' | 'ADMIN' | 'SUPER_ADMIN' | 'SUB_ADMIN' | 'ASSOCIATION_ADMIN' | 'BARBER';
+  role:
+    | 'USER'
+    | 'VENDOR'
+    | 'VENDOR_BARBER'
+    | 'BARBER'
+    | 'ADMIN'
+    | 'SUPER_ADMIN'
+    | 'SUB_ADMIN'
+    | 'ASSOCIATION_ADMIN';
+  barberId?: string;
 }
 
 export interface DecodedToken extends TokenPayload {
@@ -34,9 +43,9 @@ export class JwtService {
   }
 
   signToken(payload: TokenPayload): string {
-    return jwt.sign({ sub: payload.sub, role: payload.role }, this.secret, {
-      expiresIn: this.expirySeconds,
-    });
+    const claims: Record<string, unknown> = { sub: payload.sub, role: payload.role };
+    if (payload.barberId) claims.barberId = payload.barberId;
+    return jwt.sign(claims, this.secret, { expiresIn: this.expirySeconds });
   }
 
   verifyToken(token: string): DecodedToken {
@@ -59,9 +68,9 @@ export class JwtService {
   }
 
   signRefreshToken(payload: TokenPayload): string {
-    return jwt.sign({ sub: payload.sub, role: payload.role }, this.refreshSecret, {
-      expiresIn: this.refreshExpiry,
-    });
+    const claims: Record<string, unknown> = { sub: payload.sub, role: payload.role };
+    if (payload.barberId) claims.barberId = payload.barberId;
+    return jwt.sign(claims, this.refreshSecret, { expiresIn: this.refreshExpiry });
   }
 
   verifyRefreshToken(token: string): DecodedToken {
@@ -97,7 +106,8 @@ export class JwtService {
       typeof p['sub'] === 'string' &&
       typeof p['role'] === 'string' &&
       typeof p['iat'] === 'number' &&
-      typeof p['exp'] === 'number'
+      typeof p['exp'] === 'number' &&
+      (p['barberId'] === undefined || typeof p['barberId'] === 'string')
     );
   }
 }

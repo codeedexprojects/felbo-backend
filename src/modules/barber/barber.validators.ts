@@ -101,3 +101,9 @@ export const barberLoginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
 });
+
+export const addSelfAsBarberSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100),
+  phone: phoneSchema,
+  photo: z.string().optional(),
+});

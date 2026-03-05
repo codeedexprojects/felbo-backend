@@ -162,9 +162,12 @@ export default class VendorService {
 
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
     const tokenPayload: TokenPayload = {
       sub: vendor._id.toString(),
-      role: 'VENDOR',
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
     const token = this.jwtService.signToken(tokenPayload);
@@ -208,9 +211,12 @@ export default class VendorService {
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
     }
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
     const tokenPayload: TokenPayload = {
       sub: vendor._id.toString(),
-      role: 'VENDOR',
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
     const newToken = this.jwtService.signToken(tokenPayload);

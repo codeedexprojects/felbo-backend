@@ -14,6 +14,7 @@ import {
   barberVerifyOtpSchema,
   barberSetPasswordSchema,
   barberLoginSchema,
+  addSelfAsBarberSchema,
 } from './barber.validators';
 
 export class BarberController {
@@ -110,5 +111,16 @@ export class BarberController {
     const validated = barberLoginSchema.parse(req.body);
     const result = await this.barberService.login(validated);
     res.status(200).json({ success: true, data: result });
+  };
+
+  addSelfAsBarber = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdParamSchema.parse(req.params);
+    const validated = addSelfAsBarberSchema.parse(req.body);
+    const result = await this.barberService.addSelfAsBarber(shopId, req.user!.sub, validated);
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: 'You have been added as a barber.',
+    });
   };
 }

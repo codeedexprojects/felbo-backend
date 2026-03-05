@@ -14,6 +14,7 @@ import {
   SearchShopsResponse,
   ShopSearchResultDto,
   ShopDto,
+  VendorShopDto,
   NearbyShopDto,
   ServiceDto,
   BarberDto,
@@ -132,6 +133,25 @@ export default class ShopService {
   async getMyShops(vendorId: string): Promise<ShopDto[]> {
     const shops = await this.shopRepository.findAllByVendorId(vendorId);
     return shops.map((shop) => this.toShopDto(shop));
+  }
+
+  async getMyShopsWithBarberProfile(vendorId: string): Promise<VendorShopDto[]> {
+    const shops = await this.shopRepository.findAllByVendorId(vendorId);
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+
+    return shops.map((shop) => {
+      const shopId = shop._id.toString();
+      const myBarberProfile =
+        barberProfile && barberProfile.shopId === shopId
+          ? {
+              id: barberProfile.id,
+              name: barberProfile.name,
+              isAvailable: barberProfile.isAvailable,
+            }
+          : null;
+
+      return { ...this.toShopDto(shop), myBarberProfile };
+    });
   }
 
   async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
