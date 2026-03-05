@@ -10,6 +10,7 @@ import {
   onboardBarberSchema,
   addBarberServicesSchema,
   barberShopParamSchema,
+  addSelfAsBarberSchema,
   barberSendOtpSchema,
   barberVerifyOtpSchema,
   barberSetPasswordSchema,
@@ -81,6 +82,17 @@ export class BarberController {
       validated,
     );
     res.status(201).json({ success: true, data: result });
+  };
+
+  addSelfAsBarber = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdParamSchema.parse(req.params);
+    const validated = addSelfAsBarberSchema.parse(req.body);
+    const result = await this.barberService.addSelfAsBarber(shopId, req.user!.sub, validated);
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: 'You have been added as a barber.',
+    });
   };
 
   // ─── Auth Handlers (public) ──────────────────────────────────────────────────

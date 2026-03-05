@@ -7,7 +7,15 @@ export function authorize(...roles: string[]) {
       throw new UnauthorizedError('Authentication required. Please login.');
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRole = req.user.role;
+    let hasAccess = roles.includes(userRole);
+
+    // VENDOR_BARBER can access both VENDOR and BARBER protected routes
+    if (!hasAccess && userRole === 'VENDOR_BARBER') {
+      hasAccess = roles.includes('VENDOR') || roles.includes('BARBER');
+    }
+
+    if (!hasAccess) {
       throw new ForbiddenError('You do not have permission to access this resource.');
     }
 
