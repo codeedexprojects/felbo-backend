@@ -28,6 +28,7 @@ import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import PaymentService from '../payment/payment.service';
 import ShopService from '../shop/shop.service';
+import { BarberService } from '../barber/barber.service';
 import {
   UnauthorizedError,
   ForbiddenError,
@@ -49,9 +50,14 @@ export default class VendorService {
     private readonly jwtService: JwtService,
     private readonly paymentService: PaymentService,
     private readonly shopService: ShopService,
+    private readonly getBarberService: () => BarberService,
     private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
+  }
 
   private toVendorDto(vendor: IVendor): LoginVerifyOtpResponse['vendor'] {
     return {
@@ -436,6 +442,8 @@ export default class VendorService {
         },
         session,
       );
+
+      await this.barberService.activateBarbersByVendorId(vendor._id.toString(), session);
     });
 
     this.logger.info({

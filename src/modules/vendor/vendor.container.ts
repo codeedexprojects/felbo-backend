@@ -5,6 +5,7 @@ import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService } from '../../shared/services/jwt.service';
 import { paymentService } from '../payment/payment.container';
 import { shopService } from '../shop/shop.container';
+import { barberService } from '../barber/barber.container';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -26,6 +27,7 @@ const vendorService = new VendorService(
   jwtService,
   paymentService,
   shopService,
+  () => barberService,
   config.vendor.registrationFee,
   logger,
 );
