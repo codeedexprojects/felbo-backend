@@ -69,6 +69,12 @@ export const config = {
     bucket: getEnv('AWS_S3_BUCKET', ''),
   },
 
+  firebase: {
+    projectId: getEnv('FIREBASE_PROJECT_ID', ''),
+    privateKey: getEnv('FIREBASE_PRIVATE_KEY', ''),
+    clientEmail: getEnv('FIREBASE_CLIENT_EMAIL', ''),
+  },
+
   admin: {
     cookie: {
       name: 'adminRefreshToken',

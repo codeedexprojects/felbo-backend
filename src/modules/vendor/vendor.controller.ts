@@ -8,6 +8,7 @@ import {
   registerIndependentInitiateSchema,
   registerIndependentConfirmSchema,
   refreshTokenSchema,
+  fcmTokenSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -107,6 +108,26 @@ export default class VendorController {
     res.status(200).json({
       success: true,
       message: 'Logged out successfully.',
+    });
+  };
+
+  registerFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.registerFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token registered',
+    });
+  };
+
+  unregisterFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.unregisterFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token removed',
     });
   };
 }

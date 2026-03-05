@@ -16,6 +16,7 @@ import {
   ForbiddenError,
   AppError,
   UnauthorizedError,
+  ValidationError,
 } from '../../shared/errors/index';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -219,5 +220,16 @@ export default class UserService {
     }
 
     return this.toUserDto(user);
+  }
+
+  async registerFcmToken(userId: string, token: string): Promise<void> {
+    if (!token) {
+      throw new ValidationError('Token is required');
+    }
+    await this.userRepository.addFcmToken(userId, token);
+  }
+
+  async unregisterFcmToken(userId: string, token: string): Promise<void> {
+    await this.userRepository.removeFcmToken(userId, token);
   }
 }
