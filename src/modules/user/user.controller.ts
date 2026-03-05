@@ -5,6 +5,7 @@ import {
   verifyOtpSchema,
   updateProfileSchema,
   refreshTokenSchema,
+  fcmTokenSchema,
 } from './user.validators';
 
 export default class UserController {
@@ -65,6 +66,26 @@ export default class UserController {
     res.status(200).json({
       success: true,
       message: 'Logged out successfully.',
+    });
+  };
+
+  registerFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.userService.registerFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token registered',
+    });
+  };
+
+  unregisterFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.userService.unregisterFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token removed',
     });
   };
 }

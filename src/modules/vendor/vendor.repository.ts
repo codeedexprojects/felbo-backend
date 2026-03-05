@@ -178,4 +178,12 @@ export default class VendorRepository {
   findByIdWithRefreshToken(id: string): Promise<IVendor | null> {
     return VendorModel.findById(id).select('+refreshTokenHash').exec();
   }
+
+  addFcmToken(vendorId: string, token: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(vendorId: string, token: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $pull: { fcmTokens: token } }).exec();
+  }
 }

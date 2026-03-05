@@ -72,6 +72,9 @@ export interface IVendor extends Document {
   isFlagged: boolean;
   flaggedAt?: Date;
 
+  // Fcm tokens for push notifications
+  fcmTokens: string[];
+
   // Block status
   isBlocked: boolean;
   blockedAt?: Date;
@@ -179,6 +182,12 @@ const vendorSchema = new Schema<IVendor>(
     lastCancellationAt: { type: Date },
     isFlagged: { type: Boolean, default: false },
     flaggedAt: { type: Date },
+
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
 
     // Block status
     isBlocked: { type: Boolean, default: false },

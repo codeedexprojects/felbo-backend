@@ -698,4 +698,15 @@ export default class VendorService {
   async getAllPhotoKeys(): Promise<string[]> {
     return this.vendorRepository.getAllPhotoKeys();
   }
+
+  async registerFcmToken(vendorId: string, token: string): Promise<void> {
+    if (!token) {
+      throw new ValidationError('Token is required');
+    }
+    await this.vendorRepository.addFcmToken(vendorId, token);
+  }
+
+  async unregisterFcmToken(vendorId: string, token: string): Promise<void> {
+    await this.vendorRepository.removeFcmToken(vendorId, token);
+  }
 }

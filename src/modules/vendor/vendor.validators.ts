@@ -90,3 +90,7 @@ export const registerIndependentConfirmSchema = z.object({
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
+
+export const fcmTokenSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+});

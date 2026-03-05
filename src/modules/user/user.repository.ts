@@ -114,4 +114,12 @@ export default class UserRepository {
       { returnDocument: 'after' },
     ).exec();
   }
+
+  addFcmToken(userId: string, token: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(userId: string, token: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $pull: { fcmTokens: token } }).exec();
+  }
 }

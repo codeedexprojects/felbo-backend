@@ -29,3 +29,7 @@ export const refreshTokenSchema = z.object({
     .string({ error: 'Refresh token is required' })
     .min(1, 'Refresh token is required'),
 });
+
+export const fcmTokenSchema = z.object({
+  token: z.string({ error: 'Token is required' }).min(1, 'Token is required'),
+});
