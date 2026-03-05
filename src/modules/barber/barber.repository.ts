@@ -1,5 +1,5 @@
-import { ClientSession } from 'mongoose';
-import { BarberModel, IBarber } from './barber.model';
+import { ClientSession, Document } from 'mongoose';
+import { BarberModel, IBarber, SlotBlockModel, ISlotBlock } from './barber.model';
 import { BarberServiceModel, IBarberService } from '../service/service.model';
 import { ListBarbersFilter } from './barber.types';
 
@@ -85,18 +85,17 @@ export class BarberRepository {
 
   async createBarber(
     data: {
-     
       shopId: string;
-     
+
       vendorId: string;
-     
+
       name: string;
-     
+
       phone: string;
       email: string;
-     
+
       photo?: string;
-   
+
       isVendorBarber?: boolean;
     },
     session?: ClientSession,
@@ -242,5 +241,95 @@ export class BarberRepository {
   async existsByServiceId(serviceId: string): Promise<boolean> {
     const doc = await BarberServiceModel.exists({ serviceId }).exec();
     return doc !== null;
+  }
+
+  async createSlotBlock(
+    data: Omit<ISlotBlock, keyof Document | 'createdAt' | 'updatedAt' | 'releasedAt'>,
+  ): Promise<ISlotBlock> {
+    const [block] = await SlotBlockModel.create([data]);
+    return block;
+  }
+
+  findSlotBlockById(id: string): Promise<ISlotBlock | null> {
+    return SlotBlockModel.findById(id).lean<ISlotBlock>().exec();
+  }
+
+  async releaseSlotBlock(id: string): Promise<ISlotBlock | null> {
+    return SlotBlockModel.findByIdAndUpdate(
+      id,
+      {
+        status: 'RELEASED',
+        releasedAt: new Date(),
+      },
+      { new: true },
+    )
+      .lean<ISlotBlock>()
+      .exec();
+  }
+
+  findActiveBlocksByBarberAndDate(barberId: string, date: Date): Promise<ISlotBlock[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    return SlotBlockModel.find({
+      barberId,
+      status: 'ACTIVE',
+      date: { $gte: startOfDay, $lt: endOfDay },
+    })
+      .lean<ISlotBlock[]>()
+      .exec();
+  }
+
+  findOverlappingActiveBlocks(
+    barberId: string,
+    date: Date,
+    newStartTime: string,
+    newEndTime: string,
+  ): Promise<ISlotBlock[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    return SlotBlockModel.find({
+      barberId,
+      status: 'ACTIVE',
+      date: { $gte: startOfDay, $lt: endOfDay },
+      startTime: { $lt: newEndTime },
+      endTime: { $gt: newStartTime },
+    })
+      .lean<ISlotBlock[]>()
+      .exec();
+  }
+
+  listSlotBlocks(
+    barberId: string,
+    date: Date,
+    status?: 'ACTIVE' | 'RELEASED',
+  ): Promise<ISlotBlock[]> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    const query: {
+      barberId: string;
+      date: { $gte: Date; $lt: Date };
+      status?: 'ACTIVE' | 'RELEASED';
+    } = {
+      barberId,
+      date: { $gte: startOfDay, $lt: endOfDay },
+    };
+
+    if (status) {
+      query.status = status;
+    }
+
+    return SlotBlockModel.find(query).sort({ startTime: 1 }).lean<ISlotBlock[]>().exec();
   }
 }

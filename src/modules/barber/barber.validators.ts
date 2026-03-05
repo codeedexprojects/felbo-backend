@@ -81,8 +81,6 @@ export const barberShopParamSchema = z.object({
   barberId: mongoIdSchema,
 });
 
-// Auth schemas
-
 export const barberSendOtpSchema = z.object({
   email: z.string().email('Enter a valid email address'),
 });
@@ -106,4 +104,20 @@ export const addSelfAsBarberSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   phone: phoneSchema,
   photo: z.string().optional(),
+  email: z.string().email('Enter a valid email address'),
+});
+
+export const createSlotBlockSchema = z.object({
+  serviceIds: z.array(mongoIdSchema).max(10, 'Too many services').optional(),
+
+  reason: z.string().trim().min(1, 'Reason cannot be blank').max(200, 'Reason too long').optional(),
+});
+
+export const releaseSlotBlockParamSchema = z.object({
+  blockId: mongoIdSchema,
+});
+
+export const listSlotBlocksQuerySchema = z.object({
+  date: z.string().date('Invalid date format. Use YYYY-MM-DD').optional(),
+  status: z.enum(['ACTIVE', 'RELEASED']).optional(),
 });

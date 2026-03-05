@@ -63,3 +63,45 @@ barberSchema.index({ shopId: 1, phone: 1 }, { unique: true });
 barberSchema.index({ vendorId: 1, status: 1 });
 
 export const BarberModel = mongoose.model<IBarber>('Barber', barberSchema);
+
+export interface ISlotBlock extends Document {
+  shopId: mongoose.Types.ObjectId;
+  barberId: mongoose.Types.ObjectId;
+  serviceIds?: mongoose.Types.ObjectId[];
+  createdBy: mongoose.Types.ObjectId;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  reason?: string;
+  status: 'ACTIVE' | 'RELEASED';
+  releasedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const slotBlockSchema = new Schema<ISlotBlock>(
+  {
+    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
+    barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
+    serviceIds: [{ type: Schema.Types.ObjectId, ref: 'Service' }],
+    createdBy: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
+    date: { type: Date, required: true },
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    durationMinutes: { type: Number, required: true },
+    reason: { type: String },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'RELEASED'],
+      default: 'ACTIVE',
+    },
+    releasedAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+slotBlockSchema.index({ barberId: 1, date: 1, status: 1 });
+slotBlockSchema.index({ shopId: 1, date: 1 });
+
+export const SlotBlockModel = mongoose.model<ISlotBlock>('SlotBlock', slotBlockSchema);

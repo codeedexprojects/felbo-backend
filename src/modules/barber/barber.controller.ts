@@ -15,6 +15,9 @@ import {
   barberSetPasswordSchema,
   barberLoginSchema,
   addSelfAsBarberSchema,
+  createSlotBlockSchema,
+  releaseSlotBlockParamSchema,
+  listSlotBlocksQuerySchema,
 } from './barber.validators';
 
 export class BarberController {
@@ -84,8 +87,6 @@ export class BarberController {
     res.status(201).json({ success: true, data: result });
   };
 
-  // ─── Auth Handlers (public) ──────────────────────────────────────────────────
-
   sendOtp = async (req: Request, res: Response): Promise<void> => {
     const validated = barberSendOtpSchema.parse(req.body);
     const result = await this.barberService.sendOtp({
@@ -121,6 +122,43 @@ export class BarberController {
       success: true,
       data: result,
       message: 'You have been added as a barber.',
+    });
+  };
+
+  createSlotBlock = async (req: Request, res: Response): Promise<void> => {
+    const validated = createSlotBlockSchema.parse(req.body);
+    const result = await this.barberService.createSlotBlock({
+      barberId: req.user!.sub,
+      serviceIds: validated.serviceIds,
+      reason: validated.reason,
+    });
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: 'Slot blocked successfully',
+    });
+  };
+
+  releaseSlotBlock = async (req: Request, res: Response): Promise<void> => {
+    const { blockId } = releaseSlotBlockParamSchema.parse(req.params);
+    const result = await this.barberService.releaseSlotBlock({
+      blockId,
+      barberId: req.user!.sub,
+    });
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: 'Slot block released successfully',
+    });
+  };
+
+  listSlotBlocks = async (req: Request, res: Response): Promise<void> => {
+    const validated = listSlotBlocksQuerySchema.parse(req.query);
+    const result = await this.barberService.listSlotBlocks(req.user!.sub, validated);
+
+    res.status(200).json({
+      success: true,
+      data: result,
     });
   };
 }
