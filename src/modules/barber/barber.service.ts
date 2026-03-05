@@ -19,6 +19,8 @@ import {
   BarberSetPasswordInput,
   BarberAuthResult,
   BarberLoginInput,
+  AddSelfAsBarberInput,
+  SelfBarberDto,
 } from './barber.types';
 import { IBarber } from './barber.model';
 import {
@@ -450,6 +452,61 @@ export class BarberService {
       isAvailable: barber.isAvailable,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
+    };
+  }
+
+  async getVendorBarberProfile(vendorId: string): Promise<SelfBarberDto | null> {
+    const barber = await this.barberRepository.findVendorBarberProfile(vendorId);
+    if (!barber) return null;
+    return {
+      id: barber._id.toString(),
+      shopId: barber.shopId.toString(),
+      name: barber.name,
+      phone: barber.phone,
+      photo: barber.photo,
+      isAvailable: barber.isAvailable,
+    };
+  }
+
+  async addSelfAsBarber(
+    shopId: string,
+    vendorId: string,
+    input: AddSelfAsBarberInput,
+  ): Promise<SelfBarberDto> {
+    const shop = await this.shopService.getShopById(shopId);
+    if (shop.vendorId !== vendorId) {
+      throw new ForbiddenError('You do not own this shop.');
+    }
+
+    const existing = await this.barberRepository.findVendorBarberProfile(vendorId);
+    if (existing) {
+      throw new ConflictError('You already have a barber profile.');
+    }
+
+    const barber = await this.barberRepository.createBarber({
+      shopId,
+      vendorId,
+      name: input.name,
+      phone: input.phone,
+      photo: input.photo,
+      isVendorBarber: true,
+    });
+
+    this.logger.info({
+      action: 'VENDOR_ADDED_SELF_AS_BARBER',
+      module: 'barber',
+      shopId,
+      barberId: barber._id.toString(),
+      vendorId,
+    });
+
+    return {
+      id: barber._id.toString(),
+      shopId: barber.shopId.toString(),
+      name: barber.name,
+      phone: barber.phone,
+      photo: barber.photo,
+      isAvailable: barber.isAvailable,
     };
   }
 

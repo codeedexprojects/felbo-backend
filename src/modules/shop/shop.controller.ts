@@ -34,7 +34,7 @@ export default class ShopController {
   };
 
   getMyShops = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.shopService.getMyShops(req.user!.sub);
+    const result = await this.shopService.getMyShopsWithBarberProfile(req.user!.sub);
 
     res.status(200).json({
       success: true,
