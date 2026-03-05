@@ -42,6 +42,7 @@ export const createShopSchema = z.object({
     .regex(/^[6-9]\d{9}$/),
   address: addressSchema,
   location: locationSchema,
+  photos: z.array(z.string().url()).max(10).optional(),
 });
 
 export const updateShopSchema = z.object({
