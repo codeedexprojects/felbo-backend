@@ -199,7 +199,7 @@ export interface BarberDto {
     average: number;
     count: number;
   };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   services: BarberServiceDto[];
 }

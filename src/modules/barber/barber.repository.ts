@@ -8,14 +8,14 @@ export class BarberRepository {
     shopId: string,
     filter: ListBarbersFilter,
   ): Promise<{ barbers: IBarber[]; total: number }> {
-    const query: Record<string, unknown> = { shopId, status: 'ACTIVE' };
+    const query: Record<string, unknown> = { shopId, status: { $ne: 'DELETED' } };
 
     if (filter.search) {
       const searchRegex = {
         $regex: filter.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
         $options: 'i',
       };
-      query.$or = [{ name: searchRegex }, { phone: searchRegex }, { username: searchRegex }];
+      query.$or = [{ name: searchRegex }, { phone: searchRegex }, { email: searchRegex }];
     }
 
     if (filter.status) {
@@ -29,7 +29,12 @@ export class BarberRepository {
     const skip = (filter.page - 1) * filter.limit;
 
     const [barbers, total] = await Promise.all([
-      BarberModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(filter.limit).exec(),
+      BarberModel.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(filter.limit)
+        .lean<IBarber[]>()
+        .exec(),
       BarberModel.countDocuments(query).exec(),
     ]);
 
@@ -37,19 +42,34 @@ export class BarberRepository {
   }
 
   findById(id: string): Promise<IBarber | null> {
-    return BarberModel.findById(id).exec();
+    return BarberModel.findById(id).lean<IBarber>().exec();
   }
 
   findByIdWithPassword(id: string): Promise<IBarber | null> {
-    return BarberModel.findById(id).select('+passwordHash').exec();
+    return BarberModel.findById(id).select('+passwordHash').lean<IBarber>().exec();
   }
 
   findByUsername(username: string): Promise<IBarber | null> {
-    return BarberModel.findOne({ username }).exec();
+    return BarberModel.findOne({ username }).lean<IBarber>().exec();
   }
 
   findByPhone(shopId: string, phone: string): Promise<IBarber | null> {
-    return BarberModel.findOne({ shopId, phone, status: 'ACTIVE' }).exec();
+    return BarberModel.findOne({ shopId, phone, status: { $ne: 'DELETED' } })
+      .lean<IBarber>()
+      .exec();
+  }
+
+  findByEmail(email: string): Promise<IBarber | null> {
+    return BarberModel.findOne({ email, status: { $ne: 'DELETED' } })
+      .lean<IBarber>()
+      .exec();
+  }
+
+  findByEmailWithPassword(email: string): Promise<IBarber | null> {
+    return BarberModel.findOne({ email, status: { $ne: 'DELETED' } })
+      .select('+passwordHash')
+      .lean<IBarber>()
+      .exec();
   }
 
   async create(data: {
@@ -57,15 +77,21 @@ export class BarberRepository {
     vendorId: string;
     name: string;
     phone: string;
+    email: string;
     photo?: string;
-    username: string;
-    passwordHash: string;
   }): Promise<IBarber> {
-    return BarberModel.create(data);
+    return BarberModel.create({ ...data, status: 'ACTIVE' });
   }
 
   async createBarber(
-    data: { shopId: string; vendorId: string; name: string; phone: string; photo?: string },
+    data: {
+      shopId: string;
+      vendorId: string;
+      name: string;
+      phone: string;
+      email: string;
+      photo?: string;
+    },
     session?: ClientSession,
   ): Promise<IBarber> {
     const [barber] = await BarberModel.create(
@@ -75,9 +101,10 @@ export class BarberRepository {
           vendorId: data.vendorId,
           name: data.name,
           phone: data.phone,
+          email: data.email,
           photo: data.photo,
           rating: { average: 0, count: 0 },
-          status: 'ACTIVE',
+          status: 'INACTIVE',
           isAvailable: true,
         },
       ],
@@ -114,15 +141,15 @@ export class BarberRepository {
   }
 
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
-    return BarberServiceModel.find({ barberId, isActive: true }).exec();
+    return BarberServiceModel.find({ barberId, isActive: true }).lean<IBarberService[]>().exec();
   }
 
   findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
-    return BarberServiceModel.find({ shopId, isActive: true }).exec();
+    return BarberServiceModel.find({ shopId, isActive: true }).lean<IBarberService[]>().exec();
   }
 
   findAllActiveByShopId(shopId: string): Promise<IBarber[]> {
-    return BarberModel.find({ shopId, status: 'ACTIVE' }).exec();
+    return BarberModel.find({ shopId, status: 'ACTIVE' }).lean<IBarber[]>().exec();
   }
 
   findBarbersByShopIds(shopIds: string[]): Promise<IBarber[]> {
@@ -150,6 +177,18 @@ export class BarberRepository {
     update: { username?: string; passwordHash?: string },
   ): Promise<IBarber | null> {
     return BarberModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
+  }
+
+  setPassword(id: string, passwordHash: string): Promise<IBarber | null> {
+    return BarberModel.findByIdAndUpdate(id, { passwordHash }, { new: true }).exec();
+  }
+
+  async activateBarbersByVendorId(vendorId: string, session?: ClientSession): Promise<void> {
+    await BarberModel.updateMany(
+      { vendorId, status: 'INACTIVE' },
+      { $set: { status: 'ACTIVE' } },
+      { session },
+    ).exec();
   }
 
   async softDelete(id: string): Promise<void> {
@@ -181,7 +220,7 @@ export class BarberRepository {
   }
 
   findBarberServiceByIds(barberId: string, serviceId: string): Promise<IBarberService | null> {
-    return BarberServiceModel.findOne({ barberId, serviceId }).exec();
+    return BarberServiceModel.findOne({ barberId, serviceId }).lean<IBarberService>().exec();
   }
 
   async removeBarberService(barberId: string, serviceId: string): Promise<void> {

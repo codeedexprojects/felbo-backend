@@ -4,7 +4,7 @@ import { UnauthorizedError } from '../errors/index';
 
 export interface TokenPayload {
   sub: string;
-  role: 'USER' | 'VENDOR' | 'ADMIN' | 'SUPER_ADMIN' | 'SUB_ADMIN' | 'ASSOCIATION_ADMIN';
+  role: 'USER' | 'VENDOR' | 'ADMIN' | 'SUPER_ADMIN' | 'SUB_ADMIN' | 'ASSOCIATION_ADMIN' | 'BARBER';
 }
 
 export interface DecodedToken extends TokenPayload {

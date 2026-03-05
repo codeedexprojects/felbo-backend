@@ -12,19 +12,39 @@ import {
   AddBarberServicesDto,
   AddBarberServiceItemDto,
   BarberServiceLinkDto,
+  BarberSendOtpInput,
+  BarberSendOtpResult,
+  BarberVerifyOtpInput,
+  BarberVerifyOtpResult,
+  BarberSetPasswordInput,
+  BarberAuthResult,
+  BarberLoginInput,
 } from './barber.types';
 import { IBarber } from './barber.model';
-import { NotFoundError, ConflictError, ForbiddenError, ValidationError } from '../../shared/errors';
-import { hashPassword } from '../../shared/utils/password';
+import {
+  NotFoundError,
+  ConflictError,
+  ForbiddenError,
+  ValidationError,
+  UnauthorizedError,
+} from '../../shared/errors';
+import { hashPassword, comparePassword } from '../../shared/utils/password';
 import { withTransaction } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopService from '../shop/shop.service';
+import { BarberEmailOtpService } from '../../shared/services/brevo-email-otp.service';
+import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
+import { ClientSession } from 'mongoose';
+import crypto from 'crypto';
+import { getRedisClient } from '../../shared/redis/redis';
 
 export class BarberService {
   constructor(
     private readonly barberRepository: BarberRepository,
     private readonly getShopService: () => ShopService,
     private readonly logger: Logger,
+    private readonly emailOtpService: BarberEmailOtpService,
+    private readonly jwtService: JwtService,
   ) {}
 
   private get shopService(): ShopService {
@@ -55,16 +75,13 @@ export class BarberService {
     if (shop.vendorId !== vendorId)
       throw new ForbiddenError('You do not have access to this shop.');
 
-    const passwordHash = await hashPassword(input.password);
-
     const barber = await this.barberRepository.create({
       shopId: input.shopId,
       vendorId,
       name: input.name,
       phone: input.phone,
+      email: input.email,
       photo: input.photo,
-      username: input.username,
-      passwordHash,
     });
 
     return this.toDto(barber);
@@ -103,9 +120,6 @@ export class BarberService {
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
     // TODO: Check for future bookings when booking module is implemented.
-    // if (await this.bookingRepository.hasFutureBookings(barberId)) {
-    //   throw new ConflictError('Cannot delete barber with upcoming bookings.');
-    // }
 
     await this.barberRepository.softDelete(barberId);
   }
@@ -160,19 +174,13 @@ export class BarberService {
       throw new ConflictError('Add at least one service before adding barbers.');
     }
 
-    const passwordHash = await hashPassword(input.password);
-
     const barber = await this.barberRepository.createBarber({
       shopId,
       vendorId,
       name: input.name,
       phone: input.phone,
+      email: input.email,
       photo: input.photo,
-    });
-
-    await this.barberRepository.updateCredentials(barber._id.toString(), {
-      username: input.username,
-      passwordHash,
     });
 
     if (shop.onboardingStatus === 'PENDING_BARBERS') {
@@ -192,6 +200,7 @@ export class BarberService {
       shopId: barber.shopId.toString(),
       name: barber.name,
       phone: barber.phone,
+      email: barber.email,
       photo: barber.photo,
       rating: barber.rating,
       status: barber.status,
@@ -271,6 +280,161 @@ export class BarberService {
     return { barberId, services };
   }
 
+  async sendOtp(input: BarberSendOtpInput): Promise<BarberSendOtpResult> {
+    const barber = await this.barberRepository.findByEmail(input.email);
+
+    if (!barber) {
+      throw new NotFoundError('No barber account found with this email.');
+    }
+
+    if (barber.status === 'INACTIVE') {
+      throw new ForbiddenError(
+        'Your account has not been activated yet. Please contact your vendor.',
+      );
+    }
+
+    const result = await this.emailOtpService.sendOtp(input.email, input.clientIp);
+
+    this.logger.info({
+      action: 'BARBER_OTP_SENT',
+      module: 'barber',
+      barberId: barber._id.toString(),
+      email: input.email.slice(-8),
+    });
+
+    return { message: result.message };
+  }
+
+  async verifyOtp(input: BarberVerifyOtpInput): Promise<BarberVerifyOtpResult> {
+    const barber = await this.barberRepository.findByEmail(input.email);
+
+    if (!barber) {
+      throw new NotFoundError('No barber account found with this email.');
+    }
+
+    if (barber.status === 'INACTIVE') {
+      throw new ForbiddenError('Your account has not been activated yet.');
+    }
+
+    const result = await this.emailOtpService.verifyOtp(input.email, input.otp);
+    if (!result.verified) {
+      throw new UnauthorizedError('Invalid OTP. Please try again.');
+    }
+
+    const redis = getRedisClient();
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    await redis.set(`barber-reset:${tokenHash}`, barber._id.toString(), { EX: 600 });
+
+    this.logger.info({
+      action: 'BARBER_OTP_VERIFIED',
+      module: 'barber',
+      barberId: barber._id.toString(),
+      email: input.email.slice(-8),
+    });
+
+    return { resetToken, message: 'OTP verified. Please set your new password.' };
+  }
+
+  async setPassword(input: BarberSetPasswordInput): Promise<BarberAuthResult> {
+    const redis = getRedisClient();
+    const tokenHash = crypto.createHash('sha256').update(input.resetToken).digest('hex');
+    const resetKey = `barber-reset:${tokenHash}`;
+    const barberId = await redis.get(resetKey);
+
+    if (!barberId) {
+      throw new UnauthorizedError(
+        'Reset token has expired or is invalid. Please request a new OTP.',
+      );
+    }
+
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') {
+      throw new NotFoundError('Barber not found.');
+    }
+
+    const passwordHash = await hashPassword(input.newPassword);
+    await this.barberRepository.setPassword(barberId, passwordHash);
+
+    await redis.del(resetKey);
+
+    const tokenPayload: TokenPayload = {
+      sub: barberId,
+      role: 'BARBER',
+    };
+    const token = this.jwtService.signToken(tokenPayload);
+
+    this.logger.info({
+      action: 'BARBER_PASSWORD_SET',
+      module: 'barber',
+      barberId,
+    });
+
+    return {
+      token,
+      barber: {
+        id: barber._id.toString(),
+        name: barber.name,
+        email: barber.email!,
+        shopId: barber.shopId.toString(),
+        status: barber.status,
+      },
+    };
+  }
+
+  async login(input: BarberLoginInput): Promise<BarberAuthResult> {
+    const barber = await this.barberRepository.findByEmailWithPassword(input.email);
+
+    if (!barber || barber.status === 'INACTIVE') {
+      throw new UnauthorizedError('Invalid email or password.');
+    }
+
+    if (!barber.passwordHash) {
+      throw new ForbiddenError(
+        'Account setup not complete. Please use the OTP flow to set a password.',
+      );
+    }
+
+    const isValid = await comparePassword(input.password, barber.passwordHash);
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid email or password.');
+    }
+
+    const tokenPayload: TokenPayload = {
+      sub: barber._id.toString(),
+      role: 'BARBER',
+    };
+    const token = this.jwtService.signToken(tokenPayload);
+
+    this.logger.info({
+      action: 'BARBER_LOGIN',
+      module: 'barber',
+      barberId: barber._id.toString(),
+      email: input.email.slice(-8),
+    });
+
+    return {
+      token,
+      barber: {
+        id: barber._id.toString(),
+        name: barber.name,
+        email: barber.email!,
+        shopId: barber.shopId.toString(),
+        status: barber.status,
+      },
+    };
+  }
+
+  async activateBarbersByVendorId(vendorId: string, session?: ClientSession): Promise<void> {
+    await this.barberRepository.activateBarbersByVendorId(vendorId, session);
+
+    this.logger.info({
+      action: 'BARBERS_ACTIVATED',
+      module: 'barber',
+      vendorId,
+    });
+  }
+
   private toDto(barber: IBarber): BarberManagementDto {
     return {
       id: barber._id.toString(),
@@ -278,6 +442,7 @@ export class BarberService {
       vendorId: barber.vendorId.toString(),
       name: barber.name,
       phone: barber.phone,
+      email: barber.email,
       photo: barber.photo,
       username: barber.username ?? '',
       rating: barber.rating,

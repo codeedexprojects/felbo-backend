@@ -2,9 +2,8 @@ export interface CreateBarberInput {
   shopId: string;
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  username: string;
-  password: string;
 }
 
 export interface UpdateBarberInput {
@@ -24,10 +23,11 @@ export interface BarberManagementDto {
   vendorId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   username: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -38,7 +38,7 @@ export interface ListBarbersFilter {
   limit: number;
   search?: string;
   isAvailable?: boolean;
-  status?: 'ACTIVE' | 'DELETED';
+  status?: 'INACTIVE' | 'ACTIVE' | 'DELETED';
 }
 
 export interface ListBarbersResponse {
@@ -54,9 +54,8 @@ export interface ListBarbersResponse {
 export interface OnboardBarberInput {
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  username: string;
-  password: string;
 }
 
 export interface OnboardBarberDto {
@@ -64,9 +63,10 @@ export interface OnboardBarberDto {
   shopId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
 }
 
@@ -122,4 +122,46 @@ export interface BarberAssignedServiceDto {
   serviceName: string;
   durationMinutes: number;
   isActive: boolean;
+}
+
+// Auth types
+
+export interface BarberSendOtpInput {
+  email: string;
+  clientIp: string;
+}
+
+export interface BarberSendOtpResult {
+  message: string;
+}
+
+export interface BarberVerifyOtpInput {
+  email: string;
+  otp: string;
+}
+
+export interface BarberVerifyOtpResult {
+  resetToken: string;
+  message: string;
+}
+
+export interface BarberSetPasswordInput {
+  resetToken: string;
+  newPassword: string;
+}
+
+export interface BarberAuthResult {
+  token: string;
+  barber: {
+    id: string;
+    name: string;
+    email: string;
+    shopId: string;
+    status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
+  };
+}
+
+export interface BarberLoginInput {
+  email: string;
+  password: string;
 }

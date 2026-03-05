@@ -10,6 +10,10 @@ import {
   onboardBarberSchema,
   addBarberServicesSchema,
   barberShopParamSchema,
+  barberSendOtpSchema,
+  barberVerifyOtpSchema,
+  barberSetPasswordSchema,
+  barberLoginSchema,
 } from './barber.validators';
 
 export class BarberController {
@@ -77,5 +81,34 @@ export class BarberController {
       validated,
     );
     res.status(201).json({ success: true, data: result });
+  };
+
+  // ─── Auth Handlers (public) ──────────────────────────────────────────────────
+
+  sendOtp = async (req: Request, res: Response): Promise<void> => {
+    const validated = barberSendOtpSchema.parse(req.body);
+    const result = await this.barberService.sendOtp({
+      email: validated.email,
+      clientIp: req.ip ?? req.socket.remoteAddress ?? 'unknown',
+    });
+    res.status(200).json({ success: true, data: result });
+  };
+
+  verifyOtp = async (req: Request, res: Response): Promise<void> => {
+    const validated = barberVerifyOtpSchema.parse(req.body);
+    const result = await this.barberService.verifyOtp(validated);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  setPassword = async (req: Request, res: Response): Promise<void> => {
+    const validated = barberSetPasswordSchema.parse(req.body);
+    const result = await this.barberService.setPassword(validated);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  login = async (req: Request, res: Response): Promise<void> => {
+    const validated = barberLoginSchema.parse(req.body);
+    const result = await this.barberService.login(validated);
+    res.status(200).json({ success: true, data: result });
   };
 }
