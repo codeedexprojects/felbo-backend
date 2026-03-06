@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { shopController } from '../../modules/shop/shop.container';
+import { categoryController } from '../../modules/category/category.container';
 
 const router = Router({ mergeParams: true });
 
-router.post('/', shopController.addCategory);
+router.get('/', categoryController.getAll);
 
 export default router;

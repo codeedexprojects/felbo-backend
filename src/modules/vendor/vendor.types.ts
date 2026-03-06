@@ -15,6 +15,7 @@ export interface LoginVerifyOtpInput {
 
 export interface LoginVerifyOtpResponse {
   token: string;
+  refreshToken: string;
   vendor: {
     id: string;
     phone: string;
@@ -23,9 +24,9 @@ export interface LoginVerifyOtpResponse {
   };
   onboardingStatus:
     | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
 }
@@ -123,9 +124,9 @@ export interface VendorProfileDto {
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
 }
@@ -292,7 +293,7 @@ export interface VendorAdminDetail {
     rating: { average: number; count: number };
     onboardingStatus: string;
     status: string;
-    isActive: boolean;
+    isAvailable: boolean;
 
     barbers: {
       id: string;
@@ -345,4 +346,9 @@ export interface VendorRequestAdminDetail {
       coordinates: [number, number];
     };
   };
+}
+
+export interface RefreshTokenResponse {
+  token: string;
+  refreshToken: string;
 }

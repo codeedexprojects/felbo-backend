@@ -48,7 +48,7 @@ export interface IService extends Document {
 const serviceSchema = new Schema<IService>(
   {
     shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    categoryId: { type: Schema.Types.ObjectId, required: true },
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
     name: { type: String, required: true },
     basePrice: { type: Number, required: true },
     baseDurationMinutes: { type: Number, required: true },

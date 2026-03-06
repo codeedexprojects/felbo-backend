@@ -15,12 +15,14 @@ import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '.
 import { withTransaction } from '../../shared/database/transaction';
 import ShopService from '../shop/shop.service';
 import { BarberService } from '../barber/barber.service';
+import { CategoryService } from '../category/category.service';
 
 export class ServiceService {
   constructor(
     private readonly serviceRepository: ServiceRepository,
     private readonly getShopService: () => ShopService,
     private readonly getBarberService: () => BarberService,
+    private readonly getCategoryService: () => CategoryService,
     private readonly logger: Logger,
   ) {}
 
@@ -30,6 +32,10 @@ export class ServiceService {
 
   private get barberService(): BarberService {
     return this.getBarberService();
+  }
+
+  private get categoryService(): CategoryService {
+    return this.getCategoryService();
   }
 
   private toLink(l: IBarberService): BarberServiceLinkDto {
@@ -99,19 +105,14 @@ export class ServiceService {
   async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
     await this.barberService.getBarber(barberId, vendorId);
 
-    const links = await this.serviceRepository.findBarberServicesByBarberId(barberId);
-    if (links.length === 0) return [];
-
-    const serviceIds = links.map((l) => l.serviceId.toString());
-    const services = await this.getServicesByIds(serviceIds);
-    const serviceNameMap = new Map<string, string>(services.map((s) => [s.id, s.name]));
+    const links = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);
 
     return links.map((l) => ({
       id: l._id.toString(),
       barberId: l.barberId.toString(),
-      serviceId: l.serviceId.toString(),
+      serviceId: l.serviceId._id.toString(),
       shopId: l.shopId.toString(),
-      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
+      serviceName: l.serviceId.name,
       durationMinutes: l.durationMinutes,
       isActive: l.isActive,
     }));
@@ -182,17 +183,13 @@ export class ServiceService {
       throw new ForbiddenError('You do not own this shop.');
     }
 
-    if (
-      shop.onboardingStatus === 'PENDING_PROFILE' ||
-      shop.onboardingStatus === 'PENDING_CATEGORIES'
-    ) {
-      throw new ConflictError('Add at least one category before adding services.');
+    if (shop.onboardingStatus === 'PENDING_PROFILE') {
+      throw new ConflictError('Complete your shop profile before adding services.');
     }
 
-    // Since we don't have categories in ServiceService easily available in details, we can check via shopService
-    const categoryExists = await this.shopService.hasCategory(shopId, input.categoryId);
+    const categoryExists = await this.categoryService.categoryExists(input.categoryId);
     if (!categoryExists) {
-      throw new NotFoundError('Category not found or does not belong to this shop.');
+      throw new NotFoundError('Category not found.');
     }
 
     const service = await this.serviceRepository.createService({
@@ -235,16 +232,13 @@ export class ServiceService {
       throw new ForbiddenError('You do not own this shop.');
     }
 
-    if (
-      shop.onboardingStatus === 'PENDING_PROFILE' ||
-      shop.onboardingStatus === 'PENDING_CATEGORIES'
-    ) {
-      throw new ConflictError('Add at least one category before adding services.');
+    if (shop.onboardingStatus === 'PENDING_PROFILE') {
+      throw new ConflictError('Complete your shop profile before adding services.');
     }
 
-    const categoryExists = await this.shopService.hasCategory(shopId, input.categoryId);
+    const categoryExists = await this.categoryService.categoryExists(input.categoryId);
     if (!categoryExists) {
-      throw new NotFoundError('Category not found or does not belong to this shop.');
+      throw new NotFoundError('Category not found.');
     }
 
     const currentCount = await this.serviceRepository.countActiveServices(shopId);

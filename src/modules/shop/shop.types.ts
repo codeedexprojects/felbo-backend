@@ -1,8 +1,8 @@
 export type OnboardingStatus =
   | 'PENDING_PROFILE'
-  | 'PENDING_CATEGORIES'
   | 'PENDING_SERVICES'
   | 'PENDING_BARBERS'
+  | 'PENDING_BARBER_SERVICES'
   | 'COMPLETED';
 
 export interface ShopAddress {
@@ -43,6 +43,7 @@ export interface CreateShopInput {
   phone: string;
   address: ShopAddress;
   location: ShopLocation;
+  photos?: string[];
 }
 
 export interface UpdateShopInput {
@@ -61,15 +62,18 @@ export interface UpdateWorkingHoursInput {
   workingHours: WorkingHours;
 }
 
+export interface UpdateShopStatusInput {
+  status: 'ACTIVE' | 'DELETED';
+}
+
+export interface ToggleShopAvailableInput {
+  isAvailable: boolean;
+}
+
 export interface CompleteProfileInput {
   description: string;
   workingHours: WorkingHours;
   photos: string[];
-}
-
-export interface AddCategoryInput {
-  name: string;
-  displayOrder: number;
 }
 
 export interface AddServiceInput {
@@ -112,11 +116,9 @@ export interface NearbyShopsInput {
 
 export interface SearchShopsInput {
   query?: string;
-  city?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
-  minRating?: number;
-  serviceName?: string;
-  availableNow?: boolean;
+  categoryId?: string;
+  categoryName?: string;
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;
@@ -141,6 +143,12 @@ export interface SearchShopsResponse {
   totalPages: number;
 }
 
+export interface MyBarberProfile {
+  id: string;
+  name: string;
+  isAvailable: boolean;
+}
+
 export interface ShopDto {
   id: string;
   vendorId: string;
@@ -156,21 +164,35 @@ export interface ShopDto {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  status: 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
+}
+
+export interface VendorShopDto extends ShopDto {
+  myBarberProfile: MyBarberProfile | null;
 }
 
 export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
 }
 
-export interface CategoryDto {
+export interface NearbyShopCardDto {
   id: string;
-  shopId: string;
+  image: string | null;
   name: string;
-  displayOrder: number;
-  isActive: boolean;
+  isAvailable: boolean;
+  closingTime: string | null; // today's closing time, null if shop is closed/no working hours
+  distance: number; // kilometers
+  topServices: string[]; // up to 3 service names
+}
+
+export interface NearbyShopsResponse {
+  shops: NearbyShopCardDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface ServiceDto {
@@ -203,7 +225,7 @@ export interface BarberDto {
     average: number;
     count: number;
   };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   services: BarberServiceDto[];
 }

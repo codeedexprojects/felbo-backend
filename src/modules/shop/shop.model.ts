@@ -31,15 +31,6 @@ export interface IWorkingHours {
   sunday: IDayHours;
 }
 
-export interface IEmbeddedCategory {
-  _id: mongoose.Types.ObjectId;
-  name: string;
-  displayOrder: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface IShop extends Document {
   vendorId: mongoose.Types.ObjectId;
   name: string;
@@ -54,15 +45,14 @@ export interface IShop extends Document {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  status: 'ACTIVE' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
-    | 'PENDING_CATEGORIES'
     | 'PENDING_SERVICES'
     | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED';
-  categories: IEmbeddedCategory[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,15 +100,6 @@ const workingHoursSchema = new Schema(
   { _id: false },
 );
 
-const categorySchema = new Schema<IEmbeddedCategory>(
-  {
-    name: { type: String, required: true },
-    displayOrder: { type: Number, required: true, default: 0 },
-    isActive: { type: Boolean, default: true },
-  },
-  { timestamps: true },
-);
-
 const shopSchema = new Schema<IShop>(
   {
     vendorId: {
@@ -142,24 +123,23 @@ const shopSchema = new Schema<IShop>(
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
     },
-    isActive: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE', 'DELETED'],
+      enum: ['ACTIVE', 'DELETED'],
       default: 'ACTIVE',
     },
     onboardingStatus: {
       type: String,
       enum: [
         'PENDING_PROFILE',
-        'PENDING_CATEGORIES',
         'PENDING_SERVICES',
         'PENDING_BARBERS',
+        'PENDING_BARBER_SERVICES',
         'COMPLETED',
       ],
       default: 'PENDING_PROFILE',
     },
-    categories: { type: [categorySchema], default: [] },
   },
   {
     timestamps: true,
@@ -169,7 +149,7 @@ const shopSchema = new Schema<IShop>(
 shopSchema.index({ vendorId: 1 });
 shopSchema.index({ location: '2dsphere' });
 shopSchema.index({ shopType: 1 });
-shopSchema.index({ status: 1, isActive: 1 });
+shopSchema.index({ status: 1, isAvailable: 1 });
 shopSchema.index({ 'rating.average': -1 });
 shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });

@@ -1,313 +1,633 @@
 // ========================================
-// File: src/modules/upload/upload.constants.ts
+// File: src/modules/booking/booking.container.ts
 // ========================================
-export const MIME_TO_EXT = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-} as const;
-
-export type AllowedMimeType = keyof typeof MIME_TO_EXT;
-
-export const ALLOWED_MIME_TYPES = Object.keys(MIME_TO_EXT) as AllowedMimeType[];
-
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-
-export const PRESIGNED_PUT_EXPIRY_SECONDS = 300; // 5 minutes
-export const PRESIGNED_GET_EXPIRY_SECONDS = 3600; // 1 hour
-export const CLEANUP_AGE_HOURS = 24;
-
-export const S3_DELETE_BATCH_SIZE = 1000;
-export const S3_VENDORS_PREFIX = 'vendors/';
-
-
-
-// ========================================
-// File: src/modules/upload/upload.container.ts
-// ========================================
-import { config } from '../../shared/config/config.service';
+import { BookingRepository } from './booking.repository';
+import { BookingService } from './booking.service';
+import { BookingController } from './booking.controller';
+import { barberService } from '../barber/barber.container';
+import { availabilityService } from '../barberAvailability/barberAvailability.container';
+import { shopService } from '../shop/shop.container';
 import { logger } from '../../shared/logger/logger';
-import { vendorService } from '../vendor/vendor.container';
-import UploadService from './upload.service';
-import UploadController from './upload.controller';
 
-const uploadService = new UploadService(
-  vendorService,
-  config.aws.bucket,
-  config.aws.region,
+const bookingRepository = new BookingRepository();
+
+const bookingService = new BookingService(
+  bookingRepository,
+  () => barberService,
+  () => availabilityService,
+  () => shopService,
   logger,
 );
 
-const uploadController = new UploadController(uploadService);
+const bookingController = new BookingController(bookingService);
 
-export { uploadService, uploadController };
+export { bookingController };
 
 
 
 // ========================================
-// File: src/modules/upload/upload.controller.ts
+// File: src/modules/booking/booking.controller.ts
 // ========================================
 import { Request, Response } from 'express';
-import UploadService from './upload.service';
-import { generateUploadUrlSchema, verifyUploadSchema } from './upload.validators';
+import { BookingService } from './booking.service';
+import { shopIdParamSchema, getSlotsQuerySchema } from './booking.validators';
 
-export default class UploadController {
-  constructor(private readonly uploadService: UploadService) {}
+export class BookingController {
+  constructor(private readonly bookingService: BookingService) {}
 
-  generateUploadUrl = async (req: Request, res: Response): Promise<void> => {
-    const validated = generateUploadUrlSchema.parse(req.body);
-    const result = await this.uploadService.generateUploadUrl(validated);
+  getSlots = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdParamSchema.parse(req.params);
+    const query = getSlotsQuerySchema.parse(req.query);
 
-    res.status(200).json({ success: true, data: result });
-  };
+    const serviceIds = query.serviceIds.split(',').map((id) => id.trim());
 
-  verifyUpload = async (req: Request, res: Response): Promise<void> => {
-    const validated = verifyUploadSchema.parse(req.body);
-    const result = await this.uploadService.verifyUpload(validated);
+    const result = await this.bookingService.getSlots({
+      shopId,
+      date: query.date,
+      serviceIds,
+      barberId: query.barberId,
+    });
 
-    res.status(200).json({ success: true, data: result });
+    res.json({ success: true, data: result });
   };
 }
 
 
 
 // ========================================
-// File: src/modules/upload/upload.service.ts
+// File: src/modules/booking/booking.model.ts
 // ========================================
-import { randomUUID } from 'crypto';
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import mongoose, { Schema, Document } from 'mongoose';
+
+// ─── Booking ──────────────────────────────────────────────────────────────────
+export interface IBookingService {
+  serviceId: mongoose.Types.ObjectId;
+  serviceName: string;
+  categoryName: string;
+  durationMinutes: number;
+  price: number;
+}
+
+export interface IBookingCancellation {
+  cancelledAt: Date;
+  cancelledBy: 'USER' | 'VENDOR';
+  reason: string;
+  refundAmount: number;
+  refundType: 'WALLET' | 'ORIGINAL';
+  refundStatus: 'PENDING' | 'COMPLETED';
+}
+
+export interface IBooking extends Document {
+  bookingNumber: string;
+  userId: mongoose.Types.ObjectId;
+  userName: string;
+  userPhone: string;
+  shopId: mongoose.Types.ObjectId;
+  shopName: string;
+  barberId: mongoose.Types.ObjectId;
+  barberName: string;
+  barberSelectionType: 'SPECIFIC' | 'ANY_AVAILABLE';
+  date: Date;
+  startTime: string;
+  endTime: string;
+  totalDurationMinutes: number;
+  services: IBookingService[];
+  totalServiceAmount: number;
+  advancePaid: number;
+  remainingAmount: number;
+  paymentId?: string;
+  status: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED_BY_USER' | 'CANCELLED_BY_VENDOR' | 'NO_SHOW';
+  cancellation?: IBookingCancellation;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const bookingServiceSubSchema = new Schema(
+  {
+    serviceId: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
+    serviceName: { type: String, required: true },
+    categoryName: { type: String, required: true },
+    durationMinutes: { type: Number, required: true },
+    price: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
+const cancellationSubSchema = new Schema(
+  {
+    cancelledAt: { type: Date, required: true },
+    cancelledBy: { type: String, enum: ['USER', 'VENDOR'], required: true },
+    reason: { type: String, required: true },
+    refundAmount: { type: Number, required: true },
+    refundType: { type: String, enum: ['WALLET', 'ORIGINAL'], required: true },
+    refundStatus: { type: String, enum: ['PENDING', 'COMPLETED'], required: true },
+  },
+  { _id: false },
+);
+
+const bookingSchema = new Schema<IBooking>(
+  {
+    bookingNumber: { type: String, required: true, unique: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    userName: { type: String, required: true },
+    userPhone: { type: String, required: true },
+    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
+    shopName: { type: String, required: true },
+    barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
+    barberName: { type: String, required: true },
+    barberSelectionType: {
+      type: String,
+      enum: ['SPECIFIC', 'ANY_AVAILABLE'],
+      required: true,
+    },
+    date: { type: Date, required: true },
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    totalDurationMinutes: { type: Number, required: true },
+    services: { type: [bookingServiceSubSchema], required: true },
+    totalServiceAmount: { type: Number, required: true },
+    advancePaid: { type: Number, required: true, default: 10 },
+    remainingAmount: { type: Number, required: true },
+    paymentId: { type: String },
+    status: {
+      type: String,
+      enum: ['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+      required: true,
+    },
+    cancellation: { type: cancellationSubSchema },
+    completedAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+bookingSchema.index({ userId: 1, status: 1 });
+bookingSchema.index({ shopId: 1, date: 1, status: 1 });
+bookingSchema.index({ barberId: 1, date: 1, status: 1 });
+
+export const BookingModel = mongoose.model<IBooking>('Booking', bookingSchema);
+
+// ─── SlotLock ─────────────────────────────────────────────────────────────────
+export interface ISlotLock extends Document {
+  shopId: mongoose.Types.ObjectId;
+  barberId: mongoose.Types.ObjectId;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  lockedBy: mongoose.Types.ObjectId;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const slotLockSchema = new Schema<ISlotLock>(
+  {
+    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
+    barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
+    date: { type: Date, required: true },
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    lockedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    expiresAt: { type: Date, required: true },
+  },
+  { timestamps: true },
+);
+
+slotLockSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+slotLockSchema.index({ barberId: 1, date: 1, startTime: 1 });
+
+export const SlotLockModel = mongoose.model<ISlotLock>('SlotLock', slotLockSchema);
+
+
+
+// ========================================
+// File: src/modules/booking/booking.repository.ts
+// ========================================
+import { BookingModel, IBooking, SlotLockModel, ISlotLock } from './booking.model';
+
+export class BookingRepository {
+  private utcDayRange(date: Date): { start: Date; end: Date } {
+    const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const end = new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1),
+    );
+    return { start, end };
+  }
+
+  findConfirmedBookingsByBarberAndDate(barberId: string, date: Date): Promise<IBooking[]> {
+    const { start, end } = this.utcDayRange(date);
+    return BookingModel.find({
+      barberId,
+      date: { $gte: start, $lt: end },
+      status: 'CONFIRMED',
+    })
+      .lean<IBooking[]>()
+      .exec();
+  }
+
+  findActiveSlotLocksByBarberAndDate(barberId: string, date: Date): Promise<ISlotLock[]> {
+    const { start, end } = this.utcDayRange(date);
+    // MongoDB TTL auto-removes expired docs; no need to filter expiresAt manually
+    return SlotLockModel.find({
+      barberId,
+      date: { $gte: start, $lt: end },
+    })
+      .lean<ISlotLock[]>()
+      .exec();
+  }
+}
+
+
+
+// ========================================
+// File: src/modules/booking/booking.service.ts
+// ========================================
 import { Logger } from 'winston';
-import VendorService from '../vendor/vendor.service';
-import {
-  GenerateUploadUrlInput,
-  GenerateUploadUrlResponse,
-  VerifyUploadInput,
-  VerifyUploadResponse,
-} from './upload.types';
-import {
-  MIME_TO_EXT,
-  PRESIGNED_GET_EXPIRY_SECONDS,
-  PRESIGNED_PUT_EXPIRY_SECONDS,
-  CLEANUP_AGE_HOURS,
-  S3_DELETE_BATCH_SIZE,
-  S3_VENDORS_PREFIX,
-} from './upload.constants';
-import { withRetry, isS3ClientError, chunkArray } from '@shared/utils/retry';
-import { ValidationError, NotFoundError } from '@shared/errors';
+import { BookingRepository } from './booking.repository';
+import { GetSlotsInput, GetSlotsResponse, TimeSlot, BlockedRange } from './booking.types';
+import { NotFoundError, ValidationError } from '../../shared/errors';
+import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
+import { BarberService } from '../barber/barber.service';
+import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
+import ShopService from '../shop/shop.service';
 
-export default class UploadService {
-  private readonly s3: S3Client;
+// System config defaults — replace with configService when available
+const SLOT_INTERVAL_MINUTES = 15;
+const MIN_BUFFER_MINUTES = 30;
+const APPOINTMENT_BUFFER_MINUTES = 5;
 
+export class BookingService {
   constructor(
-    private readonly vendorService: VendorService,
-    private readonly bucket: string,
-    region: string,
+    private readonly bookingRepository: BookingRepository,
+    private readonly getBarberService: () => BarberService,
+    private readonly getAvailabilityService: () => BarberAvailabilityService,
+    private readonly getShopService: () => ShopService,
     private readonly logger: Logger,
-  ) {
-    this.s3 = new S3Client({ region });
+  ) {}
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
   }
 
-  async generateUploadUrl(input: GenerateUploadUrlInput): Promise<GenerateUploadUrlResponse> {
-    const ext = MIME_TO_EXT[input.mimeType];
-    const key = `${S3_VENDORS_PREFIX}${input.vendorId}/${randomUUID()}.${ext}`;
+  private get availabilityService(): BarberAvailabilityService {
+    return this.getAvailabilityService();
+  }
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: input.mimeType,
-      ContentLength: input.fileSizeBytes,
-    });
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
 
-    const uploadUrl = await withRetry(() =>
-      getSignedUrl(this.s3, command, { expiresIn: PRESIGNED_PUT_EXPIRY_SECONDS }),
+  async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
+    // Validate date is today (same-day only)
+    const requestedDate = parseDateAsIst(input.date);
+    const todayUtc = getTodayInIst();
+
+    if (requestedDate.getTime() !== todayUtc.getTime()) {
+      throw new ValidationError('Bookings are only available for today.');
+    }
+
+    // Validate shop
+    const shop = await this.shopService.getShopById(input.shopId);
+    if (shop.status !== 'ACTIVE') {
+      throw new NotFoundError('Shop not found or not active.');
+    }
+
+    // Validate barber (also confirms it exists and is active)
+    const barber = await this.barberService.getBarberById(input.barberId);
+    if (barber.shopId !== input.shopId) {
+      throw new ValidationError('Barber does not belong to this shop.');
+    }
+    if (!barber.isAvailable) {
+      return this.emptyResponse(input, barber.name, 0);
+    }
+
+    // Validate services and get durations — Step 6 of calc: gather service durations
+    const barberServiceLinks = await this.barberService.getBarberServicesByBarberId(input.barberId);
+    const barberServiceMap = new Map(
+      barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
     );
 
-    this.logger.info({
-      action: 'UPLOAD_URL_GENERATED',
-      module: 'upload',
-      vendorId: input.vendorId,
-      key,
-      mimeType: input.mimeType,
-    });
-
-    return { uploadUrl, key, expiresIn: PRESIGNED_PUT_EXPIRY_SECONDS };
-  }
-
-  async verifyUpload(input: VerifyUploadInput): Promise<VerifyUploadResponse> {
-    const expectedPrefix = `vendors/${input.vendorId}/`;
-    if (!input.key.startsWith(expectedPrefix)) {
-      throw new ValidationError('Invalid key: does not belong to this vendor.');
-    }
-
-    try {
-      await withRetry(() =>
-        this.s3.send(new HeadObjectCommand({ Bucket: this.bucket, Key: input.key })),
-      );
-    } catch (err: unknown) {
-      if (isS3ClientError(err) && err.$metadata.httpStatusCode === 404) {
-        throw new NotFoundError('File not found in storage. Please upload again.');
+    let totalDurationMinutes = 0;
+    for (const serviceId of input.serviceIds) {
+      const duration = barberServiceMap.get(serviceId);
+      if (duration === undefined) {
+        throw new ValidationError('One or more services are not offered by this barber.');
       }
-      throw err;
+      totalDurationMinutes += duration;
     }
 
-    const viewUrl = await withRetry(() =>
-      getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: input.key }), {
-        expiresIn: PRESIGNED_GET_EXPIRY_SECONDS,
-      }),
+    // Step 1: Get barber schedule
+    const availability = await this.availabilityService.getTodayAvailability(input.barberId);
+
+    // Step 2: Stop if not working
+    if (!availability || !availability.isWorking || !availability.workingHours) {
+      return this.emptyResponse(input, barber.name, totalDurationMinutes);
+    }
+
+    const workingHours = availability.workingHours;
+    const breaks = availability.breaks ?? [];
+
+    // Step 3: Confirmed bookings
+    const confirmedBookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      input.barberId,
+      requestedDate,
     );
 
-    this.logger.info({
-      action: 'UPLOAD_VERIFIED',
-      module: 'upload',
-      vendorId: input.vendorId,
-      key: input.key,
+    // Step 4: Walk-in blocks (slotBlocks) — via barber service to respect module boundaries
+    const slotBlocks = await this.barberService.getActiveSlotBlocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+
+    // Step 5: Payment locks (slotLocks)
+    const slotLocks = await this.bookingRepository.findActiveSlotLocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+
+    // Step 6: Collect all blocked ranges
+    const bookedRanges: BlockedRange[] = confirmedBookings.map((b) => ({
+      startMinutes: this.toMinutes(b.startTime),
+      // Extend by appointment buffer to enforce gap between appointments
+      endMinutes: this.toMinutes(b.endTime) + APPOINTMENT_BUFFER_MINUTES,
+    }));
+
+    const blockedRanges: BlockedRange[] = slotBlocks.map((b) => ({
+      startMinutes: this.toMinutes(b.startTime),
+      endMinutes: this.toMinutes(b.endTime),
+    }));
+
+    const lockedRanges: BlockedRange[] = slotLocks.map((l) => ({
+      startMinutes: this.toMinutes(l.startTime),
+      endMinutes: this.toMinutes(l.endTime),
+    }));
+
+    const breakRanges: BlockedRange[] = breaks.map((b) => ({
+      startMinutes: this.toMinutes(b.start),
+      endMinutes: this.toMinutes(b.end),
+    }));
+
+    // Step 7 & 8: Generate 15-min intervals, filter <30m buffer
+    const workStart = this.toMinutes(workingHours.start);
+    const workEnd = this.toMinutes(workingHours.end);
+
+    const nowMinutesUtc = getCurrentIstMinutes();
+    const earliestBookable = nowMinutesUtc + MIN_BUFFER_MINUTES;
+
+    // Step 9: Build and return slot list
+    const slots = this.generateSlots({
+      workStart,
+      workEnd,
+      totalDurationMinutes,
+      earliestBookable,
+      breakRanges,
+      bookedRanges,
+      blockedRanges,
+      lockedRanges,
     });
 
-    return { verified: true, viewUrl };
+    this.logger.info({
+      action: 'SLOTS_GENERATED',
+      module: 'booking',
+      shopId: input.shopId,
+      barberId: input.barberId,
+      date: input.date,
+      totalSlots: slots.length,
+      availableSlots: slots.filter((s) => s.available).length,
+    });
+
+    return {
+      shopId: input.shopId,
+      date: input.date,
+      barberId: input.barberId,
+      barberName: barber.name,
+      totalDurationMinutes,
+      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      workingHours,
+      slots,
+    };
   }
 
-  async runCleanupJob(): Promise<void> {
-    this.logger.info({ action: 'CLEANUP_JOB_STARTED', module: 'upload' });
+  private generateSlots(params: {
+    workStart: number;
+    workEnd: number;
+    totalDurationMinutes: number;
+    earliestBookable: number;
+    breakRanges: BlockedRange[];
+    bookedRanges: BlockedRange[];
+    blockedRanges: BlockedRange[];
+    lockedRanges: BlockedRange[];
+  }): TimeSlot[] {
+    const {
+      workStart,
+      workEnd,
+      totalDurationMinutes,
+      earliestBookable,
+      breakRanges,
+      bookedRanges,
+      blockedRanges,
+      lockedRanges,
+    } = params;
 
-    try {
-      const [s3Objects, dbKeys] = await Promise.all([
-        this.listAllS3Objects(),
-        this.vendorService.getAllPhotoKeys(),
-      ]);
+    const slots: TimeSlot[] = [];
 
-      const dbKeySet = new Set(dbKeys);
-      const cutoff = new Date(Date.now() - CLEANUP_AGE_HOURS * 60 * 60 * 1000);
+    for (
+      let slotStart = workStart;
+      slotStart + totalDurationMinutes <= workEnd;
+      slotStart += SLOT_INTERVAL_MINUTES
+    ) {
+      const slotEnd = slotStart + totalDurationMinutes;
+      const timeStr = this.fromMinutes(slotStart);
 
-      const toDelete = s3Objects
-        .filter((obj) => !dbKeySet.has(obj.key) && obj.lastModified < cutoff)
-        .map((obj) => ({ Key: obj.key }));
-
-      if (toDelete.length === 0) {
-        this.logger.info({
-          action: 'CLEANUP_JOB_COMPLETED',
-          module: 'upload',
-          deletedCount: 0,
-          message: 'No orphaned objects found',
-        });
-        return;
+      // Filter: slot starts before minimum buffer window
+      if (slotStart < earliestBookable) {
+        slots.push({ time: timeStr, available: false, reason: 'passed' });
+        continue;
       }
 
-      const batches = chunkArray(toDelete, S3_DELETE_BATCH_SIZE);
-      let deletedCount = 0;
-
-      for (const batch of batches) {
-        await withRetry(() =>
-          this.s3.send(
-            new DeleteObjectsCommand({
-              Bucket: this.bucket,
-              Delete: { Objects: batch, Quiet: true },
-            }),
-          ),
-        );
-        deletedCount += batch.length;
-      }
-
-      this.logger.info({
-        action: 'CLEANUP_JOB_COMPLETED',
-        module: 'upload',
-        deletedCount,
-      });
-    } catch (err) {
-      this.logger.error({
-        action: 'CLEANUP_JOB_FAILED',
-        module: 'upload',
-        error: (err as Error).message,
-      });
-    }
-  }
-
-  private async listAllS3Objects(): Promise<{ key: string; lastModified: Date }[]> {
-    const results: { key: string; lastModified: Date }[] = [];
-    let continuationToken: string | undefined;
-
-    do {
-      const response = await withRetry(() =>
-        this.s3.send(
-          new ListObjectsV2Command({
-            Bucket: this.bucket,
-            Prefix: 'vendors/',
-            ContinuationToken: continuationToken,
-          }),
-        ),
+      // Check break overlap
+      const breakConflict = breakRanges.some(
+        (r) => slotStart < r.endMinutes && slotEnd > r.startMinutes,
       );
-
-      for (const obj of response.Contents ?? []) {
-        if (obj.Key && obj.LastModified) {
-          results.push({ key: obj.Key, lastModified: obj.LastModified });
-        }
+      if (breakConflict) {
+        slots.push({ time: timeStr, available: false, reason: 'break' });
+        continue;
       }
 
-      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-    } while (continuationToken);
+      // Check confirmed booking overlap
+      const bookedConflict = bookedRanges.some(
+        (r) => slotStart < r.endMinutes && slotEnd > r.startMinutes,
+      );
+      if (bookedConflict) {
+        slots.push({ time: timeStr, available: false, reason: 'booked' });
+        continue;
+      }
 
-    return results;
+      // Check walk-in block overlap
+      const blockConflict = blockedRanges.some(
+        (r) => slotStart < r.endMinutes && slotEnd > r.startMinutes,
+      );
+      if (blockConflict) {
+        slots.push({ time: timeStr, available: false, reason: 'blocked' });
+        continue;
+      }
+
+      // Check payment lock overlap
+      const lockConflict = lockedRanges.some(
+        (r) => slotStart < r.endMinutes && slotEnd > r.startMinutes,
+      );
+      if (lockConflict) {
+        slots.push({ time: timeStr, available: false, reason: 'locked' });
+        continue;
+      }
+
+      slots.push({ time: timeStr, available: true });
+    }
+
+    return slots;
+  }
+
+  private emptyResponse(
+    input: GetSlotsInput,
+    barberName: string,
+    totalDurationMinutes: number,
+  ): GetSlotsResponse {
+    return {
+      shopId: input.shopId,
+      date: input.date,
+      barberId: input.barberId,
+      barberName,
+      totalDurationMinutes,
+      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      workingHours: { start: '00:00', end: '00:00' },
+      slots: [],
+    };
+  }
+
+  private toMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  private fromMinutes(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 }
 
 
 
 // ========================================
-// File: src/modules/upload/upload.types.ts
+// File: src/modules/booking/booking.types.ts
 // ========================================
-export interface GenerateUploadUrlInput {
-  vendorId: string;
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
-  fileSizeBytes: number;
+// Input for slot generation
+export interface GetSlotsInput {
+  shopId: string;
+  date: string; // YYYY-MM-DD (today only)
+  serviceIds: string[]; // at least one
+  barberId: string;
 }
 
-export interface GenerateUploadUrlResponse {
-  uploadUrl: string;
-  key: string;
-  expiresIn: number;
+// A single generated time slot
+export interface TimeSlot {
+  time: string; // "HH:mm"
+  available: boolean;
+  reason?: 'booked' | 'blocked' | 'locked' | 'break' | 'passed';
 }
 
-export interface VerifyUploadInput {
-  vendorId: string;
-  key: string;
+// Response for slot generation
+export interface GetSlotsResponse {
+  shopId: string;
+  date: string;
+  barberId: string;
+  barberName: string;
+  totalDurationMinutes: number;
+  slotIntervalMinutes: number;
+  workingHours: {
+    start: string;
+    end: string;
+  };
+  slots: TimeSlot[];
 }
 
-export interface VerifyUploadResponse {
-  verified: true;
-  viewUrl: string;
+// Internal: a barber service entry used during slot calculation
+export interface BarberServiceEntry {
+  serviceId: string;
+  durationMinutes: number;
+}
+
+// Internal: a blocked time range (booking, slot block, or slot lock)
+export interface BlockedRange {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+// ─── Phase 2: Booking Initiation ──────────────────────────────────────────────
+
+export interface InitiateBookingInput {
+  shopId: string;
+  barberId: string;
+  serviceIds: string[];
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  paymentMethod: 'RAZORPAY' | 'WALLET';
+}
+
+export interface BookingServiceSnapshot {
+  serviceId: string;
+  serviceName: string;
+  price: number;
+  durationMinutes: number;
+}
+
+export interface InitiateBookingResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    shop: { id: string; name: string };
+    barber: { id: string; name: string };
+    services: BookingServiceSnapshot[];
+    date: string;
+    startTime: string;
+    endTime: string;
+    totalServiceAmount: number;
+    advancePaid: number;
+    remainingAmount: number;
+    paymentMethod: string;
+    expiresAt: string; // ISO string — when the slot lock expires
+  };
+  payment?: {
+    orderId: string;
+    amount: number;
+    currency: string;
+  };
 }
 
 
 
 // ========================================
-// File: src/modules/upload/upload.validators.ts
+// File: src/modules/booking/booking.validators.ts
 // ========================================
 import { z } from 'zod';
 
-import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './upload.constants';
+const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID format');
 
-export const generateUploadUrlSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
-  mimeType: z.enum(ALLOWED_MIME_TYPES, {
-    message: 'Only image/jpeg, image/png, and image/webp are allowed',
-  }),
-  fileSizeBytes: z
-    .number({ message: 'File size must be a number' })
-    .int('File size must be an integer')
-    .positive('File size must be positive')
-    .max(MAX_FILE_SIZE_BYTES, 'File size must not exceed 10MB'),
+export const shopIdParamSchema = z.object({
+  shopId: mongoIdSchema,
 });
 
-export const verifyUploadSchema = z.object({
-  vendorId: z.string().min(1, 'Vendor ID is required'),
-  key: z.string().min(1, 'Key is required'),
+export const getSlotsQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
+  serviceIds: z
+    .string()
+    .min(1, 'serviceIds is required')
+    .refine(
+      (val) => val.split(',').every((id) => /^[0-9a-fA-F]{24}$/.test(id.trim())),
+      'serviceIds must be comma-separated valid IDs',
+    ),
+  barberId: mongoIdSchema,
 });
 
 

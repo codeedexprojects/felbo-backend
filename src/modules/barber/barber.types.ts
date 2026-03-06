@@ -2,9 +2,8 @@ export interface CreateBarberInput {
   shopId: string;
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  username: string;
-  password: string;
 }
 
 export interface UpdateBarberInput {
@@ -24,10 +23,11 @@ export interface BarberManagementDto {
   vendorId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   username: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -38,7 +38,7 @@ export interface ListBarbersFilter {
   limit: number;
   search?: string;
   isAvailable?: boolean;
-  status?: 'ACTIVE' | 'DELETED';
+  status?: 'INACTIVE' | 'ACTIVE' | 'DELETED';
 }
 
 export interface ListBarbersResponse {
@@ -49,25 +49,11 @@ export interface ListBarbersResponse {
   totalPages: number;
 }
 
-// Onboarding: add barber during shop setup
-
-export interface OnboardBarberServiceInput {
-  serviceId: string;
-  durationMinutes: number;
-}
-
 export interface OnboardBarberInput {
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  services: OnboardBarberServiceInput[];
-}
-
-export interface OnboardBarberServiceDto {
-  id: string;
-  serviceId: string;
-  durationMinutes: number;
-  isActive: boolean;
 }
 
 export interface OnboardBarberDto {
@@ -75,11 +61,33 @@ export interface OnboardBarberDto {
   shopId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
-  services: OnboardBarberServiceDto[];
+}
+
+export interface AddBarberServiceItemInput {
+  serviceId: string;
+  durationMinutes: number;
+}
+
+export interface AddBarberServicesInput {
+  services: AddBarberServiceItemInput[];
+}
+
+export interface AddBarberServiceItemDto {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  durationMinutes: number;
+  isActive: boolean;
+}
+
+export interface AddBarberServicesDto {
+  barberId: string;
+  services: AddBarberServiceItemDto[];
 }
 
 export interface BarberServiceLinkDto {
@@ -91,6 +99,22 @@ export interface BarberServiceLinkDto {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface AddSelfAsBarberInput {
+  name: string;
+  email: string;
+  phone: string;
+  photo?: string;
+}
+
+export interface SelfBarberDto {
+  id: string;
+  shopId: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isAvailable: boolean;
 }
 
 export interface AssignServiceItemInput {
@@ -110,4 +134,83 @@ export interface BarberAssignedServiceDto {
   serviceName: string;
   durationMinutes: number;
   isActive: boolean;
+}
+
+export interface BarberSendOtpInput {
+  email: string;
+  clientIp: string;
+}
+
+export interface BarberSendOtpResult {
+  message: string;
+}
+
+export interface BarberVerifyOtpInput {
+  email: string;
+  otp: string;
+}
+
+export interface BarberVerifyOtpResult {
+  resetToken: string;
+  message: string;
+}
+
+export interface BarberSetPasswordInput {
+  resetToken: string;
+  newPassword: string;
+}
+
+export interface BarberAuthResult {
+  token: string;
+  refreshToken: string;
+  barber: {
+    id: string;
+    name: string;
+    email: string;
+    shopId: string;
+    status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
+  };
+}
+
+export interface BarberLoginInput {
+  email: string;
+  password: string;
+}
+
+export interface BarberRefreshTokenResponse {
+  token: string;
+  refreshToken: string;
+}
+
+export interface CreateSlotBlockInput {
+  barberId: string;
+  serviceIds?: string[];
+  reason?: string;
+}
+
+export interface SlotBlockResult {
+  id: string;
+  barberId: string;
+  shopId: string;
+  startTime: string;
+  endTime: string;
+
+  durationMinutes: number;
+  status: 'ACTIVE' | 'RELEASED';
+}
+
+export interface ReleaseSlotBlockInput {
+  blockId: string;
+  barberId: string;
+}
+
+export interface ListSlotBlocksQuery {
+  date?: string;
+  status?: 'ACTIVE' | 'RELEASED';
+}
+
+// Minimal slot block range exposed to other modules (e.g. booking)
+export interface SlotBlockRange {
+  startTime: string;
+  endTime: string;
 }

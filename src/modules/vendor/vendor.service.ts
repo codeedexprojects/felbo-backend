@@ -21,12 +21,14 @@ import {
   VerificationRequestItemDto,
   VendorAdminDetail,
   VendorRequestAdminDetail,
+  RefreshTokenResponse,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import PaymentService from '../payment/payment.service';
 import ShopService from '../shop/shop.service';
+import { BarberService } from '../barber/barber.service';
 import {
   UnauthorizedError,
   ForbiddenError,
@@ -48,9 +50,14 @@ export default class VendorService {
     private readonly jwtService: JwtService,
     private readonly paymentService: PaymentService,
     private readonly shopService: ShopService,
+    private readonly getBarberService: () => BarberService,
     private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
+  }
 
   private toVendorDto(vendor: IVendor): LoginVerifyOtpResponse['vendor'] {
     return {
@@ -86,9 +93,9 @@ export default class VendorService {
     // Return the least-progressed onboarding status across all shops
     const statusPriority: Record<string, number> = {
       PENDING_PROFILE: 0,
-      PENDING_CATEGORIES: 1,
-      PENDING_SERVICES: 2,
-      PENDING_BARBERS: 3,
+      PENDING_SERVICES: 1,
+      PENDING_BARBERS: 2,
+      PENDING_BARBER_SERVICES: 3,
       COMPLETED: 4,
     };
 
@@ -155,12 +162,19 @@ export default class VendorService {
 
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
     const tokenPayload: TokenPayload = {
       sub: vendor._id.toString(),
-      role: 'VENDOR',
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
 
     const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
 
@@ -171,7 +185,52 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, vendor: this.toVendorDto(vendor), onboardingStatus };
+    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
+
+    const vendor = await this.vendorRepository.findByIdWithRefreshToken(decoded.sub);
+
+    if (!vendor || vendor.status === 'SUSPENDED' || vendor.status === 'DELETED') {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    if (!vendor.refreshTokenHash) {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const isValid = this.jwtService.compareTokenHash(refreshToken, vendor.refreshTokenHash);
+
+    if (!isValid) {
+      await this.vendorRepository.updateRefreshToken(vendor._id.toString(), null);
+      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+        vendorId: vendor._id,
+      });
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
+    const tokenPayload: TokenPayload = {
+      sub: vendor._id.toString(),
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
+    };
+
+    const newToken = this.jwtService.signToken(tokenPayload);
+    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
+    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), newRefreshTokenHash);
+
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(vendorId: string): Promise<void> {
+    await this.vendorRepository.updateRefreshToken(vendorId, null);
+    this.logger.info('Vendor logged out', { vendorId });
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -389,6 +448,8 @@ export default class VendorService {
         },
         session,
       );
+
+      await this.barberService.activateBarbersByVendorId(vendor._id.toString(), session);
     });
 
     this.logger.info({
@@ -489,7 +550,7 @@ export default class VendorService {
           rating: shopDto.rating,
           onboardingStatus: shopDto.onboardingStatus,
           status: shopDto.status,
-          isActive: shopDto.isActive,
+          isAvailable: shopDto.isAvailable,
 
           barbers: barberList.map((b) => ({
             id: b.id.toString(),
@@ -650,5 +711,16 @@ export default class VendorService {
 
   async getAllPhotoKeys(): Promise<string[]> {
     return this.vendorRepository.getAllPhotoKeys();
+  }
+
+  async registerFcmToken(vendorId: string, token: string): Promise<void> {
+    if (!token) {
+      throw new ValidationError('Token is required');
+    }
+    await this.vendorRepository.addFcmToken(vendorId, token);
+  }
+
+  async unregisterFcmToken(vendorId: string, token: string): Promise<void> {
+    await this.vendorRepository.removeFcmToken(vendorId, token);
   }
 }

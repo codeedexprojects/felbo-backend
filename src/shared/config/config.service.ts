@@ -65,9 +65,21 @@ export const config = {
     registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
   },
 
+  brevo: {
+    apiKey: getEnv('BREVO_API_KEY', ''),
+    fromEmail: getEnv('BREVO_FROM_EMAIL', 'noreply@felbo.in'),
+    fromName: getEnv('BREVO_FROM_NAME', 'Felbo'),
+  },
+
   aws: {
     region: getEnv('AWS_REGION', 'ap-south-1'),
     bucket: getEnv('AWS_S3_BUCKET', ''),
+  },
+
+  firebase: {
+    projectId: getEnv('FIREBASE_PROJECT_ID', ''),
+    privateKey: getEnv('FIREBASE_PRIVATE_KEY', ''),
+    clientEmail: getEnv('FIREBASE_CLIENT_EMAIL', ''),
   },
 
   admin: {

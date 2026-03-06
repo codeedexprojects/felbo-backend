@@ -1,11 +1,17 @@
-import mongoose, { ClientSession, PipelineStage } from 'mongoose';
-import { ShopModel, IShop, IEmbeddedCategory } from './shop.model';
+import { ClientSession, PipelineStage } from 'mongoose';
+import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
+import { CategoryModel } from '../category/category.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
   shop: IShop;
   distance: number;
+}
+
+export interface NearbyShopPage {
+  results: NearbyShopResult[];
+  total: number;
 }
 
 export default class ShopRepository {
@@ -19,7 +25,8 @@ export default class ShopRepository {
           phone: data.phone,
           address: data.address,
           location: data.location,
-          isActive: true,
+          photos: data.photos ?? [],
+          isAvailable: true,
           status: 'ACTIVE',
           onboardingStatus: 'PENDING_PROFILE',
         },
@@ -94,6 +101,30 @@ export default class ShopRepository {
     ).exec();
   }
 
+  updateStatus(
+    id: string,
+    status: 'ACTIVE' | 'DELETED',
+    session?: ClientSession,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: { status } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  updateIsAvailable(
+    id: string,
+    isAvailable: boolean,
+    session?: ClientSession,
+  ): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      id,
+      { $set: { isAvailable } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
   async findNearby(
     longitude: number,
     latitude: number,
@@ -101,10 +132,10 @@ export default class ShopRepository {
     filter: { shopType?: string },
     skip: number,
     limit: number,
-  ): Promise<NearbyShopResult[]> {
+  ): Promise<NearbyShopPage> {
     const matchStage: Record<string, unknown> = {
       status: 'ACTIVE',
-      isActive: true,
+      isAvailable: { $ne: false },
       onboardingStatus: 'COMPLETED',
     };
     if (filter.shopType) {
@@ -121,26 +152,30 @@ export default class ShopRepository {
           spherical: true,
         },
       },
-      { $skip: skip },
-      { $limit: limit },
+      {
+        $facet: {
+          shops: [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
     ];
 
-    const results = await ShopModel.aggregate(pipeline).exec();
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
+    const results = result.shops as Array<IShop & { distance: number }>;
 
-    return results.map((doc) => ({
-      shop: doc as IShop,
-      distance: doc.distance as number,
-    }));
+    return {
+      results: results.map((doc) => ({ shop: doc, distance: doc.distance })),
+      total,
+    };
   }
 
   async searchByName(
     query: string | undefined,
     filter: {
-      city?: string;
       shopType?: string;
-      minRating?: number;
-      serviceName?: string;
-      availableNow?: boolean;
+      categoryId?: string;
+      categoryName?: string;
       latitude?: number;
       longitude?: number;
       maxDistanceMeters?: number;
@@ -150,38 +185,49 @@ export default class ShopRepository {
   ): Promise<{ shops: Array<IShop & { distance?: number }>; total: number }> {
     const matchFilter: Record<string, unknown> = {
       status: 'ACTIVE',
-      isActive: true,
+      isAvailable: { $ne: false },
       onboardingStatus: 'COMPLETED',
     };
 
-    if (filter.city) {
-      matchFilter['address.city'] = { $regex: filter.city, $options: 'i' };
-    }
     if (filter.shopType) {
       matchFilter.shopType = filter.shopType;
     }
-    if (filter.minRating !== undefined) {
-      matchFilter['rating.average'] = { $gte: filter.minRating };
-    }
+    let categoryShopIds: string[] | null = null;
 
-    if (filter.availableNow) {
-      const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-      const istNow = new Date(Date.now() + IST_OFFSET_MS);
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const day = days[istNow.getUTCDay()];
-      const currentTime = `${String(istNow.getUTCHours()).padStart(2, '0')}:${String(istNow.getUTCMinutes()).padStart(2, '0')}`;
-      matchFilter[`workingHours.${day}.isOpen`] = true;
-      matchFilter[`workingHours.${day}.open`] = { $lte: currentTime };
-      matchFilter[`workingHours.${day}.close`] = { $gte: currentTime };
-    }
-
-    if (filter.serviceName) {
-      const escapedName = filter.serviceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const shopIds = await ServiceModel.distinct('shopId', {
-        name: { $regex: escapedName, $options: 'i' },
+    if (filter.categoryId) {
+      const ids = await ServiceModel.distinct('shopId', {
+        categoryId: filter.categoryId,
         isActive: true,
       }).exec();
-      matchFilter._id = { $in: shopIds };
+      categoryShopIds = ids.map(String);
+    }
+
+    if (filter.categoryName) {
+      const escapedName = filter.categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const categories = await CategoryModel.find({
+        name: { $regex: escapedName, $options: 'i' },
+        isActive: true,
+      })
+        .select('_id')
+        .lean()
+        .exec();
+      const ids = (
+        await ServiceModel.distinct('shopId', {
+          categoryId: { $in: categories.map((c) => c._id) },
+          isActive: true,
+        }).exec()
+      ).map(String);
+
+      if (categoryShopIds === null) {
+        categoryShopIds = ids;
+      } else {
+        const idSet = new Set(ids);
+        categoryShopIds = categoryShopIds.filter((id) => idSet.has(id));
+      }
+    }
+
+    if (categoryShopIds !== null) {
+      matchFilter._id = { $in: categoryShopIds };
     }
 
     if (query) {
@@ -224,51 +270,5 @@ export default class ShopRepository {
     ]);
 
     return { shops, total };
-  }
-
-  // --- Category operations ---
-
-  async createCategory(
-    data: { shopId: string; name: string; displayOrder: number },
-    session?: ClientSession,
-  ): Promise<IEmbeddedCategory> {
-    const categoryId = new mongoose.Types.ObjectId();
-    const now = new Date();
-    const shop = await ShopModel.findByIdAndUpdate(
-      data.shopId,
-      {
-        $push: {
-          categories: {
-            _id: categoryId,
-            name: data.name,
-            displayOrder: data.displayOrder,
-            isActive: true,
-            createdAt: now,
-            updatedAt: now,
-          },
-        },
-      },
-      { returnDocument: 'after', session },
-    ).exec();
-
-    if (!shop) throw new Error('Shop not found when creating category.');
-    const added = shop.categories.find((c) => c._id.equals(categoryId));
-    if (!added) throw new Error('Category was not persisted.');
-    return added;
-  }
-
-  async countActiveCategories(shopId: string, session?: ClientSession): Promise<number> {
-    const query = ShopModel.findById(shopId);
-    if (session) query.session(session);
-    const shop = await query.exec();
-    return shop ? shop.categories.filter((c) => c.isActive).length : 0;
-  }
-
-  async findCategoriesByShopId(shopId: string): Promise<IEmbeddedCategory[]> {
-    const shop = await ShopModel.findById(shopId).exec();
-    if (!shop) return [];
-    return [...shop.categories]
-      .filter((c) => c.isActive)
-      .sort((a, b) => a.displayOrder - b.displayOrder);
   }
 }

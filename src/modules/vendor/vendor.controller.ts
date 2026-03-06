@@ -7,6 +7,8 @@ import {
   registerAssociationSchema,
   registerIndependentInitiateSchema,
   registerIndependentConfirmSchema,
+  refreshTokenSchema,
+  fcmTokenSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -87,6 +89,45 @@ export default class VendorController {
     res.status(200).json({
       success: true,
       data: result,
+    });
+  };
+
+  refreshToken = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = refreshTokenSchema.parse(req.body);
+    const result = await this.vendorService.refreshAccessToken(refreshToken);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  logout = async (req: Request, res: Response): Promise<void> => {
+    await this.vendorService.logout(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully.',
+    });
+  };
+
+  registerFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.registerFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token registered',
+    });
+  };
+
+  unregisterFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.unregisterFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token removed',
     });
   };
 }

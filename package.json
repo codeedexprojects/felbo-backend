@@ -15,8 +15,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky || true",
-    "dump": "ts-node scripts/dump-folder.ts"
+    "prepare": "husky",
+    "dump": "ts-node scripts/dump-folder.ts",
+    "worker:notifications": "node dist/shared/notification/notification.worker.js",
+    "worker:notifications:dev": "npx tsx src/shared/notification/notification.worker.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
@@ -36,6 +38,7 @@
     "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "date-fns-tz": "^3.2.0",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",

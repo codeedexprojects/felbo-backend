@@ -43,3 +43,41 @@ export interface ListAdsResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface UserAdDto {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  targetShop: {
+    id: string;
+    name: string;
+    address: {
+      area: string;
+      city: string;
+    };
+  };
+}
+
+export interface ListUserAdsResponse {
+  ads: UserAdDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PopulatedAdvertisement {
+  _id: string;
+  title: string;
+  subtitle?: string;
+  bannerImage: string;
+  shopId: {
+    _id: string;
+    name: string;
+    address: {
+      area: string;
+      city: string;
+    };
+  };
+}

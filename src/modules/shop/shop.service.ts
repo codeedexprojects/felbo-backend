@@ -1,21 +1,22 @@
 import { ClientSession } from 'mongoose';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
-import { IShop, IEmbeddedCategory } from './shop.model';
+import { IShop } from './shop.model';
 
 import {
   CreateShopInput,
   UpdateShopInput,
   UpdateWorkingHoursInput,
+  ToggleShopAvailableInput,
   CompleteProfileInput,
-  AddCategoryInput,
   NearbyShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
   ShopSearchResultDto,
   ShopDto,
-  NearbyShopDto,
-  CategoryDto,
+  VendorShopDto,
+  NearbyShopCardDto,
+  NearbyShopsResponse,
   ServiceDto,
   BarberDto,
   BarberServiceDto,
@@ -65,26 +66,9 @@ export default class ShopService {
       workingHours: shop.workingHours,
       photos: shop.photos,
       rating: shop.rating,
-      isActive: shop.isActive,
+      isAvailable: shop.isAvailable,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
-    };
-  }
-
-  private toNearbyShopDto(shop: IShop, distance: number): NearbyShopDto {
-    return {
-      ...this.toShopDto(shop),
-      distance: Math.round(distance),
-    };
-  }
-
-  private toCategoryDto(category: IEmbeddedCategory, shopId: string): CategoryDto {
-    return {
-      id: category._id.toString(),
-      shopId,
-      name: category.name,
-      displayOrder: category.displayOrder,
-      isActive: category.isActive,
     };
   }
 
@@ -145,6 +129,25 @@ export default class ShopService {
     return shops.map((shop) => this.toShopDto(shop));
   }
 
+  async getMyShopsWithBarberProfile(vendorId: string): Promise<VendorShopDto[]> {
+    const shops = await this.shopRepository.findAllByVendorId(vendorId);
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+
+    return shops.map((shop) => {
+      const shopId = shop._id.toString();
+      const myBarberProfile =
+        barberProfile && barberProfile.shopId === shopId
+          ? {
+              id: barberProfile.id,
+              name: barberProfile.name,
+              isAvailable: barberProfile.isAvailable,
+            }
+          : null;
+
+      return { ...this.toShopDto(shop), myBarberProfile };
+    });
+  }
+
   async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
     return this.toShopDto(shop);
@@ -154,6 +157,48 @@ export default class ShopService {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') throw new NotFoundError('Shop not found.');
     return this.toShopDto(shop);
+  }
+
+  // --- Soft delete (status) ---
+  async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_DELETED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+    });
+
+    return this.toShopDto(updated);
+  }
+
+  // --- Availability toggle ---
+  async toggleShopAvailable(
+    shopId: string,
+    vendorId: string,
+    input: ToggleShopAvailableInput,
+  ): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+
+    const updated = await this.shopRepository.updateIsAvailable(
+      shop._id.toString(),
+      input.isAvailable,
+    );
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_AVAILABILITY_TOGGLED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+      isAvailable: input.isAvailable,
+    });
+
+    return this.toShopDto(updated);
   }
 
   async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
@@ -212,12 +257,6 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async hasCategory(shopId: string, categoryId: string): Promise<boolean> {
-    const shop = await this.shopRepository.findById(shopId);
-    if (!shop) return false;
-    return shop.categories.some((c) => c._id.toString() === categoryId && c.isActive);
-  }
-
   // Onboarding
   async completeProfile(
     shopId: string,
@@ -237,7 +276,7 @@ export default class ShopService {
         workingHours: input.workingHours,
         photos: input.photos,
       },
-      'PENDING_CATEGORIES',
+      'PENDING_SERVICES',
     );
 
     if (!updated) {
@@ -254,49 +293,7 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  async addCategory(
-    shopId: string,
-    vendorId: string,
-    input: AddCategoryInput,
-  ): Promise<CategoryDto> {
-    const shop = await this.assertShopOwnership(shopId, vendorId);
-
-    if (shop.onboardingStatus === 'PENDING_PROFILE') {
-      throw new ConflictError('Complete your shop profile before adding categories.');
-    }
-
-    const isDuplicate = shop.categories.some((c) => c.name === input.name && c.isActive);
-    if (isDuplicate) {
-      throw new ConflictError('A category with this name already exists.');
-    }
-
-    const category = await this.shopRepository.createCategory({
-      shopId,
-      name: input.name,
-      displayOrder: input.displayOrder,
-    });
-
-    // Transition onboarding if this is the first category
-    if (shop.onboardingStatus === 'PENDING_CATEGORIES') {
-      const count = await this.shopRepository.countActiveCategories(shopId);
-      if (count === 1) {
-        await this.shopRepository.updateOnboardingStatus(shopId, 'PENDING_SERVICES');
-      }
-    }
-
-    this.logger.info({
-      action: 'CATEGORY_ADDED',
-      module: 'shop',
-      shopId,
-      categoryId: category._id.toString(),
-      vendorId,
-    });
-
-    return this.toCategoryDto(category, shopId);
-  }
-
   // --- Public discovery ---
-
   private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6_371_000; // Earth radius in metres
     const φ1 = (lat1 * Math.PI) / 180;
@@ -373,13 +370,22 @@ export default class ShopService {
     };
   }
 
-  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopDto[]> {
+  private getTodayClosingTime(shop: IShop): string | null {
+    if (!shop.workingHours) return null;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = days[new Date().getDay()] as keyof typeof shop.workingHours;
+    const todayHours = shop.workingHours[todayKey];
+    if (!todayHours || !todayHours.isOpen) return null;
+    return todayHours.close;
+  }
+
+  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
     const maxDistance = input.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE;
     const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const results = await this.shopRepository.findNearby(
+    const { results, total } = await this.shopRepository.findNearby(
       input.longitude,
       input.latitude,
       maxDistance,
@@ -388,7 +394,32 @@ export default class ShopService {
       limit,
     );
 
-    return results.map((r) => this.toNearbyShopDto(r.shop, r.distance));
+    const shopIds = results.map((r) => r.shop._id.toString());
+    const allServices = await this.serviceService.getServicesByShopIds(shopIds);
+
+    const servicesByShopId = new Map<string, string[]>();
+    for (const svc of allServices) {
+      const key = svc.shopId;
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      const names = servicesByShopId.get(key)!;
+      if (names.length < 3) names.push(svc.name);
+    }
+
+    const shops: NearbyShopCardDto[] = results.map((r) => {
+      const shop = r.shop;
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        image: shop.photos?.[0] ?? null,
+        name: shop.name,
+        isAvailable: shop.isAvailable,
+        closingTime: this.getTodayClosingTime(shop),
+        distance: Math.round(r.distance / 100) / 10, // convert metres → km (1 decimal)
+        topServices: servicesByShopId.get(shopId) ?? [],
+      };
+    });
+
+    return { shops, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
@@ -399,11 +430,9 @@ export default class ShopService {
     const { shops, total } = await this.shopRepository.searchByName(
       input.query,
       {
-        city: input.city,
         shopType: input.shopType,
-        minRating: input.minRating,
-        serviceName: input.serviceName,
-        availableNow: input.availableNow,
+        categoryId: input.categoryId,
+        categoryName: input.categoryName,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,

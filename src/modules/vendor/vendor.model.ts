@@ -72,6 +72,9 @@ export interface IVendor extends Document {
   isFlagged: boolean;
   flaggedAt?: Date;
 
+  // Fcm tokens for push notifications
+  fcmTokens: string[];
+
   // Block status
   isBlocked: boolean;
   blockedAt?: Date;
@@ -79,6 +82,7 @@ export interface IVendor extends Document {
   blockReason?: string;
 
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  refreshTokenHash?: string | null;
   lastLoginAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -179,6 +183,12 @@ const vendorSchema = new Schema<IVendor>(
     isFlagged: { type: Boolean, default: false },
     flaggedAt: { type: Date },
 
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
+
     // Block status
     isBlocked: { type: Boolean, default: false },
     blockedAt: { type: Date },
@@ -190,6 +200,7 @@ const vendorSchema = new Schema<IVendor>(
       enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED'],
       default: 'PENDING',
     },
+    refreshTokenHash: { type: String, default: null },
     lastLoginAt: { type: Date },
   },
   {

@@ -9,12 +9,12 @@ const router = Router();
 router.post(
   '/upload-url',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),
-  uploadController.generateUploadUrl('advertisements/'),
+  uploadController.generateUploadUrl('advertisements/', false, 'banners'),
 );
 router.post(
   '/verify-upload',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),
-  uploadController.verifyUpload('advertisements/'),
+  uploadController.verifyUpload('advertisements/', false, 'banners'),
 );
 
 router.post('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.createAd);

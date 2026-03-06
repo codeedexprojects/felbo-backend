@@ -33,6 +33,18 @@ const workingHoursSchema = z.object({
 
 const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID');
 
+export const createShopSchema = z.object({
+  name: z.string().min(1, 'Shop name is required').max(100),
+  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  phone: z
+    .string()
+    .length(10, 'Enter a valid 10-digit mobile number')
+    .regex(/^[6-9]\d{9}$/),
+  address: addressSchema,
+  location: locationSchema,
+  photos: z.array(z.string().url()).max(10).optional(),
+});
+
 export const updateShopSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -40,6 +52,10 @@ export const updateShopSchema = z.object({
   address: addressSchema.optional(),
   location: locationSchema.optional(),
   photos: z.array(z.string().url()).max(10).optional(),
+});
+
+export const toggleAvailableSchema = z.object({
+  isAvailable: z.boolean(),
 });
 
 export const updateWorkingHoursSchema = z.object({
@@ -57,14 +73,9 @@ export const nearbyShopsSchema = z.object({
 
 export const searchShopsSchema = z.object({
   query: z.string().min(1).optional(),
-  city: z.string().optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
-  minRating: z.coerce.number().min(0).max(5).optional(),
-  serviceName: z.string().min(1).optional(),
-  availableNow: z
-    .string()
-    .optional()
-    .transform((val) => (val !== undefined ? val === 'true' : undefined)),
+  categoryId: mongoIdSchema.optional(),
+  categoryName: z.string().min(1).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   maxDistanceMeters: z.coerce.number().positive().optional(),
@@ -92,11 +103,6 @@ export const completeProfileSchema = z.object({
   description: z.string().min(1, 'Description is required').max(1000),
   workingHours: workingHoursSchema,
   photos: z.array(z.string().url()).min(1, 'At least one photo is required').max(10),
-});
-
-export const addCategorySchema = z.object({
-  name: z.string().min(1, 'Category name is required').max(100),
-  displayOrder: z.number().int().min(0).default(0),
 });
 
 export const addServiceSchema = z.object({

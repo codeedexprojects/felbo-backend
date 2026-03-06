@@ -36,13 +36,23 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }
 
   if (isDuplicateKeyError(err)) {
-    const [field, value] = Object.entries(err.keyValue ?? {})[0] ?? ['field', ''];
+    const entries = Object.entries(err.keyValue ?? {});
+    let field = 'field';
+    let value = '';
+
+    if (entries.length > 0) {
+      // For compound indexes (e.g., { shopId: 1, phone: 1 }), prefer the non-ID field
+      const targetEntry =
+        entries.find(([k]) => !k.toLowerCase().endsWith('id')) || entries[entries.length - 1];
+      field = targetEntry[0];
+      value = String(targetEntry[1]);
+    }
 
     res.status(409).json({
       success: false,
       error: {
         code: 'CONFLICT',
-        message: `A record with this ${field} '${String(value)}' already exists.`,
+        message: `A record with this ${field} '${value}' already exists.`,
       },
     });
     return;
