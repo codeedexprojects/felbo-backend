@@ -1,0 +1,21 @@
+import { BookingRepository } from './booking.repository';
+import { BookingService } from './booking.service';
+import { BookingController } from './booking.controller';
+import { barberService } from '../barber/barber.container';
+import { availabilityService } from '../barberAvailability/barberAvailability.container';
+import { shopService } from '../shop/shop.container';
+import { logger } from '../../shared/logger/logger';
+
+const bookingRepository = new BookingRepository();
+
+const bookingService = new BookingService(
+  bookingRepository,
+  () => barberService,
+  () => availabilityService,
+  () => shopService,
+  logger,
+);
+
+const bookingController = new BookingController(bookingService);
+
+export { bookingController };

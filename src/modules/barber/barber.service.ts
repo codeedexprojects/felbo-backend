@@ -25,6 +25,7 @@ import {
   SlotBlockResult,
   ReleaseSlotBlockInput,
   ListSlotBlocksQuery,
+  SlotBlockRange,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -565,6 +566,7 @@ export class BarberService {
     }
 
     const allBarberServices = await this.barberRepository.findBarberServicesByBarberId(barberId);
+
     const serviceMap = new Map(allBarberServices.map((s) => [s.serviceId.toString(), s]));
 
     let total = 0;
@@ -740,5 +742,30 @@ export class BarberService {
       durationMinutes: block.durationMinutes,
       status: block.status,
     };
+  }
+
+  async getBarberServicesByBarberId(barberId: string): Promise<BarberServiceLinkDto[]> {
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    return links.map((l) => ({
+      id: l._id.toString(),
+      barberId: l.barberId.toString(),
+      serviceId: l.serviceId.toString(),
+      shopId: l.shopId.toString(),
+      durationMinutes: l.durationMinutes,
+      isActive: l.isActive,
+      createdAt: l.createdAt,
+      updatedAt: l.updatedAt,
+    }));
+  }
+
+  async getActiveSlotBlocksByBarberAndDate(
+    barberId: string,
+    date: Date,
+  ): Promise<SlotBlockRange[]> {
+    const blocks = await this.barberRepository.findActiveBlocksByBarberAndDate(barberId, date);
+    return blocks.map((b) => ({
+      startTime: b.startTime,
+      endTime: b.endTime,
+    }));
   }
 }
