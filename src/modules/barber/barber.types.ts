@@ -177,6 +177,11 @@ export interface BarberLoginInput {
   password: string;
 }
 
+export interface BarberRefreshTokenResponse {
+  token: string;
+  refreshToken: string;
+}
+
 export interface CreateSlotBlockInput {
   barberId: string;
   serviceIds?: string[];

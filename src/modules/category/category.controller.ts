@@ -4,6 +4,7 @@ import {
   createCategorySchema,
   updateCategorySchema,
   categoryIdParamSchema,
+  listCategoriesSchema,
 } from './category.validators';
 
 export class CategoryController {
@@ -18,6 +19,13 @@ export class CategoryController {
 
   getAll = async (_req: Request, res: Response): Promise<void> => {
     const result = await this.categoryService.getAllCategories();
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  listUserCategories = async (req: Request, res: Response): Promise<void> => {
+    const { page, limit } = listCategoriesSchema.parse(req.query);
+    const result = await this.categoryService.listUserCategories(page, limit);
 
     res.status(200).json({ success: true, data: result });
   };
