@@ -11,6 +11,7 @@ import {
   shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
+  adminSearchShopsSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -119,6 +120,16 @@ export default class ShopController {
   deleteShop = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const result = await this.shopService.deleteShop(shopId, req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  adminSearchShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = adminSearchShopsSchema.parse(req.query);
+    const result = await this.shopService.adminSearchShops(validated);
 
     res.status(200).json({
       success: true,

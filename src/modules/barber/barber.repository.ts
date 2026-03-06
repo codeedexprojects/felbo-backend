@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { BarberModel, IBarber, SlotBlockModel, ISlotBlock } from './barber.model';
 import { BarberServiceModel, IBarberService } from '../service/service.model';
 import { ListBarbersFilter } from './barber.types';

@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { PaymentModel, IPayment } from './payment.model';
 import { CreatePaymentData, RefundEntry } from './payment.types';
 

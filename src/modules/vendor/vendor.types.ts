@@ -220,6 +220,7 @@ export interface VendorStatusCounts {
 }
 
 export interface VendorListSlimDto {
+  slNo: number;
   id: string;
   ownerName: string;
   phone: string;
@@ -245,6 +246,7 @@ export interface VerificationRequestCounts {
 }
 
 export interface VerificationRequestItemDto {
+  slNo: number;
   id: string;
   shopName: string | null;
   ownerName: string;

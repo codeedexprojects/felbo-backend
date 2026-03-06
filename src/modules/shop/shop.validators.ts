@@ -131,6 +131,12 @@ export const updateServiceSchema = z
     message: 'At least one field is required for update.',
   });
 
+export const adminSearchShopsSchema = z.object({
+  query: z.string().min(1).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
+
 export const serviceIdParamSchema = z.object({
   shopId: mongoIdSchema,
   serviceId: mongoIdSchema,

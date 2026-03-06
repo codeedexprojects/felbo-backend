@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { VendorModel, IVendor } from './vendor.model';
 import { CreateVendorData, UpsertVendorData } from './vendor.types';
 
