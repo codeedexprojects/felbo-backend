@@ -741,4 +741,18 @@ export class BarberService {
       status: block.status,
     };
   }
+
+  async getBarberServicesByBarberId(barberId: string): Promise<BarberServiceLinkDto[]> {
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    return links.map((l) => ({
+      id: l._id.toString(),
+      barberId: l.barberId.toString(),
+      serviceId: l.serviceId.toString(),
+      shopId: l.shopId.toString(),
+      durationMinutes: l.durationMinutes,
+      isActive: l.isActive,
+      createdAt: l.createdAt,
+      updatedAt: l.updatedAt,
+    }));
+  }
 }
