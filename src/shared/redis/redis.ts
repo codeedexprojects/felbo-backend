@@ -5,21 +5,12 @@ import { logger } from '../logger/logger';
 let redisClient: RedisClientType;
 
 export async function connectRedis(): Promise<RedisClientType> {
-  if (config.redis.url) {
-    // Production (Render)
-    redisClient = createClient({
-      url: config.redis.url,
-    });
-  } else {
-    // Local development
-    redisClient = createClient({
-      socket: {
-        host: config.redis.host,
-        port: config.redis.port,
-      },
-      password: config.redis.password,
-    });
-  }
+  redisClient = createClient({
+    socket: {
+      host: config.redis.host,
+      port: config.redis.port,
+    },
+  });
 
   redisClient.on('error', (err) => {
     logger.error('Redis client error', err);
