@@ -49,8 +49,6 @@ export interface ListBarbersResponse {
   totalPages: number;
 }
 
-// Onboarding: add barber during shop setup
-
 export interface OnboardBarberInput {
   name: string;
   phone: string;
@@ -69,8 +67,6 @@ export interface OnboardBarberDto {
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
 }
-
-// Onboarding: assign services to a barber
 
 export interface AddBarberServiceItemInput {
   serviceId: string;
@@ -104,8 +100,6 @@ export interface BarberServiceLinkDto {
   createdAt: Date;
   updatedAt: Date;
 }
-
-// Vendor-barber dual role: vendor adds themselves as barber in their own shop
 
 export interface AddSelfAsBarberInput {
   name: string;
@@ -142,8 +136,6 @@ export interface BarberAssignedServiceDto {
   isActive: boolean;
 }
 
-// Auth types
-
 export interface BarberSendOtpInput {
   email: string;
   clientIp: string;
@@ -170,6 +162,7 @@ export interface BarberSetPasswordInput {
 
 export interface BarberAuthResult {
   token: string;
+  refreshToken: string;
   barber: {
     id: string;
     name: string;
@@ -182,4 +175,31 @@ export interface BarberAuthResult {
 export interface BarberLoginInput {
   email: string;
   password: string;
+}
+
+export interface CreateSlotBlockInput {
+  barberId: string;
+  serviceIds?: string[];
+  reason?: string;
+}
+
+export interface SlotBlockResult {
+  id: string;
+  barberId: string;
+  shopId: string;
+  startTime: string;
+  endTime: string;
+
+  durationMinutes: number;
+  status: 'ACTIVE' | 'RELEASED';
+}
+
+export interface ReleaseSlotBlockInput {
+  blockId: string;
+  barberId: string;
+}
+
+export interface ListSlotBlocksQuery {
+  date?: string;
+  status?: 'ACTIVE' | 'RELEASED';
 }

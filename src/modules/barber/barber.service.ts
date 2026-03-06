@@ -21,8 +21,12 @@ import {
   BarberLoginInput,
   AddSelfAsBarberInput,
   SelfBarberDto,
+  CreateSlotBlockInput,
+  SlotBlockResult,
+  ReleaseSlotBlockInput,
+  ListSlotBlocksQuery,
 } from './barber.types';
-import { IBarber } from './barber.model';
+import { IBarber, ISlotBlock } from './barber.model';
 import {
   NotFoundError,
   ConflictError,
@@ -40,7 +44,17 @@ import { ClientSession } from 'mongoose';
 import crypto from 'crypto';
 import { getRedisClient } from '../../shared/redis/redis';
 
+interface TodayAvailabilityData {
+  isWorking?: boolean;
+  workingHours?: { start: string; end: string };
+  breaks: Array<{ start: string; end: string }>;
+}
+
 export class BarberService {
+  private availabilityService?: {
+    getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
+  };
+
   constructor(
     private readonly barberRepository: BarberRepository,
     private readonly getShopService: () => ShopService,
@@ -48,6 +62,12 @@ export class BarberService {
     private readonly emailOtpService: BarberEmailOtpService,
     private readonly jwtService: JwtService,
   ) {}
+
+  setAvailabilityService(svc: {
+    getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
+  }): void {
+    this.availabilityService = svc;
+  }
 
   private get shopService(): ShopService {
     return this.getShopService();
@@ -120,8 +140,6 @@ export class BarberService {
     const barber = await this.barberRepository.findById(barberId);
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
-
-    // TODO: Check for future bookings when booking module is implemented.
 
     await this.barberRepository.softDelete(barberId);
   }
@@ -365,6 +383,9 @@ export class BarberService {
       role: 'BARBER',
     };
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.barberRepository.updateRefreshToken(barberId, refreshTokenHash);
 
     this.logger.info({
       action: 'BARBER_PASSWORD_SET',
@@ -374,6 +395,7 @@ export class BarberService {
 
     return {
       token,
+      refreshToken,
       barber: {
         id: barber._id.toString(),
         name: barber.name,
@@ -407,6 +429,9 @@ export class BarberService {
       role: 'BARBER',
     };
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.barberRepository.updateRefreshToken(barber._id.toString(), refreshTokenHash);
 
     this.logger.info({
       action: 'BARBER_LOGIN',
@@ -417,6 +442,7 @@ export class BarberService {
 
     return {
       token,
+      refreshToken,
       barber: {
         id: barber._id.toString(),
         name: barber.name,
@@ -425,6 +451,168 @@ export class BarberService {
         status: barber.status,
       },
     };
+  }
+
+  async createSlotBlock(input: CreateSlotBlockInput): Promise<SlotBlockResult> {
+    const barber = await this.barberRepository.findById(input.barberId);
+    if (!barber || barber.status === 'DELETED') {
+      throw new NotFoundError('Barber not found.');
+    }
+
+    if (barber.status === 'INACTIVE') {
+      throw new ForbiddenError('Your account is inactive and cannot accept walk-in customers.');
+    }
+
+    if (!barber.isAvailable) {
+      throw new ConflictError('You are currently marked as unavailable.');
+    }
+
+    const shopId = barber.shopId.toString();
+
+    const uniqueServiceIds = input.serviceIds ? [...new Set(input.serviceIds)] : undefined;
+
+    const serviceDurationMinutes = await this.resolveServiceDuration(
+      input.barberId,
+      uniqueServiceIds,
+    );
+
+    const totalDurationMinutes = serviceDurationMinutes + 5;
+
+    const now = new Date();
+    const startTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const endTimeObj = new Date(now.getTime() + totalDurationMinutes * 60_000);
+    const endTime = `${endTimeObj.getHours().toString().padStart(2, '0')}:${endTimeObj.getMinutes().toString().padStart(2, '0')}`;
+
+    if (endTime <= startTime) {
+      throw new ValidationError(
+        'Walk-in booking cannot extend past midnight. Please try again earlier.',
+      );
+    }
+
+    const todayAvailability =
+      (await this.availabilityService?.getTodayAvailability(input.barberId)) ?? null;
+
+    if (todayAvailability) {
+      if (!todayAvailability.isWorking) {
+        throw new ConflictError('You are not scheduled to work today.');
+      }
+
+      if (todayAvailability.workingHours) {
+        const { start: workStart, end: workEnd } = todayAvailability.workingHours;
+        if (startTime < workStart || endTime > workEnd) {
+          throw new ConflictError(
+            `Walk-in slot (${this.formatTime(startTime)}–${this.formatTime(endTime)}) is outside your working hours (${this.formatTime(workStart)}–${this.formatTime(workEnd)}).`,
+          );
+        }
+      }
+
+      for (const brk of todayAvailability.breaks ?? []) {
+        if (startTime < brk.end && endTime > brk.start) {
+          throw new ConflictError(
+            `Walk-in slot overlaps with your break (${this.formatTime(brk.start)}–${this.formatTime(brk.end)}).`,
+          );
+        }
+      }
+    }
+
+    const overlapping = await this.barberRepository.findOverlappingActiveBlocks(
+      input.barberId,
+      now,
+      startTime,
+      endTime,
+    );
+    if (overlapping.length > 0) {
+      throw new ConflictError(
+        `You already have an active block from ${this.formatTime(startTime)} to ${this.formatTime(endTime)}. Please release it first.`,
+      );
+    }
+
+    const blockDate = new Date(now);
+    blockDate.setHours(0, 0, 0, 0);
+
+    const slotBlock = await this.barberRepository.createSlotBlock({
+      shopId,
+      barberId: input.barberId,
+      serviceIds: uniqueServiceIds,
+      createdBy: input.barberId,
+      date: blockDate,
+      startTime,
+      endTime,
+      durationMinutes: totalDurationMinutes,
+      reason: input.reason,
+      status: 'ACTIVE',
+    });
+
+    this.logger.info({
+      action: 'SLOT_BLOCK_CREATED',
+      module: 'barber',
+      barberId: input.barberId,
+      shopId,
+      blockId: slotBlock._id.toString(),
+    });
+
+    return this.toSlotBlockDto(slotBlock);
+  }
+
+  private async resolveServiceDuration(
+    barberId: string,
+    serviceIds: string[] | undefined,
+  ): Promise<number> {
+    const FALLBACK_DURATION_MINUTES = 30;
+
+    if (!serviceIds || serviceIds.length === 0) {
+      return FALLBACK_DURATION_MINUTES;
+    }
+
+    const allBarberServices = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    const serviceMap = new Map(allBarberServices.map((s) => [s.serviceId.toString(), s]));
+
+    let total = 0;
+    for (const serviceId of serviceIds) {
+      const barberService = serviceMap.get(serviceId);
+      if (!barberService || !barberService.isActive) {
+        throw new NotFoundError(`Service ${serviceId} is not available for this barber.`);
+      }
+      total += barberService.durationMinutes;
+    }
+
+    return total;
+  }
+
+  async releaseSlotBlock(input: ReleaseSlotBlockInput): Promise<SlotBlockResult> {
+    const block = await this.barberRepository.findSlotBlockById(input.blockId);
+    if (!block) {
+      throw new NotFoundError('Slot block not found.');
+    }
+
+    if (block.barberId.toString() !== input.barberId) {
+      throw new ForbiddenError('Not authorized to release this slot block.');
+    }
+
+    if (block.status !== 'ACTIVE') {
+      throw new ValidationError('Slot block is already released.');
+    }
+
+    const releasedBlock = await this.barberRepository.releaseSlotBlock(input.blockId);
+    if (!releasedBlock) {
+      throw new NotFoundError('Slot block could not be released. It may have been deleted.');
+    }
+
+    this.logger.info({
+      action: 'SLOT_BLOCK_RELEASED',
+      module: 'barber',
+      barberId: input.barberId,
+      shopId: block.shopId.toString(),
+      blockId: input.blockId,
+    });
+
+    return this.toSlotBlockDto(releasedBlock);
+  }
+
+  async listSlotBlocks(barberId: string, query: ListSlotBlocksQuery): Promise<SlotBlockResult[]> {
+    const date = query.date ? new Date(query.date) : new Date();
+    const blocks = await this.barberRepository.listSlotBlocks(barberId, date, query.status);
+    return blocks.map((b) => this.toSlotBlockDto(b));
   }
 
   async activateBarbersByVendorId(vendorId: string, session?: ClientSession): Promise<void> {
@@ -533,5 +721,24 @@ export class BarberService {
       createdAt: l.createdAt,
       updatedAt: l.updatedAt,
     }));
+  }
+
+  private formatTime(hhmm: string): string {
+    const [h, m] = hhmm.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${hour}:${m.toString().padStart(2, '0')} ${period}`;
+  }
+
+  private toSlotBlockDto(block: ISlotBlock): SlotBlockResult {
+    return {
+      id: block._id.toString(),
+      barberId: block.barberId.toString(),
+      shopId: block.shopId.toString(),
+      startTime: block.startTime,
+      endTime: block.endTime,
+      durationMinutes: block.durationMinutes,
+      status: block.status,
+    };
   }
 }
