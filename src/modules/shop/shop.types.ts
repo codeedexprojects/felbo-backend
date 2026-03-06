@@ -293,3 +293,23 @@ export interface GetShopDetailsOptions {
   latitude?: number;
   longitude?: number;
 }
+
+export interface AdminShopSearchInput {
+  query?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminShopSearchResultDto {
+  shopId: string;
+  shopName: string;
+  vendorName: string;
+}
+
+export interface AdminShopSearchResponse {
+  shops: AdminShopSearchResultDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

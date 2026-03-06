@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { BarberServiceModel, IBarberService, ServiceModel, IService } from './service.model';
 
 export interface IBarberServicePopulated extends Omit<IBarberService, 'serviceId'> {

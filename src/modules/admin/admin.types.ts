@@ -34,6 +34,7 @@ export interface ListUsersFilter {
 }
 
 export interface UserListItemDto {
+  slNo: number;
   id: string;
   name: string;
   phone: string;

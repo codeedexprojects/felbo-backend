@@ -49,6 +49,7 @@ export interface UserAdDto {
   title: string;
   subtitle: string;
   image: string;
+  priority: number;
   targetShop: {
     id: string;
     name: string;
@@ -72,6 +73,7 @@ export interface PopulatedAdvertisement {
   title: string;
   subtitle?: string;
   bannerImage: string;
+  priority: number;
   shopId: {
     _id: string;
     name: string;

@@ -21,7 +21,7 @@ const advertisementSchema = new Schema<IAd>(
     bannerImage: { type: String, required: true },
     shopId: { type: Schema.Types.ObjectId, required: true, ref: 'Shop', index: true },
     createdBy: { type: Schema.Types.ObjectId, required: true, ref: 'Admin' },
-    priority: { type: Number, default: 0, index: true },
+    priority: { type: Number, default: 0, unique: true, index: true },
     isActive: { type: Boolean, default: true, index: true },
   },
   {

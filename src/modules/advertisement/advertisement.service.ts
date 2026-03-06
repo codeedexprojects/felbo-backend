@@ -19,6 +19,7 @@ export class AdvertisementService {
 
   async createAd(input: CreateAdInput, adminId: string): Promise<AdDto> {
     await this.shopService.getShopById(input.shopId);
+
     const ad = await this.advertisementRepository.create({ ...input, createdBy: adminId });
     return this.toDto(ad);
   }
@@ -43,6 +44,7 @@ export class AdvertisementService {
         title: a.title,
         subtitle: a.subtitle ?? '',
         image: a.bannerImage,
+        priority: a.priority,
         targetShop: {
           id: a.shopId._id.toString(),
           name: a.shopId.name,

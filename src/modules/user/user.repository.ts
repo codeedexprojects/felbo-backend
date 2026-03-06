@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { UserModel, IUser } from './user.model';
 
 // ─── Repository ──────────────────────────────────────────────────

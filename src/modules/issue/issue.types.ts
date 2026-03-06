@@ -27,6 +27,7 @@ export interface ListIssuesFilter {
 }
 
 export interface IssueDTO {
+  slNo: number;
   id: string;
   bookingId: string;
   userId: string;

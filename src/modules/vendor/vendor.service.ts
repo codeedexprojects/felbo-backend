@@ -658,7 +658,8 @@ export default class VendorService {
     const counts = await this.vendorRepository.getStatusCounts(filter.registrationType);
 
     return {
-      vendors: vendors.map((v) => ({
+      vendors: vendors.map((v, i) => ({
+        slNo: total - (filter.page - 1) * filter.limit - i,
         id: v._id.toString(),
         ownerName: v.ownerName,
         phone: v.phone,
@@ -692,7 +693,8 @@ export default class VendorService {
 
     return {
       vendors: vendors.map(
-        (v): VerificationRequestItemDto => ({
+        (v, i): VerificationRequestItemDto => ({
+          slNo: total - (page - 1) * limit - i,
           id: v._id.toString(),
           shopName: v.shopDetails?.name ?? null,
           ownerName: v.ownerName,

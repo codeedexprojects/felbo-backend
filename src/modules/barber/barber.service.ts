@@ -42,8 +42,8 @@ import { Logger } from 'winston';
 import ShopService from '../shop/shop.service';
 import { BarberEmailOtpService } from '../../shared/services/brevo-email-otp.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import { ClientSession } from 'mongoose';
-import crypto from 'crypto';
+import { ClientSession } from '../../shared/database/transaction';
+import { generateToken, hashToken } from '../../shared/utils/token';
 import { getRedisClient } from '../../shared/redis/redis';
 
 interface TodayAvailabilityData {
@@ -344,8 +344,8 @@ export class BarberService {
     }
 
     const redis = getRedisClient();
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetToken = generateToken();
+    const tokenHash = hashToken(resetToken);
     await redis.set(`barber-reset:${tokenHash}`, barber._id.toString(), { EX: 600 });
 
     this.logger.info({
@@ -360,7 +360,7 @@ export class BarberService {
 
   async setPassword(input: BarberSetPasswordInput): Promise<BarberAuthResult> {
     const redis = getRedisClient();
-    const tokenHash = crypto.createHash('sha256').update(input.resetToken).digest('hex');
+    const tokenHash = hashToken(input.resetToken);
     const resetKey = `barber-reset:${tokenHash}`;
     const barberId = await redis.get(resetKey);
 
