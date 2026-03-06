@@ -9,6 +9,7 @@ export interface IBarber extends Document {
   photo?: string;
   username?: string;
   passwordHash?: string;
+  refreshTokenHash?: string;
   rating: {
     average: number;
     count: number;
@@ -34,6 +35,7 @@ const barberSchema = new Schema<IBarber>(
     },
     username: { type: String },
     passwordHash: { type: String, select: false },
+    refreshTokenHash: { type: String, select: false },
     isVendorBarber: { type: Boolean, default: false },
     status: {
       type: String,

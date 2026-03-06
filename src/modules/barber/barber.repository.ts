@@ -1,4 +1,4 @@
-import { ClientSession, Document } from 'mongoose';
+import { ClientSession } from 'mongoose';
 import { BarberModel, IBarber, SlotBlockModel, ISlotBlock } from './barber.model';
 import { BarberServiceModel, IBarberService } from '../service/service.model';
 import { ListBarbersFilter } from './barber.types';
@@ -47,6 +47,14 @@ export class BarberRepository {
 
   findByIdWithPassword(id: string): Promise<IBarber | null> {
     return BarberModel.findById(id).select('+passwordHash').lean<IBarber>().exec();
+  }
+
+  findByIdWithRefreshToken(id: string): Promise<IBarber | null> {
+    return BarberModel.findById(id).select('+refreshTokenHash').exec();
+  }
+
+  updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IBarber | null> {
+    return BarberModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
   }
 
   findByUsername(username: string): Promise<IBarber | null> {
@@ -243,10 +251,32 @@ export class BarberRepository {
     return doc !== null;
   }
 
-  async createSlotBlock(
-    data: Omit<ISlotBlock, keyof Document | 'createdAt' | 'updatedAt' | 'releasedAt'>,
-  ): Promise<ISlotBlock> {
-    const [block] = await SlotBlockModel.create([data]);
+  async createSlotBlock(data: {
+    shopId: string;
+    barberId: string;
+    serviceIds?: string[];
+    createdBy: string;
+    date: Date;
+    startTime: string;
+    endTime: string;
+    durationMinutes: number;
+    reason?: string;
+    status: 'ACTIVE' | 'RELEASED';
+  }): Promise<ISlotBlock> {
+    const [block] = await SlotBlockModel.create([
+      {
+        shopId: data.shopId,
+        barberId: data.barberId,
+        serviceIds: data.serviceIds,
+        createdBy: data.createdBy,
+        date: data.date,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        durationMinutes: data.durationMinutes,
+        reason: data.reason,
+        status: data.status,
+      },
+    ]);
     return block;
   }
 

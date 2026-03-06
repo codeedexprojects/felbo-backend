@@ -162,6 +162,7 @@ export interface BarberSetPasswordInput {
 
 export interface BarberAuthResult {
   token: string;
+  refreshToken: string;
   barber: {
     id: string;
     name: string;

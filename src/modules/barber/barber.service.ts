@@ -40,7 +40,7 @@ import { Logger } from 'winston';
 import ShopService from '../shop/shop.service';
 import { BarberEmailOtpService } from '../../shared/services/brevo-email-otp.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import mongoose, { ClientSession } from 'mongoose';
+import { ClientSession } from 'mongoose';
 import crypto from 'crypto';
 import { getRedisClient } from '../../shared/redis/redis';
 
@@ -383,6 +383,9 @@ export class BarberService {
       role: 'BARBER',
     };
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.barberRepository.updateRefreshToken(barberId, refreshTokenHash);
 
     this.logger.info({
       action: 'BARBER_PASSWORD_SET',
@@ -392,6 +395,7 @@ export class BarberService {
 
     return {
       token,
+      refreshToken,
       barber: {
         id: barber._id.toString(),
         name: barber.name,
@@ -425,6 +429,9 @@ export class BarberService {
       role: 'BARBER',
     };
     const token = this.jwtService.signToken(tokenPayload);
+    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
+    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
+    await this.barberRepository.updateRefreshToken(barber._id.toString(), refreshTokenHash);
 
     this.logger.info({
       action: 'BARBER_LOGIN',
@@ -435,6 +442,7 @@ export class BarberService {
 
     return {
       token,
+      refreshToken,
       barber: {
         id: barber._id.toString(),
         name: barber.name,
@@ -523,10 +531,10 @@ export class BarberService {
     blockDate.setHours(0, 0, 0, 0);
 
     const slotBlock = await this.barberRepository.createSlotBlock({
-      shopId: new mongoose.Types.ObjectId(shopId),
-      barberId: new mongoose.Types.ObjectId(input.barberId),
-      serviceIds: uniqueServiceIds?.map((id) => new mongoose.Types.ObjectId(id)),
-      createdBy: new mongoose.Types.ObjectId(input.barberId),
+      shopId,
+      barberId: input.barberId,
+      serviceIds: uniqueServiceIds,
+      createdBy: input.barberId,
       date: blockDate,
       startTime,
       endTime,
