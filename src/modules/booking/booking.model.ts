@@ -1,6 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-// ─── Booking ──────────────────────────────────────────────────────────────────
 export interface IBookingService {
   serviceId: mongoose.Types.ObjectId;
   serviceName: string;
@@ -108,7 +107,6 @@ bookingSchema.index({ barberId: 1, date: 1, status: 1 });
 
 export const BookingModel = mongoose.model<IBooking>('Booking', bookingSchema);
 
-// ─── SlotLock ─────────────────────────────────────────────────────────────────
 export interface ISlotLock extends Document {
   shopId: mongoose.Types.ObjectId;
   barberId: mongoose.Types.ObjectId;

@@ -1,19 +1,16 @@
-// Input for slot generation
 export interface GetSlotsInput {
   shopId: string;
-  date: string; // YYYY-MM-DD (today only)
-  serviceIds: string[]; // at least one
+  date: string;
+  serviceIds: string[];
   barberId: string;
 }
 
-// A single generated time slot
 export interface TimeSlot {
-  time: string; // "HH:mm"
+  time: string;
   available: boolean;
   reason?: 'booked' | 'blocked' | 'locked' | 'break' | 'passed';
 }
 
-// Response for slot generation
 export interface GetSlotsResponse {
   shopId: string;
   date: string;
@@ -28,19 +25,15 @@ export interface GetSlotsResponse {
   slots: TimeSlot[];
 }
 
-// Internal: a barber service entry used during slot calculation
 export interface BarberServiceEntry {
   serviceId: string;
   durationMinutes: number;
 }
 
-// Internal: a blocked time range (booking, slot block, or slot lock)
 export interface BlockedRange {
   startMinutes: number;
   endMinutes: number;
 }
-
-// ─── Phase 2: Booking Initiation ──────────────────────────────────────────────
 
 export interface InitiateBookingInput {
   shopId: string;
@@ -73,7 +66,7 @@ export interface InitiateBookingResponse {
     advancePaid: number;
     remainingAmount: number;
     paymentMethod: string;
-    expiresAt: string; // ISO string — when the slot lock expires
+    expiresAt: string;
   };
   payment?: {
     orderId: string;
