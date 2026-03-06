@@ -1,5 +1,3 @@
-import { Types } from 'mongoose';
-
 export interface CreateAdInput {
   title: string;
   subtitle: string;
@@ -70,12 +68,12 @@ export interface ListUserAdsResponse {
 }
 
 export interface PopulatedAdvertisement {
-  _id: Types.ObjectId;
+  _id: string;
   title: string;
   subtitle?: string;
   bannerImage: string;
   shopId: {
-    _id: Types.ObjectId;
+    _id: string;
     name: string;
     address: {
       area: string;

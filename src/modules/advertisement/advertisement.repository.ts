@@ -1,4 +1,3 @@
-import { Types } from 'mongoose';
 import { AdvertisementModel, IAd } from './advertisement.model';
 import { ListAdsFilter, PopulatedAdvertisement } from './advertisement.types';
 
@@ -38,7 +37,7 @@ export class AdvertisementRepository {
       AdvertisementModel.find({ isActive: true })
         .populate<{
           shopId: {
-            _id: Types.ObjectId;
+            _id: string;
             name: string;
             address: { area: string; city: string };
           };
