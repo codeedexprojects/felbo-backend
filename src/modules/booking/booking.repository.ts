@@ -1,11 +1,4 @@
-import {
-  BookingModel,
-  IBooking,
-  SlotBlockModel,
-  ISlotBlock,
-  SlotLockModel,
-  ISlotLock,
-} from './booking.model';
+import { BookingModel, IBooking, SlotLockModel, ISlotLock } from './booking.model';
 
 export class BookingRepository {
   private utcDayRange(date: Date): { start: Date; end: Date } {
@@ -24,17 +17,6 @@ export class BookingRepository {
       status: 'CONFIRMED',
     })
       .lean<IBooking[]>()
-      .exec();
-  }
-
-  findActiveSlotBlocksByBarberAndDate(barberId: string, date: Date): Promise<ISlotBlock[]> {
-    const { start, end } = this.utcDayRange(date);
-    return SlotBlockModel.find({
-      barberId,
-      date: { $gte: start, $lt: end },
-      status: 'ACTIVE',
-    })
-      .lean<ISlotBlock[]>()
       .exec();
   }
 

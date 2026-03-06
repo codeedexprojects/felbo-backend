@@ -120,5 +120,4 @@ export const releaseSlotBlockParamSchema = z.object({
 export const listSlotBlocksQuerySchema = z.object({
   date: z.string().date('Invalid date format. Use YYYY-MM-DD').optional(),
   status: z.enum(['ACTIVE', 'RELEASED']).optional(),
-  email: z.string().email('Enter a valid email address'),
 });

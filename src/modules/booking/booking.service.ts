@@ -89,8 +89,8 @@ export class BookingService {
       requestedDate,
     );
 
-    // Step 4: Walk-in blocks (slotBlocks)
-    const slotBlocks = await this.bookingRepository.findActiveSlotBlocksByBarberAndDate(
+    // Step 4: Walk-in blocks (slotBlocks) — via barber service to respect module boundaries
+    const slotBlocks = await this.barberService.getActiveSlotBlocksByBarberAndDate(
       input.barberId,
       requestedDate,
     );

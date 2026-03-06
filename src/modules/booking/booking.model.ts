@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 // ─── Booking ──────────────────────────────────────────────────────────────────
-
 export interface IBookingService {
   serviceId: mongoose.Types.ObjectId;
   serviceName: string;
@@ -103,57 +102,13 @@ const bookingSchema = new Schema<IBooking>(
   { timestamps: true },
 );
 
-bookingSchema.index({ bookingNumber: 1 }, { unique: true });
 bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ shopId: 1, date: 1, status: 1 });
 bookingSchema.index({ barberId: 1, date: 1, status: 1 });
 
 export const BookingModel = mongoose.model<IBooking>('Booking', bookingSchema);
 
-// ─── SlotBlock ────────────────────────────────────────────────────────────────
-
-export interface ISlotBlock extends Document {
-  shopId: mongoose.Types.ObjectId;
-  barberId: mongoose.Types.ObjectId;
-  date: Date;
-  startTime: string;
-  endTime: string;
-  serviceId?: mongoose.Types.ObjectId;
-  serviceName?: string;
-  durationMinutes?: number;
-  reason: 'WALK_IN' | 'BREAK' | 'OTHER';
-  status: 'ACTIVE' | 'RELEASED';
-  createdBy: string;
-  releasedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const slotBlockSchema = new Schema<ISlotBlock>(
-  {
-    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    barberId: { type: Schema.Types.ObjectId, ref: 'Barber', required: true },
-    date: { type: Date, required: true },
-    startTime: { type: String, required: true },
-    endTime: { type: String, required: true },
-    serviceId: { type: Schema.Types.ObjectId, ref: 'Service' },
-    serviceName: { type: String },
-    durationMinutes: { type: Number },
-    reason: { type: String, enum: ['WALK_IN', 'BREAK', 'OTHER'], required: true },
-    status: { type: String, enum: ['ACTIVE', 'RELEASED'], default: 'ACTIVE' },
-    createdBy: { type: String, required: true },
-    releasedAt: { type: Date },
-  },
-  { timestamps: true },
-);
-
-slotBlockSchema.index({ barberId: 1, date: 1, status: 1 });
-slotBlockSchema.index({ shopId: 1, date: 1 });
-
-export const SlotBlockModel = mongoose.model<ISlotBlock>('SlotBlock', slotBlockSchema);
-
 // ─── SlotLock ─────────────────────────────────────────────────────────────────
-
 export interface ISlotLock extends Document {
   shopId: mongoose.Types.ObjectId;
   barberId: mongoose.Types.ObjectId;

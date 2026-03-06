@@ -203,3 +203,9 @@ export interface ListSlotBlocksQuery {
   date?: string;
   status?: 'ACTIVE' | 'RELEASED';
 }
+
+// Minimal slot block range exposed to other modules (e.g. booking)
+export interface SlotBlockRange {
+  startTime: string;
+  endTime: string;
+}
