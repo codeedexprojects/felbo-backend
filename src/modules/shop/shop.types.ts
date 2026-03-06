@@ -116,11 +116,9 @@ export interface NearbyShopsInput {
 
 export interface SearchShopsInput {
   query?: string;
-  city?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
-  minRating?: number;
-  serviceName?: string;
-  availableNow?: boolean;
+  categoryId?: string;
+  categoryName?: string;
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;
@@ -177,6 +175,24 @@ export interface VendorShopDto extends ShopDto {
 
 export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
+}
+
+export interface NearbyShopCardDto {
+  id: string;
+  image: string | null;
+  name: string;
+  isAvailable: boolean;
+  closingTime: string | null; // today's closing time, null if shop is closed/no working hours
+  distance: number; // kilometers
+  topServices: string[]; // up to 3 service names
+}
+
+export interface NearbyShopsResponse {
+  shops: NearbyShopCardDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface ServiceDto {

@@ -100,6 +100,10 @@ export const barberLoginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const barberRefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
 export const addSelfAsBarberSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   phone: phoneSchema,

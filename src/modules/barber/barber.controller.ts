@@ -14,6 +14,7 @@ import {
   barberVerifyOtpSchema,
   barberSetPasswordSchema,
   barberLoginSchema,
+  barberRefreshTokenSchema,
   addSelfAsBarberSchema,
   createSlotBlockSchema,
   releaseSlotBlockParamSchema,
@@ -112,6 +113,17 @@ export class BarberController {
     const validated = barberLoginSchema.parse(req.body);
     const result = await this.barberService.login(validated);
     res.status(200).json({ success: true, data: result });
+  };
+
+  refreshToken = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = barberRefreshTokenSchema.parse(req.body);
+    const result = await this.barberService.refreshAccessToken(refreshToken);
+    res.status(200).json({ success: true, data: result });
+  };
+
+  logout = async (req: Request, res: Response): Promise<void> => {
+    await this.barberService.logout(req.user!.sub);
+    res.status(200).json({ success: true, message: 'Logged out successfully.' });
   };
 
   addSelfAsBarber = async (req: Request, res: Response): Promise<void> => {

@@ -1,7 +1,12 @@
 import { Logger } from 'winston';
 import { CategoryRepository } from './category.repository';
 import { ICategory } from './category.model';
-import { CreateCategoryInput, UpdateCategoryInput, CategoryDto } from './category.types';
+import {
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  CategoryDto,
+  ListUserCategoriesResponse,
+} from './category.types';
 import { ConflictError, NotFoundError } from '@shared/errors';
 
 export class CategoryService {
@@ -14,6 +19,7 @@ export class CategoryService {
     return {
       id: category._id.toString(),
       name: category.name,
+      image: category.image,
       displayOrder: category.displayOrder,
       isActive: category.isActive,
     };
@@ -45,6 +51,21 @@ export class CategoryService {
   async getAllCategoriesAdmin(): Promise<CategoryDto[]> {
     const categories = await this.categoryRepository.findAll();
     return categories.map((c) => this.toCategoryDto(c));
+  }
+  async listUserCategories(page: number, limit: number): Promise<ListUserCategoriesResponse> {
+    const { categories, total } = await this.categoryRepository.findAllActivePaginated(page, limit);
+
+    return {
+      categories: categories.map((c) => ({
+        id: c._id?.toString() ?? '',
+        name: c.name,
+        image: c.image,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+    };
   }
 
   async updateCategory(categoryId: string, input: UpdateCategoryInput): Promise<CategoryDto> {

@@ -5,6 +5,7 @@ export class CategoryRepository {
   async create(data: CreateCategoryInput): Promise<ICategory> {
     return CategoryModel.create({
       name: data.name,
+      image: data.image,
       displayOrder: data.displayOrder ?? 0,
     });
   }
@@ -19,6 +20,25 @@ export class CategoryRepository {
 
   findAllActive(): Promise<ICategory[]> {
     return CategoryModel.find({ isActive: true }).sort({ displayOrder: 1 }).exec();
+  }
+
+  async findAllActivePaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ categories: ICategory[]; total: number }> {
+    const skip = (page - 1) * limit;
+
+    const [categories, total] = await Promise.all([
+      CategoryModel.find({ isActive: true })
+        .sort({ displayOrder: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      CategoryModel.countDocuments({ isActive: true }).exec(),
+    ]);
+
+    return { categories, total };
   }
 
   findAll(): Promise<ICategory[]> {

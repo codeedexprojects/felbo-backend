@@ -1,5 +1,6 @@
+import { Types } from 'mongoose';
 import { AdvertisementModel, IAd } from './advertisement.model';
-import { ListAdsFilter } from './advertisement.types';
+import { ListAdsFilter, PopulatedAdvertisement } from './advertisement.types';
 
 export class AdvertisementRepository {
   async create(data: {
@@ -23,6 +24,32 @@ export class AdvertisementRepository {
         .limit(filter.limit)
         .exec(),
       AdvertisementModel.countDocuments({ isActive: true }).exec(),
+    ]);
+
+    return { ads, total };
+  }
+
+  async findAllActiveWithShop(
+    filter: ListAdsFilter,
+  ): Promise<{ ads: PopulatedAdvertisement[]; total: number }> {
+    const skip = (filter.page - 1) * filter.limit;
+
+    const [ads, total] = await Promise.all([
+      AdvertisementModel.find({ isActive: true })
+        .populate<{
+          shopId: {
+            _id: Types.ObjectId;
+            name: string;
+            address: { area: string; city: string };
+          };
+        }>('shopId', 'name address.area address.city')
+        .sort({ priority: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(filter.limit)
+        .lean<PopulatedAdvertisement[]>()
+        .exec(),
+
+      AdvertisementModel.countDocuments({ isActive: true }),
     ]);
 
     return { ads, total };

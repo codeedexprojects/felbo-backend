@@ -19,6 +19,7 @@ import {
   BarberSetPasswordInput,
   BarberAuthResult,
   BarberLoginInput,
+  BarberRefreshTokenResponse,
   AddSelfAsBarberInput,
   SelfBarberDto,
   CreateSlotBlockInput,
@@ -451,6 +452,50 @@ export class BarberService {
         status: barber.status,
       },
     };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<BarberRefreshTokenResponse> {
+    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
+
+    const barber = await this.barberRepository.findByIdWithRefreshToken(decoded.sub);
+
+    if (!barber || barber.status === 'DELETED' || barber.status === 'INACTIVE') {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    if (!barber.refreshTokenHash) {
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const isValid = this.jwtService.compareTokenHash(refreshToken, barber.refreshTokenHash);
+
+    if (!isValid) {
+      await this.barberRepository.updateRefreshToken(barber._id.toString(), null);
+      this.logger.warn('Barber refresh token reuse detected — cleared stored token', {
+        barberId: barber._id,
+      });
+      throw new UnauthorizedError('Invalid refresh token. Please login again.');
+    }
+
+    const tokenPayload: TokenPayload = {
+      sub: barber._id.toString(),
+      role: 'BARBER',
+    };
+
+    const newToken = this.jwtService.signToken(tokenPayload);
+    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+
+    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
+    await this.barberRepository.updateRefreshToken(barber._id.toString(), newRefreshTokenHash);
+
+    this.logger.info({ action: 'BARBER_TOKEN_REFRESHED', module: 'barber', barberId: barber._id });
+
+    return { token: newToken, refreshToken: newRefreshToken };
+  }
+
+  async logout(barberId: string): Promise<void> {
+    await this.barberRepository.updateRefreshToken(barberId, null);
+    this.logger.info({ action: 'BARBER_LOGOUT', module: 'barber', barberId });
   }
 
   async createSlotBlock(input: CreateSlotBlockInput): Promise<SlotBlockResult> {

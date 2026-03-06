@@ -23,6 +23,12 @@ export class AdvertisementController {
     res.status(200).json({ success: true, data: result });
   };
 
+  listUserAds = async (req: Request, res: Response): Promise<void> => {
+    const validated = listAdsSchema.parse(req.query);
+    const result = await this.advertisementService.listUserAds(validated);
+    res.status(200).json({ success: true, data: result });
+  };
+
   getAd = async (req: Request, res: Response): Promise<void> => {
     const { id } = adIdParamSchema.parse(req.params);
     const ad = await this.advertisementService.getAdById(id);

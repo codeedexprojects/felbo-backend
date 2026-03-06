@@ -1,3 +1,5 @@
+import { Types } from 'mongoose';
+
 export interface CreateAdInput {
   title: string;
   subtitle: string;
@@ -42,4 +44,42 @@ export interface ListAdsResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface UserAdDto {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  targetShop: {
+    id: string;
+    name: string;
+    address: {
+      area: string;
+      city: string;
+    };
+  };
+}
+
+export interface ListUserAdsResponse {
+  ads: UserAdDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PopulatedAdvertisement {
+  _id: Types.ObjectId;
+  title: string;
+  subtitle?: string;
+  bannerImage: string;
+  shopId: {
+    _id: Types.ObjectId;
+    name: string;
+    address: {
+      area: string;
+      city: string;
+    };
+  };
 }

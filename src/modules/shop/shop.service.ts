@@ -15,7 +15,8 @@ import {
   ShopSearchResultDto,
   ShopDto,
   VendorShopDto,
-  NearbyShopDto,
+  NearbyShopCardDto,
+  NearbyShopsResponse,
   ServiceDto,
   BarberDto,
   BarberServiceDto,
@@ -68,13 +69,6 @@ export default class ShopService {
       isAvailable: shop.isAvailable,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
-    };
-  }
-
-  private toNearbyShopDto(shop: IShop, distance: number): NearbyShopDto {
-    return {
-      ...this.toShopDto(shop),
-      distance: Math.round(distance),
     };
   }
 
@@ -376,13 +370,22 @@ export default class ShopService {
     };
   }
 
-  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopDto[]> {
+  private getTodayClosingTime(shop: IShop): string | null {
+    if (!shop.workingHours) return null;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = days[new Date().getDay()] as keyof typeof shop.workingHours;
+    const todayHours = shop.workingHours[todayKey];
+    if (!todayHours || !todayHours.isOpen) return null;
+    return todayHours.close;
+  }
+
+  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
     const maxDistance = input.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE;
     const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const results = await this.shopRepository.findNearby(
+    const { results, total } = await this.shopRepository.findNearby(
       input.longitude,
       input.latitude,
       maxDistance,
@@ -391,7 +394,32 @@ export default class ShopService {
       limit,
     );
 
-    return results.map((r) => this.toNearbyShopDto(r.shop, r.distance));
+    const shopIds = results.map((r) => r.shop._id.toString());
+    const allServices = await this.serviceService.getServicesByShopIds(shopIds);
+
+    const servicesByShopId = new Map<string, string[]>();
+    for (const svc of allServices) {
+      const key = svc.shopId;
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      const names = servicesByShopId.get(key)!;
+      if (names.length < 3) names.push(svc.name);
+    }
+
+    const shops: NearbyShopCardDto[] = results.map((r) => {
+      const shop = r.shop;
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        image: shop.photos?.[0] ?? null,
+        name: shop.name,
+        isAvailable: shop.isAvailable,
+        closingTime: this.getTodayClosingTime(shop),
+        distance: Math.round(r.distance / 100) / 10, // convert metres → km (1 decimal)
+        topServices: servicesByShopId.get(shopId) ?? [],
+      };
+    });
+
+    return { shops, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
@@ -402,11 +430,9 @@ export default class ShopService {
     const { shops, total } = await this.shopRepository.searchByName(
       input.query,
       {
-        city: input.city,
         shopType: input.shopType,
-        minRating: input.minRating,
-        serviceName: input.serviceName,
-        availableNow: input.availableNow,
+        categoryId: input.categoryId,
+        categoryName: input.categoryName,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
