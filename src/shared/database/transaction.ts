@@ -1,5 +1,7 @@
 import mongoose, { ClientSession } from 'mongoose';
 
+export type { ClientSession };
+
 export async function withTransaction<T>(fn: (session: ClientSession) => Promise<T>): Promise<T> {
   const session = await mongoose.startSession();
   try {

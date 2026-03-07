@@ -65,8 +65,14 @@ export const updateWorkingHoursSchema = z.object({
 export const nearbyShopsSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180),
   latitude: z.coerce.number().min(-90).max(90),
-  maxDistanceMeters: z.coerce.number().positive().optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
+
+export const recommendedShopsSchema = z.object({
+  longitude: z.coerce.number().min(-180).max(180),
+  latitude: z.coerce.number().min(-90).max(90),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
 });
@@ -130,6 +136,12 @@ export const updateServiceSchema = z
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
     message: 'At least one field is required for update.',
   });
+
+export const adminSearchShopsSchema = z.object({
+  query: z.string().min(1).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
 
 export const serviceIdParamSchema = z.object({
   shopId: mongoIdSchema,

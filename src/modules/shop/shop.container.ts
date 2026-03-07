@@ -6,6 +6,8 @@ import { barberService } from '../barber/barber.container';
 import { BarberService } from '../barber/barber.service';
 import { serviceService } from '../service/service.container';
 import { ServiceService } from '../service/service.service';
+import { userService } from '../user/user.container';
+import UserService from '../user/user.service';
 
 const shopRepository = new ShopRepository();
 
@@ -14,6 +16,7 @@ const shopService: ShopService = new ShopService(
   logger,
   (): BarberService => barberService,
   (): ServiceService => serviceService,
+  (): UserService => userService,
 );
 
 const shopController = new ShopController(shopService);

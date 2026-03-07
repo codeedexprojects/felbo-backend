@@ -6,11 +6,13 @@ import {
   toggleAvailableSchema,
   updateWorkingHoursSchema,
   nearbyShopsSchema,
+  recommendedShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
   shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
+  adminSearchShopsSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -95,6 +97,19 @@ export default class ShopController {
     });
   };
 
+  getRecommendedShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = recommendedShopsSchema.parse(req.query);
+    const result = await this.shopService.getRecommendedShops({
+      ...validated,
+      userId: req.user!.sub,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   searchShops = async (req: Request, res: Response): Promise<void> => {
     const validated = searchShopsSchema.parse(req.query);
     const result = await this.shopService.searchShops(validated);
@@ -119,6 +134,16 @@ export default class ShopController {
   deleteShop = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     const result = await this.shopService.deleteShop(shopId, req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  adminSearchShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = adminSearchShopsSchema.parse(req.query);
+    const result = await this.shopService.adminSearchShops(validated);
 
     res.status(200).json({
       success: true,

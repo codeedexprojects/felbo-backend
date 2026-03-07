@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import { hmacSha256 } from '../../shared/utils/token';
 import Razorpay from 'razorpay';
 import { Logger } from 'winston';
 import PaymentRepository from './payment.repository';
@@ -58,10 +58,10 @@ export default class PaymentService {
   }
 
   async verifyVendorRegistrationPayment(input: VerifyPaymentInput): Promise<void> {
-    const expectedSignature = crypto
-      .createHmac('sha256', this.razorpayKeySecret)
-      .update(`${input.orderId}|${input.paymentId}`)
-      .digest('hex');
+    const expectedSignature = hmacSha256(
+      this.razorpayKeySecret,
+      `${input.orderId}|${input.paymentId}`,
+    );
 
     if (expectedSignature !== input.signature) {
       this.logger.warn({

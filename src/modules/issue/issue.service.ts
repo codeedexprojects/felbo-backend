@@ -40,7 +40,9 @@ export class IssueService {
     const counts = await this.issueRepository.getStatusCounts();
 
     return {
-      issues: issues.map(this.toDTO),
+      issues: issues.map((issue, i) =>
+        this.toDTO(issue, total - (filter.page - 1) * filter.limit - i),
+      ),
       total,
       page: filter.page,
       limit: filter.limit,
@@ -164,8 +166,9 @@ export class IssueService {
     };
   }
 
-  private toDTO(issue: IBookingIssue): IssueDTO {
+  private toDTO(issue: IBookingIssue, slNo: number): IssueDTO {
     return {
+      slNo,
       id: issue._id.toString(),
       bookingId: issue.bookingId.toString(),
       userId: issue.userId.toString(),

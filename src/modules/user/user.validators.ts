@@ -21,7 +21,11 @@ export const verifyOtpSchema = z.object({
 
 export const updateProfileSchema = z.object({
   name: z.string().min(2, 'Enter valid name').max(50, 'Enter valid name').trim().optional(),
-  email: z.string().email('Enter valid email').optional().or(z.literal('')),
+  email: z.email('Enter valid email').optional().or(z.literal('')),
+  profileUrl: z.url('Enter valid profile URL').optional(),
+  gender: z
+    .enum(['male', 'female', 'other'], { error: 'Gender must be male, female, or other' })
+    .optional(),
 });
 
 export const refreshTokenSchema = z.object({

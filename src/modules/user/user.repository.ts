@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { UserModel, IUser } from './user.model';
 
 // ─── Repository ──────────────────────────────────────────────────
@@ -39,7 +39,12 @@ export default class UserRepository {
 
   updateProfile(
     id: string,
-    data: { name?: string; email?: string },
+    data: {
+      name?: string;
+      email?: string;
+      profileUrl?: string;
+      gender?: 'male' | 'female' | 'other';
+    },
     session?: ClientSession,
   ): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(id, data, {
