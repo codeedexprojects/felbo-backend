@@ -1,7 +1,7 @@
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
 import { GetSlotsInput, GetSlotsResponse, TimeSlot, BlockedRange } from './booking.types';
-import { NotFoundError, ValidationError } from '../../shared/errors';
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
@@ -162,6 +162,17 @@ export class BookingService {
       workingHours,
       slots,
     };
+  }
+
+  async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    if (booking.userId.toString() !== userId)
+      throw new ForbiddenError('This booking does not belong to you.');
+    if (booking.shopId.toString() !== shopId)
+      throw new ValidationError('Booking does not match the provided shop.');
+    if (booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR')
+      throw new ConflictError('Cannot raise an issue for a cancelled booking.');
   }
 
   private generateSlots(params: {
