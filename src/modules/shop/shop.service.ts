@@ -37,7 +37,7 @@ import { DEFAULT_MAX_DISTANCE_METERS, DEFAULT_PAGE_LIMIT } from '../../shared/co
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 import { ServiceService } from '../service/service.service';
-import UserRepository from '../user/user.repository';
+import UserService from '../user/user.service';
 
 export default class ShopService {
   constructor(
@@ -45,7 +45,7 @@ export default class ShopService {
     private readonly logger: Logger,
     private readonly getBarberService: () => BarberService,
     private readonly getServiceService: () => ServiceService,
-    private readonly getUserRepository: () => UserRepository,
+    private readonly getUserService: () => UserService,
   ) {}
 
   private get barberService(): BarberService {
@@ -56,8 +56,8 @@ export default class ShopService {
     return this.getServiceService();
   }
 
-  private get userRepository(): UserRepository {
-    return this.getUserRepository();
+  private get userService(): UserService {
+    return this.getUserService();
   }
 
   private toShopDto(shop: IShop): ShopDto {
@@ -436,7 +436,7 @@ export default class ShopService {
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const user = await this.userRepository.findById(input.userId);
+    const user = await this.userService.getUserById(input.userId).catch(() => null);
     const gender = user?.gender ?? null;
 
     const shopTypes =
