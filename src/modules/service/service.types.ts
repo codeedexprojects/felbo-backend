@@ -77,3 +77,10 @@ export interface PublicServiceDto {
   applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
 }
+
+export interface BookingServiceSnapshotData {
+  id: string;
+  name: string;
+  categoryName: string;
+  basePrice: number;
+}

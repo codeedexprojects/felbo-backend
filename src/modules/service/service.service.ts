@@ -10,6 +10,7 @@ import {
   AddServiceInput,
   UpdateServiceInput,
   AdminServiceSummaryDto,
+  BookingServiceSnapshotData,
 } from './service.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { withTransaction } from '../../shared/database/transaction';
@@ -386,6 +387,23 @@ export class ServiceService {
       basePrice: s.basePrice,
       baseDurationMinutes: s.baseDurationMinutes,
       description: s.description,
+    }));
+  }
+
+  async getServicesForBookingSnapshot(
+    serviceIds: string[],
+    shopId: string,
+  ): Promise<BookingServiceSnapshotData[]> {
+    const services = await this.serviceRepository.findActiveServicesByIds(serviceIds, shopId);
+
+    const categoryIds = [...new Set(services.map((s) => s.categoryId.toString()))];
+    const categoryNameMap = await this.categoryService.getCategoryNamesByIds(categoryIds);
+
+    return services.map((s) => ({
+      id: s._id.toString(),
+      name: s.name,
+      categoryName: categoryNameMap.get(s.categoryId.toString()) ?? '',
+      basePrice: s.basePrice,
     }));
   }
 }

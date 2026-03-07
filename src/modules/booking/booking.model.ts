@@ -35,8 +35,16 @@ export interface IBooking extends Document {
   totalServiceAmount: number;
   advancePaid: number;
   remainingAmount: number;
+  paymentMethod: 'RAZORPAY' | 'WALLET';
   paymentId?: string;
-  status: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED_BY_USER' | 'CANCELLED_BY_VENDOR' | 'NO_SHOW';
+  razorpayOrderId?: string;
+  status:
+    | 'PENDING_PAYMENT'
+    | 'CONFIRMED'
+    | 'COMPLETED'
+    | 'CANCELLED_BY_USER'
+    | 'CANCELLED_BY_VENDOR'
+    | 'NO_SHOW';
   cancellation?: IBookingCancellation;
   completedAt?: Date;
   createdAt: Date;
@@ -89,10 +97,23 @@ const bookingSchema = new Schema<IBooking>(
     totalServiceAmount: { type: Number, required: true },
     advancePaid: { type: Number, required: true, default: 10 },
     remainingAmount: { type: Number, required: true },
+    paymentMethod: {
+      type: String,
+      enum: ['RAZORPAY', 'WALLET'],
+      required: true,
+    },
     paymentId: { type: String },
+    razorpayOrderId: { type: String },
     status: {
       type: String,
-      enum: ['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+      enum: [
+        'PENDING_PAYMENT',
+        'CONFIRMED',
+        'COMPLETED',
+        'CANCELLED_BY_USER',
+        'CANCELLED_BY_VENDOR',
+        'NO_SHOW',
+      ],
       required: true,
     },
     cancellation: { type: cancellationSubSchema },

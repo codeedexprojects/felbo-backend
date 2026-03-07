@@ -114,4 +114,13 @@ export class CategoryService {
     const category = await this.categoryRepository.findById(categoryId);
     return !!category && category.isActive;
   }
+
+  async getCategoryNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    const categories = await this.categoryRepository.findByIds(ids);
+    const map = new Map<string, string>();
+    for (const c of categories) {
+      map.set(c._id.toString(), c.name);
+    }
+    return map;
+  }
 }
