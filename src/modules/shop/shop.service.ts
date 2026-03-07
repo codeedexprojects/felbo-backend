@@ -10,6 +10,7 @@ import {
   ToggleShopAvailableInput,
   CompleteProfileInput,
   NearbyShopsInput,
+  RecommendedShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
   ShopSearchResultDto,
@@ -31,13 +32,12 @@ import {
   AdminShopSearchResponse,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
+import { DEFAULT_MAX_DISTANCE_METERS, DEFAULT_PAGE_LIMIT } from '../../shared/constants/index';
 
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 import { ServiceService } from '../service/service.service';
-
-const DEFAULT_MAX_DISTANCE = 10000; // 10 km
-const DEFAULT_PAGE_LIMIT = 20;
+import UserService from '../user/user.service';
 
 export default class ShopService {
   constructor(
@@ -45,6 +45,7 @@ export default class ShopService {
     private readonly logger: Logger,
     private readonly getBarberService: () => BarberService,
     private readonly getServiceService: () => ServiceService,
+    private readonly getUserService: () => UserService,
   ) {}
 
   private get barberService(): BarberService {
@@ -53,6 +54,10 @@ export default class ShopService {
 
   private get serviceService(): ServiceService {
     return this.getServiceService();
+  }
+
+  private get userService(): UserService {
+    return this.getUserService();
   }
 
   private toShopDto(shop: IShop): ShopDto {
@@ -382,7 +387,7 @@ export default class ShopService {
   }
 
   async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
-    const maxDistance = input.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE;
+    const maxDistance = DEFAULT_MAX_DISTANCE_METERS;
     const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
@@ -414,9 +419,60 @@ export default class ShopService {
         id: shopId,
         image: shop.photos?.[0] ?? null,
         name: shop.name,
+        shopType: shop.shopType,
+        address: shop.address,
         isAvailable: shop.isAvailable,
         closingTime: this.getTodayClosingTime(shop),
-        distance: Math.round(r.distance / 100) / 10, // convert metres → km (1 decimal)
+        distance: Math.round(r.distance / 100) / 10,
+        topServices: servicesByShopId.get(shopId) ?? [],
+      };
+    });
+
+    return { shops, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getRecommendedShops(input: RecommendedShopsInput): Promise<NearbyShopsResponse> {
+    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const page = input.page ?? 1;
+    const skip = (page - 1) * limit;
+
+    const user = await this.userService.getUserById(input.userId).catch(() => null);
+    const gender = user?.gender ?? null;
+
+    const shopTypes =
+      gender === 'male' ? ['MENS', 'UNISEX'] : gender === 'female' ? ['WOMENS', 'UNISEX'] : null;
+
+    const { results, total } = await this.shopRepository.findRecommended(
+      input.longitude,
+      input.latitude,
+      shopTypes,
+      skip,
+      limit,
+    );
+
+    const shopIds = results.map((r) => r.shop._id.toString());
+    const allServices = await this.serviceService.getServicesByShopIds(shopIds);
+
+    const servicesByShopId = new Map<string, string[]>();
+    for (const svc of allServices) {
+      const key = svc.shopId;
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      const names = servicesByShopId.get(key)!;
+      if (names.length < 3) names.push(svc.name);
+    }
+
+    const shops: NearbyShopCardDto[] = results.map((r) => {
+      const shop = r.shop;
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        image: shop.photos?.[0] ?? null,
+        name: shop.name,
+        shopType: shop.shopType,
+        address: shop.address,
+        isAvailable: shop.isAvailable,
+        closingTime: this.getTodayClosingTime(shop),
+        distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
       };
     });
@@ -465,6 +521,7 @@ export default class ShopService {
         id: shopId,
         name: s.name,
         photos: s.photos ?? [],
+        shopType: s.shopType,
         address: s.address,
         services: shopServices,
       };

@@ -8,6 +8,7 @@ const router = Router();
 router.get('/advertisements', advertisementController.listUserAds);
 router.get('/categories', categoryController.listUserCategories);
 router.get('/shops/nearby', shopController.getNearbyShops);
+router.get('/shops/recommended', shopController.getRecommendedShops);
 router.get('/shops/search', shopController.searchShops);
 
 export default router;
