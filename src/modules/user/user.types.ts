@@ -3,6 +3,8 @@ export interface UserDto {
   phone: string;
   name: string;
   email: string | null;
+  profileUrl: string | null;
+  gender: 'male' | 'female' | 'other' | null;
   walletBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
@@ -15,12 +17,16 @@ export interface UserProfileDto {
   phone: string;
   name: string;
   email: string | null;
+  profileUrl: string | null;
+  gender: 'male' | 'female' | 'other' | null;
   walletBalance: number;
 }
 
 export interface UpdateProfileInput {
   name?: string;
   email?: string;
+  profileUrl?: string;
+  gender?: 'male' | 'female' | 'other';
 }
 
 export interface SendOtpInput {
@@ -47,6 +53,8 @@ export interface VerifyOtpResponse {
     phone: string;
     name: string;
     email: string | null;
+    profileUrl: string | null;
+    gender: 'male' | 'female' | 'other' | null;
     walletBalance: number;
   };
 }
