@@ -41,6 +41,8 @@ export default class UserService {
       phone: user.phone,
       name: user.name,
       email: user.email || null,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
       walletBalance: user.walletBalance,
       cancellationCount: user.cancellationCount,
       status: user.status,
@@ -55,6 +57,8 @@ export default class UserService {
       phone: user.phone,
       name: user.name,
       email: user.email || null,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
       walletBalance: user.walletBalance,
     };
   }
@@ -65,6 +69,8 @@ export default class UserService {
       phone: user.phone,
       name: user.name,
       email: user.email || null,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
       walletBalance: user.walletBalance,
     };
   }

@@ -6,6 +6,7 @@ import {
   toggleAvailableSchema,
   updateWorkingHoursSchema,
   nearbyShopsSchema,
+  recommendedShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
   shopDetailsQuerySchema,
@@ -89,6 +90,19 @@ export default class ShopController {
   getNearbyShops = async (req: Request, res: Response): Promise<void> => {
     const validated = nearbyShopsSchema.parse(req.query);
     const result = await this.shopService.getNearbyShops(validated);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getRecommendedShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = recommendedShopsSchema.parse(req.query);
+    const result = await this.shopService.getRecommendedShops({
+      ...validated,
+      userId: req.user!.sub,
+    });
 
     res.status(200).json({
       success: true,

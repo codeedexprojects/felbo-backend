@@ -4,6 +4,8 @@ export interface IUser extends Document {
   phone: string;
   name: string;
   email?: string;
+  profileUrl?: string | null;
+  gender?: 'male' | 'female' | 'other' | null;
   walletBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
@@ -29,6 +31,15 @@ const userSchema = new Schema<IUser>(
     },
     email: {
       type: String,
+      default: null,
+    },
+    profileUrl: {
+      type: String,
+      default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other'],
       default: null,
     },
     walletBalance: {

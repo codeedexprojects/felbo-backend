@@ -32,4 +32,4 @@ const userService = new UserService(
 
 const userController = new UserController(userService);
 
-export { userController, userService };
+export { userController, userService, userRepository };

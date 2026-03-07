@@ -4,6 +4,7 @@ import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
 import { CategoryModel } from '../category/category.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
+import { DEFAULT_MAX_DISTANCE_METERS } from '../../shared/constants/index';
 
 export interface NearbyShopResult {
   shop: IShop;
@@ -153,6 +154,51 @@ export default class ShopRepository {
           spherical: true,
         },
       },
+      {
+        $facet: {
+          shops: [{ $skip: skip }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
+    const results = result.shops as Array<IShop & { distance: number }>;
+
+    return {
+      results: results.map((doc) => ({ shop: doc, distance: doc.distance })),
+      total,
+    };
+  }
+
+  async findRecommended(
+    longitude: number,
+    latitude: number,
+    shopTypes: string[] | null,
+    skip: number,
+    limit: number,
+  ): Promise<NearbyShopPage> {
+    const matchStage: Record<string, unknown> = {
+      status: 'ACTIVE',
+      isAvailable: { $ne: false },
+      onboardingStatus: 'COMPLETED',
+    };
+    if (shopTypes && shopTypes.length > 0) {
+      matchStage.shopType = { $in: shopTypes };
+    }
+
+    const pipeline: PipelineStage[] = [
+      {
+        $geoNear: {
+          near: { type: 'Point', coordinates: [longitude, latitude] },
+          distanceField: 'distance',
+          maxDistance: DEFAULT_MAX_DISTANCE_METERS,
+          query: matchStage,
+          spherical: true,
+        },
+      },
+      { $sort: { 'rating.average': -1 } },
       {
         $facet: {
           shops: [{ $skip: skip }, { $limit: limit }],

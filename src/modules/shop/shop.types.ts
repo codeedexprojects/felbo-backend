@@ -108,8 +108,15 @@ export interface AddBarberInput {
 export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
-  maxDistanceMeters?: number;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  page?: number;
+  limit?: number;
+}
+
+export interface RecommendedShopsInput {
+  longitude: number;
+  latitude: number;
+  userId: string;
   page?: number;
   limit?: number;
 }
@@ -130,6 +137,7 @@ export interface ShopSearchResultDto {
   id: string;
   name: string;
   photos: string[];
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
   address: ShopAddress;
   services: Array<{ id: string; name: string; basePrice: number }>;
   distance?: number;
@@ -181,10 +189,12 @@ export interface NearbyShopCardDto {
   id: string;
   image: string | null;
   name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
   isAvailable: boolean;
-  closingTime: string | null; // today's closing time, null if shop is closed/no working hours
-  distance: number; // kilometers
-  topServices: string[]; // up to 3 service names
+  closingTime: string | null;
+  distance: number;
+  topServices: string[];
 }
 
 export interface NearbyShopsResponse {
@@ -255,8 +265,8 @@ export interface PublicServiceDto {
   categoryId: string;
   name: string;
   basePrice: number;
-  minDuration: number; // minutes — min across barbers, falls back to baseDurationMinutes
-  maxDuration: number; // minutes — max across barbers, falls back to baseDurationMinutes
+  minDuration: number;
+  maxDuration: number;
   applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
 }
@@ -269,7 +279,7 @@ export interface PublicBarberDto {
     average: number;
     count: number;
   };
-  isAvailableToday: boolean; // based on isActive; daily scheduling not yet modelled
+  isAvailableToday: boolean;
 }
 
 export interface ShopDetailsDto {
@@ -278,7 +288,7 @@ export interface ShopDetailsDto {
   description: string;
   shopType: 'MENS' | 'WOMENS' | 'UNISEX';
   address: ShopAddress;
-  distance?: number; // metres from caller, present only when lat/lng query params are sent
+  distance?: number;
   rating: {
     average: number;
     count: number;
