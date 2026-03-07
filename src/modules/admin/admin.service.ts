@@ -189,7 +189,9 @@ export class AdminService {
     ]);
 
     return {
-      users: users.map((u) => this.mapUserToListItem(u)),
+      users: users.map((u, i) =>
+        this.mapUserToListItem(u, total - (filter.page - 1) * filter.limit - i),
+      ),
       total,
       page: filter.page,
       limit: filter.limit,
@@ -234,8 +236,9 @@ export class AdminService {
     await this.userRepository.unblockById(userId);
   }
 
-  private mapUserToListItem(user: IUser): UserListItemDto {
+  private mapUserToListItem(user: IUser, slNo: number): UserListItemDto {
     return {
+      slNo,
       id: user._id.toString(),
       name: user.name,
       phone: user.phone,

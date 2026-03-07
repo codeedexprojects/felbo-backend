@@ -1,4 +1,5 @@
-import { ClientSession, PipelineStage } from 'mongoose';
+import { PipelineStage } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
 import { CategoryModel } from '../category/category.model';
@@ -270,5 +271,63 @@ export default class ShopRepository {
     ]);
 
     return { shops, total };
+  }
+
+  async adminSearchShops(
+    query: string | undefined,
+    skip: number,
+    limit: number,
+  ): Promise<{
+    results: Array<{ shopId: string; shopName: string; vendorName: string }>;
+    total: number;
+  }> {
+    const pipeline: PipelineStage[] = [
+      { $match: { status: { $ne: 'DELETED' } } },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: 'vendorId',
+          foreignField: '_id',
+          as: 'vendor',
+        },
+      },
+      { $unwind: '$vendor' },
+    ];
+
+    if (query) {
+      const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: escaped, $options: 'i' };
+      pipeline.push({
+        $match: { $or: [{ name: regex }, { 'vendor.ownerName': regex }] },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        results: [
+          { $skip: skip },
+          { $limit: limit },
+          { $project: { _id: 1, name: 1, vendorName: '$vendor.ownerName' } },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    });
+
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
+    const docs = result.results as Array<{
+      _id: { toString(): string };
+      name: string;
+      vendorName: string;
+    }>;
+
+    return {
+      results: docs.map((d) => ({
+        shopId: d._id.toString(),
+        shopName: d.name,
+        vendorName: d.vendorName,
+      })),
+      total,
+    };
   }
 }

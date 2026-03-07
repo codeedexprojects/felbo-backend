@@ -1,4 +1,5 @@
-import mongoose, { ClientSession } from 'mongoose';
+import mongoose from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import {
   BarberAvailabilityModel,
   IBarberAvailability,

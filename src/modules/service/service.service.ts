@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import { ServiceRepository } from './service.repository';
 import { IBarberService, IService } from './service.model';

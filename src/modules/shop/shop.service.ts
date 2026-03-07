@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
 import { IShop } from './shop.model';
@@ -27,6 +27,8 @@ import {
   ShopDetailsDto,
   GetShopDetailsOptions,
   OnboardingStatus,
+  AdminShopSearchInput,
+  AdminShopSearchResponse,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 
@@ -513,5 +515,15 @@ export default class ShopService {
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async adminSearchShops(input: AdminShopSearchInput): Promise<AdminShopSearchResponse> {
+    const limit = input.limit ?? 20;
+    const page = input.page ?? 1;
+    const skip = (page - 1) * limit;
+
+    const { results, total } = await this.shopRepository.adminSearchShops(input.query, skip, limit);
+
+    return { shops: results, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 }
