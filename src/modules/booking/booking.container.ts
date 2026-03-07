@@ -18,4 +18,4 @@ const bookingService = new BookingService(
 
 const bookingController = new BookingController(bookingService);
 
-export { bookingController };
+export { bookingController, bookingService };
