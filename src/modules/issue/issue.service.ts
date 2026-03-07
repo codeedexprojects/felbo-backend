@@ -13,6 +13,7 @@ import { NotFoundError, ConflictError, ValidationError } from '../../shared/erro
 import VendorService from '../vendor/vendor.service';
 import ShopService from '../shop/shop.service';
 import PaymentService from '../payment/payment.service';
+import { BookingService } from '../booking/booking.service';
 
 const MAX_DISTANCE_METERS = 500;
 
@@ -33,6 +34,7 @@ export class IssueService {
     private readonly vendorService: VendorService,
     private readonly shopService: ShopService,
     private readonly paymentService: PaymentService,
+    private readonly bookingService: BookingService,
   ) {}
 
   async listIssues(filter: ListIssuesFilter): Promise<ListIssuesResponse> {
@@ -52,6 +54,15 @@ export class IssueService {
   }
 
   async createIssue(input: CreateIssueInput, userId: string): Promise<IssueDetailDTO> {
+    // Verify booking exists, belongs to this user, and matches the shop
+    await this.bookingService.verifyBookingForIssue(input.bookingId, userId, input.shopId);
+
+    // Prevent duplicate issues for the same booking
+    const alreadyExists = await this.issueRepository.existsByBookingId(input.bookingId);
+    if (alreadyExists) {
+      throw new ConflictError('An issue has already been raised for this booking.');
+    }
+
     const shop = await this.shopService.getShopById(input.shopId);
 
     const [shopLng, shopLat] = shop.location.coordinates;
@@ -76,7 +87,6 @@ export class IssueService {
       type: input.type,
       description: input.description,
       userLocation: input.userLocation,
-      photoUrl: input.photoUrl,
       razorpayPaymentId: input.razorpayPaymentId,
     });
 
@@ -158,7 +168,6 @@ export class IssueService {
       refundId: issue.refundId ?? null,
       razorpayPaymentId: issue.razorpayPaymentId ?? null,
       userLocation: issue.userLocation ?? null,
-      photoUrl: issue.photoUrl ?? null,
       reviewedBy: issue.reviewedBy?.toString() ?? null,
       adminNote: issue.adminNote ?? null,
       createdAt: issue.createdAt,

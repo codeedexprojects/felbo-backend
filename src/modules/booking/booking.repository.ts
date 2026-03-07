@@ -9,6 +9,10 @@ export class BookingRepository {
     return { start, end };
   }
 
+  findById(id: string): Promise<IBooking | null> {
+    return BookingModel.findById(id).lean<IBooking>().exec();
+  }
+
   findConfirmedBookingsByBarberAndDate(barberId: string, date: Date): Promise<IBooking[]> {
     const { start, end } = this.utcDayRange(date);
     return BookingModel.find({
