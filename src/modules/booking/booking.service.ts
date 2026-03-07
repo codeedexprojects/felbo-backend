@@ -1,5 +1,4 @@
-import crypto from 'crypto';
-import Razorpay from 'razorpay';
+import PaymentService from '../payment/payment.service';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
 import {
@@ -32,8 +31,6 @@ const ADVANCE_AMOUNT_PAISE = ADVANCE_AMOUNT_RUPEES * 100;
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 export class BookingService {
-  private readonly razorpay: InstanceType<typeof Razorpay>;
-
   constructor(
     private readonly bookingRepository: BookingRepository,
     private readonly getBarberService: () => BarberService,
@@ -41,15 +38,9 @@ export class BookingService {
     private readonly getShopService: () => ShopService,
     private readonly getUserService: () => UserService,
     private readonly getServiceService: () => ServiceService,
-    private readonly razorpayKeyId: string,
-    private readonly razorpayKeySecret: string,
+    private readonly getPaymentService: () => PaymentService,
     private readonly logger: Logger,
-  ) {
-    this.razorpay = new Razorpay({
-      key_id: this.razorpayKeyId,
-      key_secret: this.razorpayKeySecret,
-    });
-  }
+  ) {}
 
   private get barberService(): BarberService {
     return this.getBarberService();
@@ -69,6 +60,10 @@ export class BookingService {
 
   private get serviceService(): ServiceService {
     return this.getServiceService();
+  }
+
+  private get paymentService(): PaymentService {
+    return this.getPaymentService();
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
@@ -330,13 +325,11 @@ export class BookingService {
       }
     }
 
-    // 10. Create Razorpay order for ₹10
-    const receipt = `bk_${userId.slice(-6)}_${Date.now()}`;
-    const order = await this.razorpay.orders.create({
-      amount: ADVANCE_AMOUNT_PAISE,
-      currency: 'INR',
-      receipt,
-      notes: { purpose: 'BOOKING_ADVANCE', userId, shopId: input.shopId },
+    // 10. Create Razorpay order for ₹10 via PaymentService
+    const { orderId } = await this.paymentService.createBookingAdvanceOrder({
+      userId,
+      shopId: input.shopId,
+      amountRupees: ADVANCE_AMOUNT_RUPEES,
     });
 
     // 11. Build service data for DB and response
@@ -390,7 +383,7 @@ export class BookingService {
       advancePaid: ADVANCE_AMOUNT_RUPEES,
       remainingAmount,
       paymentMethod: input.paymentMethod,
-      razorpayOrderId: order.id,
+      razorpayOrderId: orderId,
       status: 'PENDING_PAYMENT',
     });
 
@@ -434,7 +427,7 @@ export class BookingService {
       },
       payment:
         input.paymentMethod === 'RAZORPAY'
-          ? { orderId: order.id, amount: ADVANCE_AMOUNT_PAISE, currency: 'INR' }
+          ? { orderId: orderId, amount: ADVANCE_AMOUNT_PAISE, currency: 'INR' }
           : undefined,
     };
   }
@@ -461,20 +454,11 @@ export class BookingService {
       throw new ValidationError('Payment order ID mismatch.');
     }
 
-    const expectedSignature = crypto
-      .createHmac('sha256', this.razorpayKeySecret)
-      .update(`${input.razorpayOrderId}|${input.razorpayPaymentId}`)
-      .digest('hex');
-
-    if (expectedSignature !== input.razorpaySignature) {
-      this.logger.warn({
-        action: 'BOOKING_PAYMENT_SIGNATURE_MISMATCH',
-        module: 'booking',
-        bookingId,
-        orderId: input.razorpayOrderId,
-      });
-      throw new ValidationError('Payment verification failed. Invalid signature.');
-    }
+    await this.paymentService.verifyBookingPayment({
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      signature: input.razorpaySignature,
+    });
 
     const confirmed = await this.bookingRepository.updateBookingConfirmed(
       bookingId,
@@ -558,6 +542,11 @@ export class BookingService {
       const slotEnd = slotStart + totalDurationMinutes;
       const timeStr = this.fromMinutes(slotStart);
 
+      if (bookedRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
+        slots.push({ time: timeStr, available: false, reason: 'booked' });
+        continue;
+      }
+
       if (slotStart < earliestBookable) {
         slots.push({ time: timeStr, available: false, reason: 'passed' });
         continue;
@@ -565,11 +554,6 @@ export class BookingService {
 
       if (breakRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
         slots.push({ time: timeStr, available: false, reason: 'break' });
-        continue;
-      }
-
-      if (bookedRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
-        slots.push({ time: timeStr, available: false, reason: 'booked' });
         continue;
       }
 
