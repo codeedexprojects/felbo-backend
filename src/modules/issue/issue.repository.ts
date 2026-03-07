@@ -20,11 +20,14 @@ export class IssueRepository {
     type: CreateIssueInput['type'];
     description: string;
     userLocation: { lat: number; lng: number };
-    photoUrl?: string;
     razorpayPaymentId?: string;
   }): Promise<IBookingIssue> {
     const issue = await BookingIssueModel.create(data);
     return issue;
+  }
+
+  existsByBookingId(bookingId: string): Promise<boolean> {
+    return BookingIssueModel.exists({ bookingId }).then((doc) => doc !== null);
   }
 
   async findAll(filter: ListIssuesFilter): Promise<{ issues: IBookingIssue[]; total: number }> {

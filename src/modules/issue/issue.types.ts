@@ -78,7 +78,6 @@ export interface CreateIssueInput {
   type: IssueType;
   description: string;
   userLocation: { lat: number; lng: number };
-  photoUrl?: string;
   razorpayPaymentId?: string;
 }
 export type RefundStatus = 'NONE' | 'PENDING' | 'ISSUED' | 'FAILED';
@@ -97,7 +96,6 @@ export interface IssueDetailDTO {
   refundId: string | null;
   razorpayPaymentId: string | null;
   userLocation: { lat: number; lng: number } | null;
-  photoUrl: string | null;
   reviewedBy: string | null;
   adminNote: string | null;
   createdAt: Date;
