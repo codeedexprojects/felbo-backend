@@ -4,7 +4,6 @@ import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
 import { CategoryModel } from '../category/category.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
-import { DEFAULT_MAX_DISTANCE_METERS } from '../../shared/constants/index';
 
 export interface NearbyShopResult {
   shop: IShop;
@@ -175,6 +174,7 @@ export default class ShopRepository {
   async findRecommended(
     longitude: number,
     latitude: number,
+    maxDistance: number,
     shopTypes: string[] | null,
     skip: number,
     limit: number,
@@ -193,7 +193,7 @@ export default class ShopRepository {
         $geoNear: {
           near: { type: 'Point', coordinates: [longitude, latitude] },
           distanceField: 'distance',
-          maxDistance: DEFAULT_MAX_DISTANCE_METERS,
+          maxDistance,
           query: matchStage,
           spherical: true,
         },

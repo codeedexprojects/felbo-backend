@@ -4,6 +4,7 @@ import { BookingController } from './booking.controller';
 import { barberService } from '../barber/barber.container';
 import { availabilityService } from '../barberAvailability/barberAvailability.container';
 import { shopService } from '../shop/shop.container';
+import { configService } from '../config/config.container';
 import { logger } from '../../shared/logger/logger';
 
 const bookingRepository = new BookingRepository();
@@ -13,6 +14,7 @@ const bookingService = new BookingService(
   () => barberService,
   () => availabilityService,
   () => shopService,
+  configService,
   logger,
 );
 

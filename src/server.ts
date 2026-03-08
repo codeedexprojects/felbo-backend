@@ -4,11 +4,13 @@ import { logger } from './shared/logger/logger';
 import { connectMongo } from './shared/database/mongo';
 import { connectRedis } from './shared/redis/redis';
 import { uploadService } from './modules/upload/upload.container';
+import { configService } from './modules/config/config.container';
 import { SEVEN_DAYS_MS } from './shared/constants';
 
 async function bootstrap(): Promise<void> {
   await connectMongo();
   await connectRedis();
+  await configService.initialize();
 
   app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} [${config.nodeEnv}]`);
