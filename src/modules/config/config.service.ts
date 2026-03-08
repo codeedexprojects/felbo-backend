@@ -18,13 +18,11 @@ export class ConfigService {
     await this.configRepository.upsertMany(DEFAULT_CONFIGS);
     const configs = await this.configRepository.findAll();
     for (const config of configs) {
-      try {
-        await this.getRedis().set(`${REDIS_KEY_PREFIX}${config.key}`, config.value, {
-          EX: REDIS_TTL,
-        });
-      } catch (err) {
-        this.logger.warn('Redis sync failed during initialization', { key: config.key, err });
-      }
+      await this.getRedis()
+        .set(`${REDIS_KEY_PREFIX}${config.key}`, config.value, { EX: REDIS_TTL })
+        .catch((err) =>
+          this.logger.warn('Redis sync failed during initialization', { key: config.key, err }),
+        );
     }
     this.logger.info('System config initialised', { count: configs.length });
   }
@@ -55,11 +53,9 @@ export class ConfigService {
       throw new NotFoundError(`Config key '${key}' could not be updated.`);
     }
 
-    try {
-      await this.getRedis().set(`${REDIS_KEY_PREFIX}${key}`, value, { EX: REDIS_TTL });
-    } catch (err) {
-      this.logger.warn('Redis sync failed after config update', { key, err });
-    }
+    await this.getRedis()
+      .set(`${REDIS_KEY_PREFIX}${key}`, value, { EX: REDIS_TTL })
+      .catch((err) => this.logger.warn('Redis sync failed after config update', { key, err }));
 
     this.logger.info('System config updated', { key, value, adminId });
 
