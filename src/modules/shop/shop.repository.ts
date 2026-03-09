@@ -1,10 +1,8 @@
-import { PipelineStage } from 'mongoose';
+import mongoose, { PipelineStage } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
-import { CategoryModel } from '../category/category.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
-import { DEFAULT_MAX_DISTANCE_METERS } from '../../shared/constants/index';
 
 export interface NearbyShopResult {
   shop: IShop;
@@ -44,6 +42,16 @@ export default class ShopRepository {
 
   findAllByVendorId(vendorId: string): Promise<IShop[]> {
     return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
+  }
+
+  async findIdsByVendorIds(
+    vendorIds: mongoose.Types.ObjectId[],
+  ): Promise<mongoose.Types.ObjectId[]> {
+    const shops = await ShopModel.find({ vendorId: { $in: vendorIds }, status: { $ne: 'DELETED' } })
+      .select('_id')
+      .lean<{ _id: mongoose.Types.ObjectId }[]>()
+      .exec();
+    return shops.map((s) => s._id);
   }
 
   updateById(
@@ -175,6 +183,7 @@ export default class ShopRepository {
   async findRecommended(
     longitude: number,
     latitude: number,
+    maxDistance: number,
     shopTypes: string[] | null,
     skip: number,
     limit: number,
@@ -193,7 +202,7 @@ export default class ShopRepository {
         $geoNear: {
           near: { type: 'Point', coordinates: [longitude, latitude] },
           distanceField: 'distance',
-          maxDistance: DEFAULT_MAX_DISTANCE_METERS,
+          maxDistance,
           query: matchStage,
           spherical: true,
         },
@@ -222,7 +231,6 @@ export default class ShopRepository {
     filter: {
       shopType?: string;
       categoryId?: string;
-      categoryName?: string;
       latitude?: number;
       longitude?: number;
       maxDistanceMeters?: number;
@@ -247,30 +255,6 @@ export default class ShopRepository {
         isActive: true,
       }).exec();
       categoryShopIds = ids.map(String);
-    }
-
-    if (filter.categoryName) {
-      const escapedName = filter.categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const categories = await CategoryModel.find({
-        name: { $regex: escapedName, $options: 'i' },
-        isActive: true,
-      })
-        .select('_id')
-        .lean()
-        .exec();
-      const ids = (
-        await ServiceModel.distinct('shopId', {
-          categoryId: { $in: categories.map((c) => c._id) },
-          isActive: true,
-        }).exec()
-      ).map(String);
-
-      if (categoryShopIds === null) {
-        categoryShopIds = ids;
-      } else {
-        const idSet = new Set(ids);
-        categoryShopIds = categoryShopIds.filter((id) => idSet.has(id));
-      }
     }
 
     if (categoryShopIds !== null) {

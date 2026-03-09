@@ -242,6 +242,15 @@ export class BarberRepository {
     return BarberServiceModel.findOne({ barberId, serviceId }).lean<IBarberService>().exec();
   }
 
+  findBarberServicesByServiceIds(
+    barberId: string,
+    serviceIds: string[],
+  ): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ barberId, serviceId: { $in: serviceIds }, isActive: true })
+      .lean<IBarberService[]>()
+      .exec();
+  }
+
   async removeBarberService(barberId: string, serviceId: string): Promise<void> {
     await BarberServiceModel.deleteOne({ barberId, serviceId }).exec();
   }

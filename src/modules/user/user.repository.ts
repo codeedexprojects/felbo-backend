@@ -43,7 +43,7 @@ export default class UserRepository {
       name?: string;
       email?: string;
       profileUrl?: string;
-      gender?: 'male' | 'female' | 'other';
+      gender?: 'MALE' | 'FEMALE' | 'OTHER';
     },
     session?: ClientSession,
   ): Promise<IUser | null> {

@@ -87,7 +87,7 @@ const bookingSchema = new Schema<IBooking>(
     totalDurationMinutes: { type: Number, required: true },
     services: { type: [bookingServiceSubSchema], required: true },
     totalServiceAmount: { type: Number, required: true },
-    advancePaid: { type: Number, required: true, default: 10 },
+    advancePaid: { type: Number, required: true },
     remainingAmount: { type: Number, required: true },
     paymentId: { type: String },
     status: {

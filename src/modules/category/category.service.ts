@@ -7,7 +7,7 @@ import {
   CategoryDto,
   ListUserCategoriesResponse,
 } from './category.types';
-import { ConflictError, NotFoundError } from '../../shared/errors';
+import { ConflictError, NotFoundError } from '../../shared/errors/index';
 
 export class CategoryService {
   constructor(
