@@ -78,7 +78,7 @@ export default class UserService {
 
   async sendOtp(input: SendOtpInput): Promise<SendOtpResponse> {
     const phoneWithCode = `91${input.phone}`;
-    const result = await this.otpService.sendOtp(phoneWithCode, 'USER');
+    const result = await this.otpService.sendOtp(phoneWithCode);
 
     await this.otpSessionService.storeSession(result.sessionId, input.phone);
 

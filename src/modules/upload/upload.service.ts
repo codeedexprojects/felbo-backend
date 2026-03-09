@@ -16,8 +16,8 @@ import {
   CLEANUP_AGE_HOURS,
   S3_DELETE_BATCH_SIZE,
 } from './upload.constants';
-import { withRetry, isS3ClientError, chunkArray } from '@shared/utils/retry';
-import { NotFoundError } from '@shared/errors';
+import { withRetry, isS3ClientError, chunkArray } from '../../shared/utils/retry';
+import { NotFoundError } from '../../shared/errors';
 
 export default class UploadService {
   private readonly s3: S3Client;
