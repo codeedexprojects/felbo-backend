@@ -24,7 +24,7 @@ export const updateProfileSchema = z.object({
   email: z.email('Enter valid email').optional().or(z.literal('')),
   profileUrl: z.url('Enter valid profile URL').optional(),
   gender: z
-    .enum(['male', 'female', 'other'], { error: 'Gender must be male, female, or other' })
+    .enum(['MALE', 'FEMALE', 'OTHER'], { error: 'Gender must be MALE, FEMALE, or OTHER' })
     .optional(),
 });
 

@@ -78,10 +78,9 @@ export const recommendedShopsSchema = z.object({
 });
 
 export const searchShopsSchema = z.object({
-  query: z.string().min(1).optional(),
+  query: z.string().optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
   categoryId: mongoIdSchema.optional(),
-  categoryName: z.string().min(1).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   maxDistanceMeters: z.coerce.number().positive().optional(),

@@ -444,7 +444,7 @@ export default class ShopService {
     const gender = user?.gender ?? null;
 
     const shopTypes =
-      gender === 'male' ? ['MENS', 'UNISEX'] : gender === 'female' ? ['WOMENS', 'UNISEX'] : null;
+      gender === 'MALE' ? ['MENS', 'UNISEX'] : gender === 'FEMALE' ? ['WOMENS', 'UNISEX'] : null;
 
     const maxDistance = await this.configService.getValueAsNumber(
       CONFIG_KEYS.RECOMMENDED_SHOPS_MAX_DISTANCE_METERS,
@@ -498,7 +498,6 @@ export default class ShopService {
       {
         shopType: input.shopType,
         categoryId: input.categoryId,
-        categoryName: input.categoryName,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
