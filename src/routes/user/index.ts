@@ -7,6 +7,7 @@ import profileRoutes from './profile.routes';
 import issueRoutes from './issue.routes';
 import fcmRoutes from './fcm.routes';
 import homeRoutes from './home.routes';
+import shopRoutes from './shop.routes';
 import bookingRoutes from './booking.routes';
 
 const router = Router();
@@ -20,6 +21,7 @@ router.use('/profile', profileRoutes);
 router.use('/issues', issueRoutes);
 router.use('/fcm-token', fcmRoutes);
 router.use('/home', homeRoutes);
+router.use('/shops', shopRoutes);
 router.use('/bookings', bookingRoutes);
 
 export default router;

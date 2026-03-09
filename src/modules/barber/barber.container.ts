@@ -9,6 +9,7 @@ import {
   DevBrevoEmailOtpService,
 } from '../../shared/services/brevo-email-otp.service';
 import { JwtService } from '../../shared/services/jwt.service';
+import { configService } from '../config/config.container';
 
 const barberRepository = new BarberRepository();
 
@@ -29,6 +30,7 @@ const barberService: BarberService = new BarberService(
   logger,
   emailOtpService,
   jwtService,
+  configService,
 );
 
 const barberController = new BarberController(barberService);

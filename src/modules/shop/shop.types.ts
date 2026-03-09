@@ -125,7 +125,6 @@ export interface SearchShopsInput {
   query?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
   categoryId?: string;
-  categoryName?: string;
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;
@@ -260,17 +259,6 @@ export interface AdminServiceSummaryDto {
 
 // Public shop details DTOs (used by the user-facing shop details page)
 
-export interface PublicServiceDto {
-  id: string;
-  categoryId: string;
-  name: string;
-  basePrice: number;
-  minDuration: number;
-  maxDuration: number;
-  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
-  description?: string;
-}
-
 export interface PublicBarberDto {
   id: string;
   name: string;
@@ -288,20 +276,14 @@ export interface ShopDetailsDto {
   description: string;
   shopType: 'MENS' | 'WOMENS' | 'UNISEX';
   address: ShopAddress;
-  distance?: number;
+  location: ShopLocation;
   rating: {
     average: number;
     count: number;
   };
   workingHours?: WorkingHours;
   photos: string[];
-  services: PublicServiceDto[];
   barbers: PublicBarberDto[];
-}
-
-export interface GetShopDetailsOptions {
-  latitude?: number;
-  longitude?: number;
 }
 
 export interface AdminShopSearchInput {

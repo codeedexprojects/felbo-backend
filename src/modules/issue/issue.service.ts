@@ -13,8 +13,9 @@ import { NotFoundError, ConflictError, ValidationError } from '../../shared/erro
 import VendorService from '../vendor/vendor.service';
 import ShopService from '../shop/shop.service';
 import PaymentService from '../payment/payment.service';
-
-const MAX_DISTANCE_METERS = 500;
+import { BookingService } from '../booking/booking.service';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6_371_000;
@@ -33,6 +34,8 @@ export class IssueService {
     private readonly vendorService: VendorService,
     private readonly shopService: ShopService,
     private readonly paymentService: PaymentService,
+    private readonly bookingService: BookingService,
+    private readonly configService: ConfigService,
   ) {}
 
   async listIssues(filter: ListIssuesFilter): Promise<ListIssuesResponse> {
@@ -52,6 +55,15 @@ export class IssueService {
   }
 
   async createIssue(input: CreateIssueInput, userId: string): Promise<IssueDetailDTO> {
+    // Verify booking exists, belongs to this user, and matches the shop
+    await this.bookingService.verifyBookingForIssue(input.bookingId, userId, input.shopId);
+
+    // Prevent duplicate issues for the same booking
+    const alreadyExists = await this.issueRepository.existsByBookingId(input.bookingId);
+    if (alreadyExists) {
+      throw new ConflictError('An issue has already been raised for this booking.');
+    }
+
     const shop = await this.shopService.getShopById(input.shopId);
 
     const [shopLng, shopLat] = shop.location.coordinates;
@@ -62,9 +74,12 @@ export class IssueService {
       shopLng,
     );
 
-    if (distance > MAX_DISTANCE_METERS) {
+    const issueMaxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.ISSUE_MAX_DISTANCE_METERS,
+    );
+    if (distance > issueMaxDistance) {
       throw new ValidationError(
-        `You must be within 500m of the shop to raise an issue. Your distance: ${Math.round(distance)}m.`,
+        `You must be within ${issueMaxDistance}m of the shop to raise an issue. Your distance: ${Math.round(distance)}m.`,
       );
     }
 
@@ -76,7 +91,6 @@ export class IssueService {
       type: input.type,
       description: input.description,
       userLocation: input.userLocation,
-      photoUrl: input.photoUrl,
       razorpayPaymentId: input.razorpayPaymentId,
     });
 
@@ -93,7 +107,15 @@ export class IssueService {
       throw new ConflictError('Refund has already been processed.');
     if (!issue.razorpayPaymentId) throw new ValidationError('No payment linked to this issue.');
 
-    const refundId = await this.paymentService.refundIssuePayment(issue.razorpayPaymentId);
+    const advancePaidRupees = await this.bookingService.getAdvancePaidForBooking(
+      issue.bookingId.toString(),
+    );
+    if (!advancePaidRupees)
+      throw new ConflictError('No advance payment to refund for this booking.');
+    const refundId = await this.paymentService.refundIssuePayment(
+      issue.razorpayPaymentId,
+      advancePaidRupees * 100,
+    );
     await this.issueRepository.updateRefundStatus(issueId, 'ISSUED', refundId);
   }
 
@@ -158,7 +180,6 @@ export class IssueService {
       refundId: issue.refundId ?? null,
       razorpayPaymentId: issue.razorpayPaymentId ?? null,
       userLocation: issue.userLocation ?? null,
-      photoUrl: issue.photoUrl ?? null,
       reviewedBy: issue.reviewedBy?.toString() ?? null,
       adminNote: issue.adminNote ?? null,
       createdAt: issue.createdAt,
@@ -194,6 +215,27 @@ export class IssueService {
       description: i.description,
       status: i.status,
       createdAt: i.createdAt,
+    }));
+  }
+
+  async getRecentIssuesForDashboard(limit: number): Promise<
+    {
+      id: string;
+      userName: string;
+      userProfileUrl: string | null;
+      reason: string;
+      status: 'OPEN' | 'RESOLVED' | 'REJECTED';
+      createdAt: Date;
+    }[]
+  > {
+    const issues = await this.issueRepository.findRecentWithUserPopulated(limit);
+    return issues.map((issue) => ({
+      id: (issue._id as { toString(): string }).toString(),
+      userName: issue.userId?.name ?? 'Unknown',
+      userProfileUrl: issue.userId?.profileUrl ?? null,
+      reason: issue.description,
+      status: issue.status,
+      createdAt: issue.createdAt,
     }));
   }
 }

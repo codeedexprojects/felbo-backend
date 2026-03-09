@@ -4,6 +4,7 @@ import { BookingController } from './booking.controller';
 import { barberService } from '../barber/barber.container';
 import { availabilityService } from '../barberAvailability/barberAvailability.container';
 import { shopService } from '../shop/shop.container';
+import { configService } from '../config/config.container';
 import { userService } from '../user/user.container';
 import { serviceService } from '../service/service.container';
 import { paymentService } from '../payment/payment.container';
@@ -17,6 +18,7 @@ const bookingService = new BookingService(
   () => barberService,
   () => availabilityService,
   () => shopService,
+  configService,
   () => userService,
   () => serviceService,
   () => paymentService,
@@ -25,4 +27,4 @@ const bookingService = new BookingService(
 
 const bookingController = new BookingController(bookingService);
 
-export { bookingController };
+export { bookingController, bookingService };

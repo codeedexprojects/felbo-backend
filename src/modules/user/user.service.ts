@@ -17,6 +17,7 @@ import {
   AppError,
   UnauthorizedError,
   ValidationError,
+  ConflictError,
 } from '../../shared/errors/index';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -237,5 +238,38 @@ export default class UserService {
 
   async unregisterFcmToken(userId: string, token: string): Promise<void> {
     await this.userRepository.removeFcmToken(userId, token);
+  }
+
+  async getUserStatusCounts(): Promise<{ total: number; active: number; blocked: number }> {
+    return this.userRepository.getStatusCounts();
+  }
+
+  async findAllUsers(filter: {
+    search?: string;
+    status?: 'ACTIVE' | 'BLOCKED';
+    page: number;
+    limit: number;
+  }): Promise<{ users: IUser[]; total: number }> {
+    return this.userRepository.findAll(filter);
+  }
+
+  async findUserForAdmin(userId: string): Promise<IUser> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    return user;
+  }
+
+  async blockUser(userId: string, reason: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
+    await this.userRepository.blockById(userId, reason);
+  }
+
+  async unblockUser(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
+    await this.userRepository.unblockById(userId);
   }
 }

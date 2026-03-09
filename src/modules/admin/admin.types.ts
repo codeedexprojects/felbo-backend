@@ -69,6 +69,36 @@ export interface UserIssueDto {
   createdAt: Date;
 }
 
+// ─── Dashboard ──────────────────────────────────────────────────────────────
+
+export interface DashboardRecentIssueDto {
+  id: string;
+  userName: string;
+  userProfileUrl: string | null;
+  reason: string;
+  status: 'OPEN' | 'RESOLVED' | 'REJECTED';
+  createdAt: Date;
+}
+
+export interface SuperAdminDashboardDto {
+  totalUsers: number;
+  totalVendors: number;
+  totalBookings: number;
+  todaysBookings: number;
+  todaysRevenue: number;
+  pendingVerifications: number;
+  recentIssues: DashboardRecentIssueDto[];
+}
+
+export interface AssociationAdminDashboardDto {
+  myVendorsCount: number;
+  myVendorsBookings: {
+    today: number;
+    total: number;
+  };
+  myVendorsRevenue: number;
+}
+
 export interface UserDetailDto {
   id: string;
   name: string;

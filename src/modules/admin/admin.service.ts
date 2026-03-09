@@ -9,19 +9,18 @@ import {
   UserDetailDto,
   UserListItemDto,
   UserIssueDto,
+  SuperAdminDashboardDto,
+  AssociationAdminDashboardDto,
 } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import {
-  UnauthorizedError,
-  ForbiddenError,
-  NotFoundError,
-  ConflictError,
-} from '../../shared/errors/index';
+import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
 import { IUser } from '../user/user.model';
-import UserRepository from '../user/user.repository';
+import UserService from '../user/user.service';
 import VendorService from '../vendor/vendor.service';
 import { IssueService } from '../issue/issue.service';
+import { BookingService } from '../booking/booking.service';
+import ShopService from '../shop/shop.service';
 import {
   ListVendorsFilter,
   ListVendorsResponse,
@@ -36,10 +35,48 @@ export class AdminService {
     private readonly adminRepository: AdminRepository,
     private readonly jwtService: JwtService,
     private readonly vendorService: VendorService,
-    private readonly userRepository: UserRepository,
+    private readonly userService: UserService,
     private readonly issueService: IssueService,
     private readonly logger: Logger,
+    private readonly bookingService: BookingService,
+    private readonly shopService: ShopService,
   ) {}
+
+  async getSuperAdminDashboard(): Promise<SuperAdminDashboardDto> {
+    const [userCounts, vendorStats, bookingStats, recentIssues] = await Promise.all([
+      this.userService.getUserStatusCounts(),
+      this.vendorService.getVendorDashboardStats(),
+      this.bookingService.getGlobalDashboardStats(),
+      this.issueService.getRecentIssuesForDashboard(5),
+    ]);
+
+    return {
+      totalUsers: userCounts.total,
+      totalVendors: vendorStats.total,
+      totalBookings: bookingStats.totalBookings,
+      todaysBookings: bookingStats.todaysBookings,
+      todaysRevenue: bookingStats.todaysRevenue,
+      pendingVerifications: vendorStats.pendingVerifications,
+      recentIssues,
+    };
+  }
+
+  async getAssociationAdminDashboard(): Promise<AssociationAdminDashboardDto> {
+    const vendorIds = await this.vendorService.getAssociationVendorIds();
+
+    const shopIds = await this.shopService.getShopIdsByVendorIds(vendorIds);
+
+    const bookingStats = await this.bookingService.getStatsByShopIds(shopIds);
+
+    return {
+      myVendorsCount: vendorIds.length,
+      myVendorsBookings: {
+        today: bookingStats.todaysBookings,
+        total: bookingStats.totalBookings,
+      },
+      myVendorsRevenue: bookingStats.totalBookings * 2,
+    };
+  }
 
   async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {
     return this.vendorService.getVendorRequestDetailForAdmin(vendorId);
@@ -184,8 +221,8 @@ export class AdminService {
 
   async listUsers(filter: ListUsersFilter): Promise<ListUsersResponse> {
     const [{ users, total }, counts] = await Promise.all([
-      this.userRepository.findAll(filter),
-      this.userRepository.getStatusCounts(),
+      this.userService.findAllUsers(filter),
+      this.userService.getUserStatusCounts(),
     ]);
 
     return {
@@ -201,8 +238,7 @@ export class AdminService {
   }
 
   async getUserDetail(userId: string): Promise<UserDetailDto> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    const user = await this.userService.findUserForAdmin(userId);
 
     const issuesReported: UserIssueDto[] = await this.issueService.getRecentIssuesByUserId(userId);
 
@@ -223,17 +259,11 @@ export class AdminService {
   }
 
   async blockUser(userId: string, reason: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
-    if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
-    await this.userRepository.blockById(userId, reason);
+    await this.userService.blockUser(userId, reason);
   }
 
   async unblockUser(userId: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
-    if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
-    await this.userRepository.unblockById(userId);
+    await this.userService.unblockUser(userId);
   }
 
   private mapUserToListItem(user: IUser, slNo: number): UserListItemDto {

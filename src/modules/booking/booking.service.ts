@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import PaymentService from '../payment/payment.service';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
@@ -11,7 +12,7 @@ import {
   ConfirmBookingInput,
   ConfirmBookingResponse,
 } from './booking.types';
-import { NotFoundError, ValidationError } from '../../shared/errors';
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
@@ -19,9 +20,10 @@ import ShopService from '../shop/shop.service';
 import UserService from '../user/user.service';
 import { ServiceService } from '../service/service.service';
 import { IWorkingHours } from '../shop/shop.model';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
-// System config defaults — replace with configService when available
-const SLOT_INTERVAL_MINUTES = 15;
+// const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
 const APPOINTMENT_BUFFER_MINUTES = 5;
 const SLOT_LOCK_MINUTES = 5;
@@ -36,6 +38,7 @@ export class BookingService {
     private readonly getBarberService: () => BarberService,
     private readonly getAvailabilityService: () => BarberAvailabilityService,
     private readonly getShopService: () => ShopService,
+    private readonly configService: ConfigService,
     private readonly getUserService: () => UserService,
     private readonly getServiceService: () => ServiceService,
     private readonly getPaymentService: () => PaymentService,
@@ -67,6 +70,13 @@ export class BookingService {
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
+    const [slotIntervalMinutes, minBufferMinutes, appointmentBufferMinutes] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.SLOT_INTERVAL_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.MIN_BOOKING_BUFFER_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.APPOINTMENT_BUFFER_MINUTES),
+    ]);
+
+    // Validate date is today (same-day only)
     const requestedDate = parseDateAsIst(input.date);
     const todayUtc = getTodayInIst();
 
@@ -84,7 +94,7 @@ export class BookingService {
       throw new ValidationError('Barber does not belong to this shop.');
     }
     if (!barber.isAvailable) {
-      return this.emptyResponse(input, barber.name, 0);
+      return this.emptyResponse(input, barber.name, 0, slotIntervalMinutes);
     }
 
     const barberServiceLinks = await this.barberService.getBarberServicesByBarberId(input.barberId);
@@ -92,8 +102,9 @@ export class BookingService {
       barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
     );
 
+    const uniqueServiceIds = [...new Set(input.serviceIds)];
     let totalDurationMinutes = 0;
-    for (const serviceId of input.serviceIds) {
+    for (const serviceId of uniqueServiceIds) {
       const duration = barberServiceMap.get(serviceId);
       if (duration === undefined) {
         throw new ValidationError('One or more services are not offered by this barber.');
@@ -106,7 +117,7 @@ export class BookingService {
 
     // Step 2: Stop if not working
     if (!availability || !availability.isWorking || !availability.workingHours) {
-      return this.emptyResponse(input, barber.name, totalDurationMinutes);
+      return this.emptyResponse(input, barber.name, totalDurationMinutes, slotIntervalMinutes);
     }
 
     const workingHours = availability.workingHours;
@@ -133,7 +144,8 @@ export class BookingService {
     // Step 6: Collect all blocked ranges
     const bookedRanges: BlockedRange[] = confirmedBookings.map((b) => ({
       startMinutes: this.toMinutes(b.startTime),
-      endMinutes: this.toMinutes(b.endTime) + APPOINTMENT_BUFFER_MINUTES,
+      // Extend by appointment buffer to enforce gap between appointments
+      endMinutes: this.toMinutes(b.endTime) + appointmentBufferMinutes,
     }));
 
     const blockedRanges: BlockedRange[] = slotBlocks.map((b) => ({
@@ -155,13 +167,14 @@ export class BookingService {
     const workEnd = this.toMinutes(workingHours.end);
 
     const nowMinutesUtc = getCurrentIstMinutes();
-    const earliestBookable = nowMinutesUtc + MIN_BUFFER_MINUTES;
+    const earliestBookable = nowMinutesUtc + minBufferMinutes;
 
     const slots = this.generateSlots({
       workStart,
       workEnd,
       totalDurationMinutes,
       earliestBookable,
+      slotIntervalMinutes,
       breakRanges,
       bookedRanges,
       blockedRanges,
@@ -184,10 +197,43 @@ export class BookingService {
       barberId: input.barberId,
       barberName: barber.name,
       totalDurationMinutes,
-      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      slotIntervalMinutes,
       workingHours,
       slots,
     };
+  }
+
+  async getAdvancePaidForBooking(bookingId: string): Promise<number> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    return booking.advancePaid;
+  }
+
+  async getGlobalDashboardStats(): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    todaysRevenue: number;
+  }> {
+    return this.bookingRepository.getGlobalDashboardStats();
+  }
+
+  async getStatsByShopIds(shopIds: Types.ObjectId[]): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    totalRevenue: number;
+  }> {
+    return this.bookingRepository.getStatsByShopIds(shopIds);
+  }
+
+  async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    if (booking.userId.toString() !== userId)
+      throw new ForbiddenError('This booking does not belong to you.');
+    if (booking.shopId.toString() !== shopId)
+      throw new ValidationError('Booking does not match the provided shop.');
+    if (booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR')
+      throw new ConflictError('Cannot raise an issue for a cancelled booking.');
   }
 
   async initiateBooking(
@@ -516,6 +562,7 @@ export class BookingService {
     workEnd: number;
     totalDurationMinutes: number;
     earliestBookable: number;
+    slotIntervalMinutes: number;
     breakRanges: BlockedRange[];
     bookedRanges: BlockedRange[];
     blockedRanges: BlockedRange[];
@@ -526,6 +573,7 @@ export class BookingService {
       workEnd,
       totalDurationMinutes,
       earliestBookable,
+      slotIntervalMinutes,
       breakRanges,
       bookedRanges,
       blockedRanges,
@@ -537,7 +585,7 @@ export class BookingService {
     for (
       let slotStart = workStart;
       slotStart + totalDurationMinutes <= workEnd;
-      slotStart += SLOT_INTERVAL_MINUTES
+      slotStart += slotIntervalMinutes
     ) {
       const slotEnd = slotStart + totalDurationMinutes;
       const timeStr = this.fromMinutes(slotStart);
@@ -577,6 +625,7 @@ export class BookingService {
     input: GetSlotsInput,
     barberName: string,
     totalDurationMinutes: number,
+    slotIntervalMinutes: number,
   ): GetSlotsResponse {
     return {
       shopId: input.shopId,
@@ -584,7 +633,7 @@ export class BookingService {
       barberId: input.barberId,
       barberName,
       totalDurationMinutes,
-      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      slotIntervalMinutes,
       workingHours: { start: '00:00', end: '00:00' },
       slots: [],
     };

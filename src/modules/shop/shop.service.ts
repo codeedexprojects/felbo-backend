@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
@@ -23,16 +24,15 @@ import {
   BarberServiceDto,
   AdminBarberSummaryDto,
   AdminServiceSummaryDto,
-  PublicServiceDto,
   PublicBarberDto,
   ShopDetailsDto,
-  GetShopDetailsOptions,
   OnboardingStatus,
   AdminShopSearchInput,
   AdminShopSearchResponse,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
-import { DEFAULT_MAX_DISTANCE_METERS, DEFAULT_PAGE_LIMIT } from '../../shared/constants/index';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
@@ -46,6 +46,7 @@ export default class ShopService {
     private readonly getBarberService: () => BarberService,
     private readonly getServiceService: () => ServiceService,
     private readonly getUserService: () => UserService,
+    private readonly configService: ConfigService,
   ) {}
 
   private get barberService(): BarberService {
@@ -301,54 +302,15 @@ export default class ShopService {
   }
 
   // --- Public discovery ---
-  private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6_371_000; // Earth radius in metres
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
-
-  async getShopDetails(shopId: string, options?: GetShopDetailsOptions): Promise<ShopDetailsDto> {
+  async getShopDetails(shopId: string): Promise<ShopDetailsDto> {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
 
-    const [services, barbers, barberServices] = await Promise.all([
-      this.serviceService.getServicesByShopId(shopId),
-      this.barberService.getBarbersByShopId(shopId),
-      this.barberService.getBarberServicesByShopId(shopId),
-    ]);
+    const barbers = await this.barberService.getBarbersByShopId(shopId);
 
-    // Build a map of serviceId → list of barber-specific durations
-    const durationMap = new Map<string, number[]>();
-    for (const bs of barberServices) {
-      const sid = bs.serviceId;
-      const existing = durationMap.get(sid) ?? [];
-      existing.push(bs.durationMinutes);
-      durationMap.set(sid, existing);
-    }
-
-    const publicServices: PublicServiceDto[] = services.map((s) => {
-      const durations = durationMap.get(s.id) ?? [];
-      const minDuration = durations.length > 0 ? Math.min(...durations) : s.baseDurationMinutes;
-      const maxDuration = durations.length > 0 ? Math.max(...durations) : s.baseDurationMinutes;
-      return {
-        id: s.id,
-        categoryId: s.categoryId,
-        name: s.name,
-        basePrice: s.basePrice,
-        minDuration,
-        maxDuration,
-        applicableFor: s.applicableFor,
-        description: s.description,
-      };
-    });
-
-    const publicBarbers: PublicBarberDto[] = barbers.map((b) => ({
+    const publicBarbers: PublicBarberDto[] = barbers.slice(0, 4).map((b) => ({
       id: b.id,
       name: b.name,
       photo: b.photo,
@@ -356,23 +318,16 @@ export default class ShopService {
       isAvailableToday: b.isAvailable,
     }));
 
-    let distance: number | undefined;
-    if (options?.latitude !== undefined && options?.longitude !== undefined) {
-      const [shopLon, shopLat] = shop.location.coordinates;
-      distance = this.computeDistanceMeters(options.latitude, options.longitude, shopLat, shopLon);
-    }
-
     return {
       id: shop._id.toString(),
       name: shop.name,
       description: shop.description,
       shopType: shop.shopType,
       address: shop.address,
-      distance,
+      location: shop.location,
       rating: shop.rating,
       workingHours: shop.workingHours,
       photos: shop.photos,
-      services: publicServices,
       barbers: publicBarbers,
     };
   }
@@ -387,8 +342,10 @@ export default class ShopService {
   }
 
   async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
-    const maxDistance = DEFAULT_MAX_DISTANCE_METERS;
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.SHOP_MAX_DISTANCE_METERS,
+    );
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -432,7 +389,7 @@ export default class ShopService {
   }
 
   async getRecommendedShops(input: RecommendedShopsInput): Promise<NearbyShopsResponse> {
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -440,11 +397,15 @@ export default class ShopService {
     const gender = user?.gender ?? null;
 
     const shopTypes =
-      gender === 'male' ? ['MENS', 'UNISEX'] : gender === 'female' ? ['WOMENS', 'UNISEX'] : null;
+      gender === 'MALE' ? ['MENS', 'UNISEX'] : gender === 'FEMALE' ? ['WOMENS', 'UNISEX'] : null;
 
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.RECOMMENDED_SHOPS_MAX_DISTANCE_METERS,
+    );
     const { results, total } = await this.shopRepository.findRecommended(
       input.longitude,
       input.latitude,
+      maxDistance,
       shopTypes,
       skip,
       limit,
@@ -481,7 +442,7 @@ export default class ShopService {
   }
 
   async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -490,7 +451,6 @@ export default class ShopService {
       {
         shopType: input.shopType,
         categoryId: input.categoryId,
-        categoryName: input.categoryName,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
@@ -572,6 +532,10 @@ export default class ShopService {
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async getShopIdsByVendorIds(vendorIds: Types.ObjectId[]): Promise<Types.ObjectId[]> {
+    return this.shopRepository.findIdsByVendorIds(vendorIds);
   }
 
   async adminSearchShops(input: AdminShopSearchInput): Promise<AdminShopSearchResponse> {

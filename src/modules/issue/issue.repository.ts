@@ -20,11 +20,14 @@ export class IssueRepository {
     type: CreateIssueInput['type'];
     description: string;
     userLocation: { lat: number; lng: number };
-    photoUrl?: string;
     razorpayPaymentId?: string;
   }): Promise<IBookingIssue> {
     const issue = await BookingIssueModel.create(data);
     return issue;
+  }
+
+  existsByBookingId(bookingId: string): Promise<boolean> {
+    return BookingIssueModel.exists({ bookingId }).then((doc) => doc !== null);
   }
 
   async findAll(filter: ListIssuesFilter): Promise<{ issues: IBookingIssue[]; total: number }> {
@@ -44,6 +47,25 @@ export class IssueRepository {
 
   findRecentByUserId(userId: string, limit: number = 20): Promise<IBookingIssue[]> {
     return BookingIssueModel.find({ userId }).sort({ createdAt: -1 }).limit(limit).exec();
+  }
+
+  findRecentWithUserPopulated(limit: number): Promise<
+    (Omit<IBookingIssue, 'userId'> & {
+      userId: { _id: string; name: string; profileUrl: string | null } | null;
+    })[]
+  > {
+    return BookingIssueModel.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate<{
+        userId: { _id: string; name: string; profileUrl: string | null } | null;
+      }>('userId', 'name profileUrl')
+      .lean()
+      .exec() as Promise<
+      (Omit<IBookingIssue, 'userId'> & {
+        userId: { _id: string; name: string; profileUrl: string | null } | null;
+      })[]
+    >;
   }
 
   async getStatusCounts(): Promise<{
