@@ -74,3 +74,18 @@ export interface InitiateBookingResponse {
     currency: string;
   };
 }
+
+export interface ConfirmBookingInput {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface ConfirmBookingResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    paymentId: string;
+  };
+}

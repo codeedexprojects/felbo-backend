@@ -1,4 +1,4 @@
-export type PaymentPurpose = 'VENDOR_REGISTRATION';
+export type PaymentPurpose = 'VENDOR_REGISTRATION' | 'BOOKING_ADVANCE';
 
 export type PaymentStatus = 'CREATED' | 'PAID' | 'FAILED' | 'REFUNDED';
 
@@ -7,7 +7,9 @@ export interface CreatePaymentData {
   purpose: PaymentPurpose;
   amountPaise: number;
   currency: string;
-  phone: string;
+  phone?: string;
+  userId?: string;
+  shopId?: string;
   receipt: string;
   notes?: Record<string, string>;
   status: PaymentStatus;
@@ -23,6 +25,12 @@ export interface RefundEntry {
 
 export interface CreateOrderInput {
   phone: string;
+  amountRupees: number;
+}
+
+export interface CreateBookingPaymentInput {
+  userId: string;
+  shopId: string;
   amountRupees: number;
 }
 

@@ -14,6 +14,12 @@ export class CategoryRepository {
     return CategoryModel.findById(id).exec();
   }
 
+  findByIds(ids: string[]): Promise<ICategory[]> {
+    return CategoryModel.find({ _id: { $in: ids } })
+      .lean()
+      .exec() as unknown as Promise<ICategory[]>;
+  }
+
   findByName(name: string): Promise<ICategory | null> {
     return CategoryModel.findOne({ name }).exec();
   }

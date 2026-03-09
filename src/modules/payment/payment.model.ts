@@ -12,10 +12,12 @@ export interface IPayment extends Document {
   razorpayOrderId: string;
   razorpayPaymentId?: string;
   razorpaySignature?: string;
-  purpose: 'VENDOR_REGISTRATION';
+  purpose: 'VENDOR_REGISTRATION' | 'BOOKING_ADVANCE';
   amountPaise: number;
   currency: string;
-  phone: string;
+  phone?: string;
+  userId?: string;
+  shopId?: string;
   receipt: string;
   notes?: Record<string, string>;
   status: 'CREATED' | 'PAID' | 'FAILED' | 'REFUNDED';
@@ -47,12 +49,14 @@ const paymentSchema = new Schema<IPayment>(
     razorpaySignature: { type: String },
     purpose: {
       type: String,
-      enum: ['VENDOR_REGISTRATION'],
+      enum: ['VENDOR_REGISTRATION', 'BOOKING_ADVANCE'],
       required: true,
     },
     amountPaise: { type: Number, required: true },
     currency: { type: String, required: true, default: 'INR' },
-    phone: { type: String, required: true },
+    phone: { type: String },
+    userId: { type: String },
+    shopId: { type: String },
     receipt: { type: String, required: true },
     notes: { type: Schema.Types.Mixed },
     status: {

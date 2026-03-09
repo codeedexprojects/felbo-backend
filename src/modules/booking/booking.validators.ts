@@ -17,3 +17,25 @@ export const getSlotsQuerySchema = z.object({
     ),
   barberId: mongoIdSchema,
 });
+
+export const initiateBookingBodySchema = z.object({
+  shopId: mongoIdSchema,
+  barberId: mongoIdSchema,
+  serviceIds: z
+    .array(mongoIdSchema)
+    .min(1, 'At least one service is required')
+    .max(10, 'Cannot book more than 10 services at once'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be in HH:mm format'),
+  paymentMethod: z.enum(['RAZORPAY', 'WALLET']),
+});
+
+export const bookingIdParamSchema = z.object({
+  bookingId: mongoIdSchema,
+});
+
+export const confirmBookingBodySchema = z.object({
+  razorpayOrderId: z.string().min(1),
+  razorpayPaymentId: z.string().min(1),
+  razorpaySignature: z.string().min(1),
+});
