@@ -45,6 +45,8 @@ import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { ClientSession } from '../../shared/database/transaction';
 import { generateToken, hashToken } from '../../shared/utils/token';
 import { getRedisClient } from '../../shared/redis/redis';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -63,6 +65,7 @@ export class BarberService {
     private readonly logger: Logger,
     private readonly emailOtpService: BarberEmailOtpService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   setAvailabilityService(svc: {
@@ -604,26 +607,23 @@ export class BarberService {
     barberId: string,
     serviceIds: string[] | undefined,
   ): Promise<number> {
-    const FALLBACK_DURATION_MINUTES = 30;
-
     if (!serviceIds || serviceIds.length === 0) {
-      return FALLBACK_DURATION_MINUTES;
+      return this.configService.getValueAsNumber(CONFIG_KEYS.WALK_IN_FALLBACK_DURATION_MINUTES);
     }
 
-    const allBarberServices = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    const barberServices = await this.barberRepository.findBarberServicesByServiceIds(
+      barberId,
+      serviceIds,
+    );
 
-    const serviceMap = new Map(allBarberServices.map((s) => [s.serviceId.toString(), s]));
-
-    let total = 0;
+    const foundIds = new Set(barberServices.map((s) => s.serviceId.toString()));
     for (const serviceId of serviceIds) {
-      const barberService = serviceMap.get(serviceId);
-      if (!barberService || !barberService.isActive) {
+      if (!foundIds.has(serviceId)) {
         throw new NotFoundError(`Service ${serviceId} is not available for this barber.`);
       }
-      total += barberService.durationMinutes;
     }
 
-    return total;
+    return barberServices.reduce((sum, s) => sum + s.durationMinutes, 0);
   }
 
   async releaseSlotBlock(input: ReleaseSlotBlockInput): Promise<SlotBlockResult> {

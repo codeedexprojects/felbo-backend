@@ -136,11 +136,9 @@ export default class PaymentService {
     });
   }
 
-  async refundIssuePayment(razorpayPaymentId: string): Promise<string> {
-    const ISSUE_REFUND_PAISE = 1000; // ₹10
-
+  async refundIssuePayment(razorpayPaymentId: string, amountPaise: number): Promise<string> {
     const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
-      amount: ISSUE_REFUND_PAISE,
+      amount: amountPaise,
       notes: { reason: 'Issue refund' },
     });
 
@@ -149,7 +147,7 @@ export default class PaymentService {
       module: 'payment',
       paymentId: razorpayPaymentId,
       refundId: refund.id,
-      amountPaise: ISSUE_REFUND_PAISE,
+      amountPaise,
     });
 
     return refund.id;

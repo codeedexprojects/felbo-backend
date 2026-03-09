@@ -4,7 +4,7 @@ export interface UserDto {
   name: string;
   email: string | null;
   profileUrl: string | null;
-  gender: 'male' | 'female' | 'other' | null;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
   walletBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
@@ -18,7 +18,7 @@ export interface UserProfileDto {
   name: string;
   email: string | null;
   profileUrl: string | null;
-  gender: 'male' | 'female' | 'other' | null;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
   walletBalance: number;
 }
 
@@ -26,7 +26,7 @@ export interface UpdateProfileInput {
   name?: string;
   email?: string;
   profileUrl?: string;
-  gender?: 'male' | 'female' | 'other';
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
 export interface SendOtpInput {
@@ -54,7 +54,7 @@ export interface VerifyOtpResponse {
     name: string;
     email: string | null;
     profileUrl: string | null;
-    gender: 'male' | 'female' | 'other' | null;
+    gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
     walletBalance: number;
   };
 }

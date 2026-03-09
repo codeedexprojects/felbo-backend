@@ -6,11 +6,8 @@ import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../share
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
-
-// System config defaults — replace with configService when available
-const SLOT_INTERVAL_MINUTES = 15;
-const MIN_BUFFER_MINUTES = 30;
-const APPOINTMENT_BUFFER_MINUTES = 5;
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 export class BookingService {
   constructor(
@@ -18,6 +15,7 @@ export class BookingService {
     private readonly getBarberService: () => BarberService,
     private readonly getAvailabilityService: () => BarberAvailabilityService,
     private readonly getShopService: () => ShopService,
+    private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {}
 
@@ -34,6 +32,12 @@ export class BookingService {
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
+    const [slotIntervalMinutes, minBufferMinutes, appointmentBufferMinutes] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.SLOT_INTERVAL_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.MIN_BOOKING_BUFFER_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.APPOINTMENT_BUFFER_MINUTES),
+    ]);
+
     // Validate date is today (same-day only)
     const requestedDate = parseDateAsIst(input.date);
     const todayUtc = getTodayInIst();
@@ -54,7 +58,7 @@ export class BookingService {
       throw new ValidationError('Barber does not belong to this shop.');
     }
     if (!barber.isAvailable) {
-      return this.emptyResponse(input, barber.name, 0);
+      return this.emptyResponse(input, barber.name, 0, slotIntervalMinutes);
     }
 
     // Validate services and get durations — Step 6 of calc: gather service durations
@@ -63,8 +67,9 @@ export class BookingService {
       barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
     );
 
+    const uniqueServiceIds = [...new Set(input.serviceIds)];
     let totalDurationMinutes = 0;
-    for (const serviceId of input.serviceIds) {
+    for (const serviceId of uniqueServiceIds) {
       const duration = barberServiceMap.get(serviceId);
       if (duration === undefined) {
         throw new ValidationError('One or more services are not offered by this barber.');
@@ -77,7 +82,7 @@ export class BookingService {
 
     // Step 2: Stop if not working
     if (!availability || !availability.isWorking || !availability.workingHours) {
-      return this.emptyResponse(input, barber.name, totalDurationMinutes);
+      return this.emptyResponse(input, barber.name, totalDurationMinutes, slotIntervalMinutes);
     }
 
     const workingHours = availability.workingHours;
@@ -105,7 +110,7 @@ export class BookingService {
     const bookedRanges: BlockedRange[] = confirmedBookings.map((b) => ({
       startMinutes: this.toMinutes(b.startTime),
       // Extend by appointment buffer to enforce gap between appointments
-      endMinutes: this.toMinutes(b.endTime) + APPOINTMENT_BUFFER_MINUTES,
+      endMinutes: this.toMinutes(b.endTime) + appointmentBufferMinutes,
     }));
 
     const blockedRanges: BlockedRange[] = slotBlocks.map((b) => ({
@@ -128,7 +133,7 @@ export class BookingService {
     const workEnd = this.toMinutes(workingHours.end);
 
     const nowMinutesUtc = getCurrentIstMinutes();
-    const earliestBookable = nowMinutesUtc + MIN_BUFFER_MINUTES;
+    const earliestBookable = nowMinutesUtc + minBufferMinutes;
 
     // Step 9: Build and return slot list
     const slots = this.generateSlots({
@@ -136,6 +141,7 @@ export class BookingService {
       workEnd,
       totalDurationMinutes,
       earliestBookable,
+      slotIntervalMinutes,
       breakRanges,
       bookedRanges,
       blockedRanges,
@@ -158,10 +164,16 @@ export class BookingService {
       barberId: input.barberId,
       barberName: barber.name,
       totalDurationMinutes,
-      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      slotIntervalMinutes,
       workingHours,
       slots,
     };
+  }
+
+  async getAdvancePaidForBooking(bookingId: string): Promise<number> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    return booking.advancePaid;
   }
 
   async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
@@ -180,6 +192,7 @@ export class BookingService {
     workEnd: number;
     totalDurationMinutes: number;
     earliestBookable: number;
+    slotIntervalMinutes: number;
     breakRanges: BlockedRange[];
     bookedRanges: BlockedRange[];
     blockedRanges: BlockedRange[];
@@ -190,6 +203,7 @@ export class BookingService {
       workEnd,
       totalDurationMinutes,
       earliestBookable,
+      slotIntervalMinutes,
       breakRanges,
       bookedRanges,
       blockedRanges,
@@ -201,7 +215,7 @@ export class BookingService {
     for (
       let slotStart = workStart;
       slotStart + totalDurationMinutes <= workEnd;
-      slotStart += SLOT_INTERVAL_MINUTES
+      slotStart += slotIntervalMinutes
     ) {
       const slotEnd = slotStart + totalDurationMinutes;
       const timeStr = this.fromMinutes(slotStart);
@@ -258,6 +272,7 @@ export class BookingService {
     input: GetSlotsInput,
     barberName: string,
     totalDurationMinutes: number,
+    slotIntervalMinutes: number,
   ): GetSlotsResponse {
     return {
       shopId: input.shopId,
@@ -265,7 +280,7 @@ export class BookingService {
       barberId: input.barberId,
       barberName,
       totalDurationMinutes,
-      slotIntervalMinutes: SLOT_INTERVAL_MINUTES,
+      slotIntervalMinutes,
       workingHours: { start: '00:00', end: '00:00' },
       slots: [],
     };

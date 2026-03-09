@@ -125,7 +125,6 @@ export interface SearchShopsInput {
   query?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
   categoryId?: string;
-  categoryName?: string;
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;

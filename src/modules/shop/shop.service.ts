@@ -32,7 +32,8 @@ import {
   AdminShopSearchResponse,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
-import { DEFAULT_MAX_DISTANCE_METERS, DEFAULT_PAGE_LIMIT } from '../../shared/constants/index';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
@@ -46,6 +47,7 @@ export default class ShopService {
     private readonly getBarberService: () => BarberService,
     private readonly getServiceService: () => ServiceService,
     private readonly getUserService: () => UserService,
+    private readonly configService: ConfigService,
   ) {}
 
   private get barberService(): BarberService {
@@ -387,8 +389,10 @@ export default class ShopService {
   }
 
   async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
-    const maxDistance = DEFAULT_MAX_DISTANCE_METERS;
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.SHOP_MAX_DISTANCE_METERS,
+    );
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -432,7 +436,7 @@ export default class ShopService {
   }
 
   async getRecommendedShops(input: RecommendedShopsInput): Promise<NearbyShopsResponse> {
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -440,11 +444,15 @@ export default class ShopService {
     const gender = user?.gender ?? null;
 
     const shopTypes =
-      gender === 'male' ? ['MENS', 'UNISEX'] : gender === 'female' ? ['WOMENS', 'UNISEX'] : null;
+      gender === 'MALE' ? ['MENS', 'UNISEX'] : gender === 'FEMALE' ? ['WOMENS', 'UNISEX'] : null;
 
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.RECOMMENDED_SHOPS_MAX_DISTANCE_METERS,
+    );
     const { results, total } = await this.shopRepository.findRecommended(
       input.longitude,
       input.latitude,
+      maxDistance,
       shopTypes,
       skip,
       limit,
@@ -481,7 +489,7 @@ export default class ShopService {
   }
 
   async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
@@ -490,7 +498,6 @@ export default class ShopService {
       {
         shopType: input.shopType,
         categoryId: input.categoryId,
-        categoryName: input.categoryName,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
