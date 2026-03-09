@@ -17,19 +17,26 @@ export class BookingRepository {
   }> {
     const { start, end } = this.utcDayRange(new Date());
 
-    const [totalBookings, todaysBookings, revenueResult] = await Promise.all([
-      BookingModel.countDocuments().exec(),
-      BookingModel.countDocuments({ createdAt: { $gte: start, $lt: end } }).exec(),
-      BookingModel.aggregate([
-        { $match: { createdAt: { $gte: start, $lt: end } } },
-        { $group: { _id: null, total: { $sum: '$advancePaid' } } },
-      ]).exec(),
-    ]);
+    const [result] = await BookingModel.aggregate([
+      {
+        $facet: {
+          totalBookings: [{ $count: 'count' }],
+          todaysBookings: [
+            { $match: { createdAt: { $gte: start, $lt: end } } },
+            { $count: 'count' },
+          ],
+          todaysRevenue: [
+            { $match: { createdAt: { $gte: start, $lt: end } } },
+            { $group: { _id: null, total: { $sum: '$advancePaid' } } },
+          ],
+        },
+      },
+    ]).exec();
 
     return {
-      totalBookings,
-      todaysBookings,
-      todaysRevenue: (revenueResult[0]?.total as number) ?? 0,
+      totalBookings: result.totalBookings[0]?.count ?? 0,
+      todaysBookings: result.todaysBookings[0]?.count ?? 0,
+      todaysRevenue: result.todaysRevenue[0]?.total ?? 0,
     };
   }
 
@@ -40,22 +47,26 @@ export class BookingRepository {
   }> {
     const { start, end } = this.utcDayRange(new Date());
 
-    const [totalBookings, todaysBookings, revenueResult] = await Promise.all([
-      BookingModel.countDocuments({ shopId: { $in: shopIds } }).exec(),
-      BookingModel.countDocuments({
-        shopId: { $in: shopIds },
-        createdAt: { $gte: start, $lt: end },
-      }).exec(),
-      BookingModel.aggregate([
-        { $match: { shopId: { $in: shopIds } } },
-        { $group: { _id: null, total: { $sum: '$advancePaid' } } },
-      ]).exec(),
-    ]);
+    const result = await BookingModel.aggregate([
+      { $match: { shopId: { $in: shopIds } } },
+      {
+        $facet: {
+          totalBookings: [{ $count: 'count' }],
+          todaysBookings: [
+            { $match: { createdAt: { $gte: start, $lt: end } } },
+            { $count: 'count' },
+          ],
+          totalRevenue: [{ $group: { _id: null, total: { $sum: '$advancePaid' } } }],
+        },
+      },
+    ]).exec();
+
+    const data = result[0];
 
     return {
-      totalBookings,
-      todaysBookings,
-      totalRevenue: (revenueResult[0]?.total as number) ?? 0,
+      totalBookings: data.totalBookings[0]?.count ?? 0,
+      todaysBookings: data.todaysBookings[0]?.count ?? 0,
+      totalRevenue: data.totalRevenue[0]?.total ?? 0,
     };
   }
 

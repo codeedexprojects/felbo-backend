@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { Logger } from 'winston';
 import VendorRepository from './vendor.repository';
 import { IVendor } from './vendor.model';
@@ -740,7 +741,11 @@ export default class VendorService {
     return counts.pending;
   }
 
-  async getAssociationVendorIds(): Promise<import('mongoose').Types.ObjectId[]> {
+  async getVendorDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
+    return this.vendorRepository.getDashboardStats();
+  }
+
+  async getAssociationVendorIds(): Promise<Types.ObjectId[]> {
     return this.vendorRepository.findIdsByRegistrationType('ASSOCIATION');
   }
 }

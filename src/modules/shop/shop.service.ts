@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
@@ -531,6 +532,10 @@ export default class ShopService {
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async getShopIdsByVendorIds(vendorIds: Types.ObjectId[]): Promise<Types.ObjectId[]> {
+    return this.shopRepository.findIdsByVendorIds(vendorIds);
   }
 
   async adminSearchShops(input: AdminShopSearchInput): Promise<AdminShopSearchResponse> {

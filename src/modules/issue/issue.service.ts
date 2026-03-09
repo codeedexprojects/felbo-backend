@@ -217,4 +217,25 @@ export class IssueService {
       createdAt: i.createdAt,
     }));
   }
+
+  async getRecentIssuesForDashboard(limit: number): Promise<
+    {
+      id: string;
+      userName: string;
+      userProfileUrl: string | null;
+      reason: string;
+      status: 'OPEN' | 'RESOLVED' | 'REJECTED';
+      createdAt: Date;
+    }[]
+  > {
+    const issues = await this.issueRepository.findRecentWithUserPopulated(limit);
+    return issues.map((issue) => ({
+      id: (issue._id as { toString(): string }).toString(),
+      userName: issue.userId?.name ?? 'Unknown',
+      userProfileUrl: issue.userId?.profileUrl ?? null,
+      reason: issue.description,
+      status: issue.status,
+      createdAt: issue.createdAt,
+    }));
+  }
 }

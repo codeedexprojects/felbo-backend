@@ -116,6 +116,25 @@ export default class VendorRepository {
     return { pending, association, independent };
   }
 
+  async getDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
+    const result = await VendorModel.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pendingVerifications: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'PENDING'] }, 1, 0] },
+          },
+        },
+      },
+    ]).exec();
+
+    return {
+      total: result[0]?.total ?? 0,
+      pendingVerifications: result[0]?.pendingVerifications ?? 0,
+    };
+  }
+
   async findIdsByRegistrationType(
     registrationType: 'ASSOCIATION' | 'INDEPENDENT',
   ): Promise<mongoose.Types.ObjectId[]> {
