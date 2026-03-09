@@ -8,6 +8,8 @@ import { DEFAULT_CONFIGS } from '../../shared/config/config.defaults';
 import { REDIS_KEY_PREFIX, REDIS_TTL } from '../../shared/config/config.keys';
 
 export class ConfigService {
+  private readonly memoryCache = new Map<string, string>();
+
   constructor(
     private readonly configRepository: ConfigRepository,
     private readonly getRedis: () => RedisClientType,
@@ -17,13 +19,17 @@ export class ConfigService {
   async initialize(): Promise<void> {
     await this.configRepository.upsertMany(DEFAULT_CONFIGS);
     const configs = await this.configRepository.findAll();
-    for (const config of configs) {
-      await this.getRedis()
-        .set(`${REDIS_KEY_PREFIX}${config.key}`, config.value, { EX: REDIS_TTL })
-        .catch((err) =>
-          this.logger.warn('Redis sync failed during initialization', { key: config.key, err }),
-        );
-    }
+    configs.forEach((config) => this.memoryCache.set(config.key, config.value));
+
+    await Promise.all(
+      configs.map((config) =>
+        this.getRedis()
+          .set(`${REDIS_KEY_PREFIX}${config.key}`, config.value, { EX: REDIS_TTL })
+          .catch((err) =>
+            this.logger.warn('Redis sync failed during initialization', { key: config.key, err }),
+          ),
+      ),
+    );
     this.logger.info('System config initialised', { count: configs.length });
   }
 
@@ -53,6 +59,8 @@ export class ConfigService {
       throw new NotFoundError(`Config key '${key}' could not be updated.`);
     }
 
+    this.memoryCache.set(key, value);
+
     await this.getRedis()
       .set(`${REDIS_KEY_PREFIX}${key}`, value, { EX: REDIS_TTL })
       .catch((err) => this.logger.warn('Redis sync failed after config update', { key, err }));
@@ -63,31 +71,58 @@ export class ConfigService {
   }
 
   async getValueAsNumber(key: string): Promise<number> {
-    const cached = await this.getRedis().get(`${REDIS_KEY_PREFIX}${key}`);
-    if (cached !== null) return Number(cached);
+    const inMemory = this.memoryCache.get(key);
+    if (inMemory !== undefined) return Number(inMemory);
+
+    const cached = await this.getRedis()
+      .get(`${REDIS_KEY_PREFIX}${key}`)
+      .catch(() => null);
+    if (cached !== null) {
+      this.memoryCache.set(key, cached);
+      return Number(cached);
+    }
 
     const config = await this.configRepository.findByKey(key);
     if (!config) throw new NotFoundError(`Config key '${key}' not found.`);
+    this.memoryCache.set(key, config.value);
     this.rewarmCache(key, config.value);
     return Number(config.value);
   }
 
   async getValueAsBoolean(key: string): Promise<boolean> {
-    const cached = await this.getRedis().get(`${REDIS_KEY_PREFIX}${key}`);
-    if (cached !== null) return cached === 'true';
+    const inMemory = this.memoryCache.get(key);
+    if (inMemory !== undefined) return inMemory === 'true';
+
+    const cached = await this.getRedis()
+      .get(`${REDIS_KEY_PREFIX}${key}`)
+      .catch(() => null);
+    if (cached !== null) {
+      this.memoryCache.set(key, cached);
+      return cached === 'true';
+    }
 
     const config = await this.configRepository.findByKey(key);
     if (!config) throw new NotFoundError(`Config key '${key}' not found.`);
+    this.memoryCache.set(key, config.value);
     this.rewarmCache(key, config.value);
     return config.value === 'true';
   }
 
   async getValueAsString(key: string): Promise<string> {
-    const cached = await this.getRedis().get(`${REDIS_KEY_PREFIX}${key}`);
-    if (cached !== null) return cached;
+    const inMemory = this.memoryCache.get(key);
+    if (inMemory !== undefined) return inMemory;
+
+    const cached = await this.getRedis()
+      .get(`${REDIS_KEY_PREFIX}${key}`)
+      .catch(() => null);
+    if (cached !== null) {
+      this.memoryCache.set(key, cached);
+      return cached;
+    }
 
     const config = await this.configRepository.findByKey(key);
     if (!config) throw new NotFoundError(`Config key '${key}' not found.`);
+    this.memoryCache.set(key, config.value);
     this.rewarmCache(key, config.value);
     return config.value;
   }
