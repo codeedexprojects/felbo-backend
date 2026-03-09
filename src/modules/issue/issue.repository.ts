@@ -49,6 +49,25 @@ export class IssueRepository {
     return BookingIssueModel.find({ userId }).sort({ createdAt: -1 }).limit(limit).exec();
   }
 
+  findRecentWithUserPopulated(limit: number): Promise<
+    (Omit<IBookingIssue, 'userId'> & {
+      userId: { _id: string; name: string; profileUrl: string | null } | null;
+    })[]
+  > {
+    return BookingIssueModel.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate<{
+        userId: { _id: string; name: string; profileUrl: string | null } | null;
+      }>('userId', 'name profileUrl')
+      .lean()
+      .exec() as Promise<
+      (Omit<IBookingIssue, 'userId'> & {
+        userId: { _id: string; name: string; profileUrl: string | null } | null;
+      })[]
+    >;
+  }
+
   async getStatusCounts(): Promise<{
     total: number;
     open: number;

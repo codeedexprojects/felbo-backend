@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
 import { GetSlotsInput, GetSlotsResponse, TimeSlot, BlockedRange } from './booking.types';
@@ -174,6 +175,22 @@ export class BookingService {
     const booking = await this.bookingRepository.findById(bookingId);
     if (!booking) throw new NotFoundError('Booking not found.');
     return booking.advancePaid;
+  }
+
+  async getGlobalDashboardStats(): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    todaysRevenue: number;
+  }> {
+    return this.bookingRepository.getGlobalDashboardStats();
+  }
+
+  async getStatsByShopIds(shopIds: Types.ObjectId[]): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    totalRevenue: number;
+  }> {
+    return this.bookingRepository.getStatsByShopIds(shopIds);
   }
 
   async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
