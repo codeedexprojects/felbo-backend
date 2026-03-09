@@ -725,4 +725,22 @@ export default class VendorService {
   async unregisterFcmToken(vendorId: string, token: string): Promise<void> {
     await this.vendorRepository.removeFcmToken(vendorId, token);
   }
+
+  async getVendorStatusCounts(): Promise<{
+    total: number;
+    active: number;
+    pendingVerification: number;
+    suspended: number;
+  }> {
+    return this.vendorRepository.getStatusCounts();
+  }
+
+  async getPendingVerificationCount(): Promise<number> {
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+    return counts.pending;
+  }
+
+  async getAssociationVendorIds(): Promise<import('mongoose').Types.ObjectId[]> {
+    return this.vendorRepository.findIdsByRegistrationType('ASSOCIATION');
+  }
 }

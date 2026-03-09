@@ -1,4 +1,4 @@
-import { PipelineStage } from 'mongoose';
+import mongoose, { PipelineStage } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { ShopModel, IShop } from './shop.model';
 import { ServiceModel } from '../service/service.model';
@@ -42,6 +42,16 @@ export default class ShopRepository {
 
   findAllByVendorId(vendorId: string): Promise<IShop[]> {
     return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
+  }
+
+  async findIdsByVendorIds(
+    vendorIds: mongoose.Types.ObjectId[],
+  ): Promise<mongoose.Types.ObjectId[]> {
+    const shops = await ShopModel.find({ vendorId: { $in: vendorIds }, status: { $ne: 'DELETED' } })
+      .select('_id')
+      .lean<{ _id: mongoose.Types.ObjectId }[]>()
+      .exec();
+    return shops.map((s) => s._id);
   }
 
   updateById(

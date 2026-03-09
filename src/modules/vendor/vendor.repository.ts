@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { VendorModel, IVendor } from './vendor.model';
 import { CreateVendorData, UpsertVendorData } from './vendor.types';
@@ -113,6 +114,16 @@ export default class VendorRepository {
     }).exec();
 
     return { pending, association, independent };
+  }
+
+  async findIdsByRegistrationType(
+    registrationType: 'ASSOCIATION' | 'INDEPENDENT',
+  ): Promise<mongoose.Types.ObjectId[]> {
+    const vendors = await VendorModel.find({ registrationType })
+      .select('_id')
+      .lean<{ _id: mongoose.Types.ObjectId }[]>()
+      .exec();
+    return vendors.map((v) => v._id);
   }
 
   async findAll(

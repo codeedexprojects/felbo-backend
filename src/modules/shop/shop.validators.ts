@@ -92,11 +92,6 @@ export const shopIdParamSchema = z.object({
   id: mongoIdSchema,
 });
 
-export const shopDetailsQuerySchema = z.object({
-  latitude: z.coerce.number().min(-90).max(90).optional(),
-  longitude: z.coerce.number().min(-180).max(180).optional(),
-});
-
 export const shopIdOnboardingParamSchema = z.object({
   shopId: z
     .string()

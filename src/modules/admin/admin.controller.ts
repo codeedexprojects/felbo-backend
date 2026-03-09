@@ -171,4 +171,14 @@ export class AdminController {
     await this.adminService.unblockUser(id);
     res.status(200).json({ success: true, message: 'User unblocked successfully.' });
   };
+
+  getSuperAdminDashboard = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getSuperAdminDashboard();
+    res.status(200).json({ success: true, data: result });
+  };
+
+  getAssociationAdminDashboard = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getAssociationAdminDashboard();
+    res.status(200).json({ success: true, data: result });
+  };
 }

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { BookingModel, IBooking, SlotLockModel, ISlotLock } from './booking.model';
 
 export class BookingRepository {
@@ -7,6 +8,55 @@ export class BookingRepository {
       Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1),
     );
     return { start, end };
+  }
+
+  async getGlobalDashboardStats(): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    todaysRevenue: number;
+  }> {
+    const { start, end } = this.utcDayRange(new Date());
+
+    const [totalBookings, todaysBookings, revenueResult] = await Promise.all([
+      BookingModel.countDocuments().exec(),
+      BookingModel.countDocuments({ createdAt: { $gte: start, $lt: end } }).exec(),
+      BookingModel.aggregate([
+        { $match: { createdAt: { $gte: start, $lt: end } } },
+        { $group: { _id: null, total: { $sum: '$advancePaid' } } },
+      ]).exec(),
+    ]);
+
+    return {
+      totalBookings,
+      todaysBookings,
+      todaysRevenue: (revenueResult[0]?.total as number) ?? 0,
+    };
+  }
+
+  async getStatsByShopIds(shopIds: mongoose.Types.ObjectId[]): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    totalRevenue: number;
+  }> {
+    const { start, end } = this.utcDayRange(new Date());
+
+    const [totalBookings, todaysBookings, revenueResult] = await Promise.all([
+      BookingModel.countDocuments({ shopId: { $in: shopIds } }).exec(),
+      BookingModel.countDocuments({
+        shopId: { $in: shopIds },
+        createdAt: { $gte: start, $lt: end },
+      }).exec(),
+      BookingModel.aggregate([
+        { $match: { shopId: { $in: shopIds } } },
+        { $group: { _id: null, total: { $sum: '$advancePaid' } } },
+      ]).exec(),
+    ]);
+
+    return {
+      totalBookings,
+      todaysBookings,
+      totalRevenue: (revenueResult[0]?.total as number) ?? 0,
+    };
   }
 
   findById(id: string): Promise<IBooking | null> {

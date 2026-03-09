@@ -9,6 +9,9 @@ import {
   UserDetailDto,
   UserListItemDto,
   UserIssueDto,
+  SuperAdminDashboardDto,
+  AssociationAdminDashboardDto,
+  DashboardRecentIssueDto,
 } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import {
@@ -22,6 +25,9 @@ import { IUser } from '../user/user.model';
 import UserRepository from '../user/user.repository';
 import VendorService from '../vendor/vendor.service';
 import { IssueService } from '../issue/issue.service';
+import { IssueRepository } from '../issue/issue.repository';
+import { BookingRepository } from '../booking/booking.repository';
+import ShopRepository from '../shop/shop.repository';
 import {
   ListVendorsFilter,
   ListVendorsResponse,
@@ -39,7 +45,57 @@ export class AdminService {
     private readonly userRepository: UserRepository,
     private readonly issueService: IssueService,
     private readonly logger: Logger,
+    private readonly issueRepository: IssueRepository,
+    private readonly bookingRepository: BookingRepository,
+    private readonly shopRepository: ShopRepository,
   ) {}
+
+  async getSuperAdminDashboard(): Promise<SuperAdminDashboardDto> {
+    const [userCounts, vendorCounts, bookingStats, pendingVerifications, rawIssues] =
+      await Promise.all([
+        this.userRepository.getStatusCounts(),
+        this.vendorService.getVendorStatusCounts(),
+        this.bookingRepository.getGlobalDashboardStats(),
+        this.vendorService.getPendingVerificationCount(),
+        this.issueRepository.findRecentWithUserPopulated(5),
+      ]);
+
+    const recentIssues: DashboardRecentIssueDto[] = rawIssues.map((issue) => ({
+      id: (issue._id as { toString(): string }).toString(),
+      userName: issue.userId?.name ?? 'Unknown',
+      userProfileUrl: issue.userId?.profileUrl ?? null,
+      reason: issue.description,
+      status: issue.status,
+      createdAt: issue.createdAt,
+    }));
+
+    return {
+      totalUsers: userCounts.total,
+      totalVendors: vendorCounts.total,
+      totalBookings: bookingStats.totalBookings,
+      todaysBookings: bookingStats.todaysBookings,
+      todaysRevenue: bookingStats.todaysRevenue,
+      pendingVerifications,
+      recentIssues,
+    };
+  }
+
+  async getAssociationAdminDashboard(): Promise<AssociationAdminDashboardDto> {
+    const vendorIds = await this.vendorService.getAssociationVendorIds();
+
+    const shopIds = await this.shopRepository.findIdsByVendorIds(vendorIds);
+
+    const bookingStats = await this.bookingRepository.getStatsByShopIds(shopIds);
+
+    return {
+      myVendorsCount: vendorIds.length,
+      myVendorsBookings: {
+        today: bookingStats.todaysBookings,
+        total: bookingStats.totalBookings,
+      },
+      myVendorsRevenue: bookingStats.totalBookings * 2,
+    };
+  }
 
   async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {
     return this.vendorService.getVendorRequestDetailForAdmin(vendorId);

@@ -9,7 +9,6 @@ import {
   recommendedShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
-  shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
   adminSearchShopsSchema,
@@ -122,8 +121,7 @@ export default class ShopController {
 
   getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
-    const { latitude, longitude } = shopDetailsQuerySchema.parse(req.query);
-    const result = await this.shopService.getShopDetails(id, { latitude, longitude });
+    const result = await this.shopService.getShopDetails(id);
 
     res.status(200).json({
       success: true,
