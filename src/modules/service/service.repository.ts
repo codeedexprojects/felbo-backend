@@ -176,4 +176,8 @@ export class ServiceRepository {
       { returnDocument: 'after' },
     ).exec();
   }
+
+  countActiveByCategoryId(categoryId: string): Promise<number> {
+    return ServiceModel.countDocuments({ categoryId, isActive: true }).exec();
+  }
 }

@@ -390,6 +390,10 @@ export class ServiceService {
     }));
   }
 
+  async countActiveByCategoryId(categoryId: string): Promise<number> {
+    return this.serviceRepository.countActiveByCategoryId(categoryId);
+  }
+
   async getServicesForBookingSnapshot(
     serviceIds: string[],
     shopId: string,

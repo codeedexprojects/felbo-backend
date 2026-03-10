@@ -88,7 +88,7 @@ export default class ShopController {
 
   getNearbyShops = async (req: Request, res: Response): Promise<void> => {
     const validated = nearbyShopsSchema.parse(req.query);
-    const result = await this.shopService.getNearbyShops(validated);
+    const result = await this.shopService.getNearbyShops({ ...validated, userId: req.user!.sub });
 
     res.status(200).json({
       success: true,
@@ -121,7 +121,7 @@ export default class ShopController {
 
   getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
-    const result = await this.shopService.getShopDetails(id);
+    const result = await this.shopService.getShopDetails(id, req.user?.sub);
 
     res.status(200).json({
       success: true,

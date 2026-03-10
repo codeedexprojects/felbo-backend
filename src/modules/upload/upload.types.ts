@@ -8,4 +8,5 @@ export interface UploadUrlResponse {
 export interface VerifyUploadResponse {
   verified: true;
   viewUrl: string;
+  permanentUrl: string;
 }
