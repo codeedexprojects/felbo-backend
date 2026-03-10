@@ -41,6 +41,7 @@ export interface IShop extends Document {
   location: IShopLocation;
   workingHours?: IWorkingHours;
   photos: string[];
+  categoryIds: mongoose.Types.ObjectId[];
   rating: {
     average: number;
     count: number;
@@ -119,6 +120,10 @@ const shopSchema = new Schema<IShop>(
     location: { type: locationSchema, required: true },
     workingHours: { type: workingHoursSchema },
     photos: { type: [String], default: [] },
+    categoryIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
+      default: [],
+    },
     rating: {
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
@@ -153,5 +158,6 @@ shopSchema.index({ status: 1, isAvailable: 1 });
 shopSchema.index({ 'rating.average': -1 });
 shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });
+shopSchema.index({ categoryIds: 1, status: 1, isAvailable: 1 });
 
 export const ShopModel = mongoose.model<IShop>('Shop', shopSchema);

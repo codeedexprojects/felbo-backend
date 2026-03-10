@@ -180,4 +180,8 @@ export class ServiceRepository {
   countActiveByCategoryId(categoryId: string): Promise<number> {
     return ServiceModel.countDocuments({ categoryId, isActive: true }).exec();
   }
+
+  countActiveServicesByShopAndCategory(shopId: string, categoryId: string): Promise<number> {
+    return ServiceModel.countDocuments({ shopId, categoryId, isActive: true }).exec();
+  }
 }

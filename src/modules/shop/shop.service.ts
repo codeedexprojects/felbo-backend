@@ -369,7 +369,7 @@ export default class ShopService {
       input.longitude,
       input.latitude,
       maxDistance,
-      { shopType: input.shopType },
+      { shopType: input.shopType, categoryId: input.categoryId },
       skip,
       limit,
     );
@@ -432,6 +432,7 @@ export default class ShopService {
       shopTypes,
       skip,
       limit,
+      input.categoryId,
     );
 
     const shopIds = results.map((r) => r.shop._id.toString());
@@ -531,6 +532,14 @@ export default class ShopService {
 
   async getActiveServicesByIds(serviceIds: string[], shopId: string): Promise<ServiceDto[]> {
     return this.serviceService.getActiveServicesByIds(serviceIds, shopId);
+  }
+
+  async syncShopCategory(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.addCategoryIfMissing(shopId, categoryId);
+  }
+
+  async removeCategoryFromShop(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.removeCategoryFromShop(shopId, categoryId);
   }
 
   async updateOnboardingStatus(
