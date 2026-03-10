@@ -5,6 +5,10 @@ import { barberService } from '../barber/barber.container';
 import { availabilityService } from '../barberAvailability/barberAvailability.container';
 import { shopService } from '../shop/shop.container';
 import { configService } from '../config/config.container';
+import { userService } from '../user/user.container';
+import { serviceService } from '../service/service.container';
+import { paymentService } from '../payment/payment.container';
+
 import { logger } from '../../shared/logger/logger';
 
 const bookingRepository = new BookingRepository();
@@ -15,6 +19,9 @@ const bookingService = new BookingService(
   () => availabilityService,
   () => shopService,
   configService,
+  () => userService,
+  () => serviceService,
+  () => paymentService,
   logger,
 );
 

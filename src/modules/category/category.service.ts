@@ -8,12 +8,18 @@ import {
   ListUserCategoriesResponse,
 } from './category.types';
 import { ConflictError, NotFoundError } from '../../shared/errors/index';
+import { ServiceService } from '../service/service.service';
 
 export class CategoryService {
   constructor(
     private readonly categoryRepository: CategoryRepository,
+    private readonly getServiceService: () => ServiceService,
     private readonly logger: Logger,
   ) {}
+
+  private get serviceService(): ServiceService {
+    return this.getServiceService();
+  }
 
   private toCategoryDto(category: ICategory): CategoryDto {
     return {
@@ -101,6 +107,13 @@ export class CategoryService {
       throw new NotFoundError('Category not found.');
     }
 
+    const activeServiceCount = await this.serviceService.countActiveByCategoryId(categoryId);
+    if (activeServiceCount > 0) {
+      throw new ConflictError(
+        `Cannot delete category: ${activeServiceCount} active service(s) are using it.`,
+      );
+    }
+
     await this.categoryRepository.softDelete(categoryId);
 
     this.logger.info({
@@ -113,5 +126,14 @@ export class CategoryService {
   async categoryExists(categoryId: string): Promise<boolean> {
     const category = await this.categoryRepository.findById(categoryId);
     return !!category && category.isActive;
+  }
+
+  async getCategoryNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    const categories = await this.categoryRepository.findByIds(ids);
+    const map = new Map<string, string>();
+    for (const c of categories) {
+      map.set(c._id.toString(), c.name);
+    }
+    return map;
   }
 }
