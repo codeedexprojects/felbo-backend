@@ -89,3 +89,34 @@ export interface ConfirmBookingResponse {
     paymentId: string;
   };
 }
+
+export interface BookingDetailsDto {
+  id: string;
+  userId: string;
+  shopId: string;
+  barberId: string;
+  status: string;
+}
+
+export interface BookingListItemDto {
+  id: string;
+  bookingNumber: string;
+  shopName: string;
+  barberName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  totalServiceAmount: number;
+  advancePaid: number;
+  remainingAmount: number;
+  status: string;
+  createdAt: Date;
+}
+
+export interface UserBookingsResponse {
+  bookings: BookingListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}

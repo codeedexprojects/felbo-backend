@@ -379,4 +379,12 @@ export default class ShopRepository {
       total,
     };
   }
+
+  updateRating(shopId: string, average: number, count: number): Promise<void> {
+    return ShopModel.findByIdAndUpdate(shopId, {
+      $set: { 'rating.average': average, 'rating.count': count },
+    })
+      .exec()
+      .then(() => undefined);
+  }
 }

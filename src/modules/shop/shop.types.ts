@@ -143,6 +143,7 @@ export interface ShopSearchResultDto {
   address: ShopAddress;
   services: Array<{ id: string; name: string; basePrice: number }>;
   distance?: number;
+  rating: { average: number; count: number };
 }
 
 export interface SearchShopsResponse {
@@ -198,6 +199,7 @@ export interface NearbyShopCardDto {
   distance: number;
   topServices: string[];
   isFavorite: boolean;
+  rating: { average: number; count: number };
 }
 
 export interface NearbyShopsResponse {
