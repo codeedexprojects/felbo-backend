@@ -36,6 +36,10 @@ export class FavoriteService {
     }
   }
 
+  async getFavoriteShopIds(userId: string): Promise<Set<string>> {
+    return this.favoriteRepository.getFavoriteShopIds(userId);
+  }
+
   async listFavorites(userId: string, page: number, limit: number): Promise<ListFavoritesResponse> {
     const skip = (page - 1) * limit;
     const { favorites, total } = await this.favoriteRepository.findByUserId(userId, skip, limit);

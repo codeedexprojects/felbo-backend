@@ -38,7 +38,7 @@ import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 import { ServiceService } from '../service/service.service';
 import UserService from '../user/user.service';
-import { FavoriteRepository } from '../favorite/favorite.repository';
+import { FavoriteService } from '../favorite/favorite.service';
 
 export default class ShopService {
   constructor(
@@ -48,7 +48,7 @@ export default class ShopService {
     private readonly getServiceService: () => ServiceService,
     private readonly getUserService: () => UserService,
     private readonly configService: ConfigService,
-    private readonly getFavoriteRepository?: () => FavoriteRepository,
+    private readonly getFavoriteService?: () => FavoriteService,
   ) {}
 
   private get barberService(): BarberService {
@@ -64,8 +64,8 @@ export default class ShopService {
   }
 
   private async getFavoriteShopIds(userId?: string): Promise<Set<string>> {
-    if (!userId || !this.getFavoriteRepository) return new Set();
-    return this.getFavoriteRepository().getFavoriteShopIds(userId);
+    if (!userId || !this.getFavoriteService) return new Set();
+    return this.getFavoriteService().getFavoriteShopIds(userId);
   }
 
   private toShopDto(shop: IShop): ShopDto {
