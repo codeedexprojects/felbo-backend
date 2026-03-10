@@ -9,6 +9,8 @@ import { ServiceService } from '../service/service.service';
 import { userService } from '../user/user.container';
 import UserService from '../user/user.service';
 import { configService } from '../config/config.container';
+import { favoriteRepository } from '../favorite/favorite.container';
+import { FavoriteRepository } from '../favorite/favorite.repository';
 
 const shopRepository = new ShopRepository();
 
@@ -19,6 +21,7 @@ const shopService: ShopService = new ShopService(
   (): ServiceService => serviceService,
   (): UserService => userService,
   configService,
+  (): FavoriteRepository => favoriteRepository,
 );
 
 const shopController = new ShopController(shopService);

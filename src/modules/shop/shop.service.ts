@@ -38,6 +38,7 @@ import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 import { ServiceService } from '../service/service.service';
 import UserService from '../user/user.service';
+import { FavoriteRepository } from '../favorite/favorite.repository';
 
 export default class ShopService {
   constructor(
@@ -47,6 +48,7 @@ export default class ShopService {
     private readonly getServiceService: () => ServiceService,
     private readonly getUserService: () => UserService,
     private readonly configService: ConfigService,
+    private readonly getFavoriteRepository?: () => FavoriteRepository,
   ) {}
 
   private get barberService(): BarberService {
@@ -59,6 +61,11 @@ export default class ShopService {
 
   private get userService(): UserService {
     return this.getUserService();
+  }
+
+  private async getFavoriteShopIds(userId?: string): Promise<Set<string>> {
+    if (!userId || !this.getFavoriteRepository) return new Set();
+    return this.getFavoriteRepository().getFavoriteShopIds(userId);
   }
 
   private toShopDto(shop: IShop): ShopDto {
@@ -165,6 +172,11 @@ export default class ShopService {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') throw new NotFoundError('Shop not found.');
     return this.toShopDto(shop);
+  }
+
+  async getShopsByIds(shopIds: string[]): Promise<ShopDto[]> {
+    const shops = await this.shopRepository.findByIds(shopIds);
+    return shops.map((s) => this.toShopDto(s));
   }
 
   // --- Soft delete (status) ---
@@ -302,13 +314,16 @@ export default class ShopService {
   }
 
   // --- Public discovery ---
-  async getShopDetails(shopId: string): Promise<ShopDetailsDto> {
+  async getShopDetails(shopId: string, userId?: string): Promise<ShopDetailsDto> {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
 
-    const barbers = await this.barberService.getBarbersByShopId(shopId);
+    const [barbers, favoriteShopIds] = await Promise.all([
+      this.barberService.getBarbersByShopId(shopId),
+      this.getFavoriteShopIds(userId),
+    ]);
 
     const publicBarbers: PublicBarberDto[] = barbers.slice(0, 4).map((b) => ({
       id: b.id,
@@ -329,6 +344,7 @@ export default class ShopService {
       workingHours: shop.workingHours,
       photos: shop.photos,
       barbers: publicBarbers,
+      isFavorite: favoriteShopIds.has(shopId),
     };
   }
 
@@ -359,7 +375,10 @@ export default class ShopService {
     );
 
     const shopIds = results.map((r) => r.shop._id.toString());
-    const allServices = await this.serviceService.getServicesByShopIds(shopIds);
+    const [allServices, favoriteShopIds] = await Promise.all([
+      this.serviceService.getServicesByShopIds(shopIds),
+      this.getFavoriteShopIds(input.userId),
+    ]);
 
     const servicesByShopId = new Map<string, string[]>();
     for (const svc of allServices) {
@@ -382,6 +401,7 @@ export default class ShopService {
         closingTime: this.getTodayClosingTime(shop),
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
+        isFavorite: favoriteShopIds.has(shopId),
       };
     });
 
@@ -393,7 +413,10 @@ export default class ShopService {
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const user = await this.userService.getUserById(input.userId).catch(() => null);
+    const [user, favoriteShopIds] = await Promise.all([
+      this.userService.getUserById(input.userId).catch(() => null),
+      this.getFavoriteShopIds(input.userId),
+    ]);
     const gender = user?.gender ?? null;
 
     const shopTypes =
@@ -435,6 +458,7 @@ export default class ShopService {
         closingTime: this.getTodayClosingTime(shop),
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
+        isFavorite: favoriteShopIds.has(shopId),
       };
     });
 

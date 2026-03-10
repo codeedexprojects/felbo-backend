@@ -109,6 +109,7 @@ export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  userId?: string;
   page?: number;
   limit?: number;
 }
@@ -194,6 +195,7 @@ export interface NearbyShopCardDto {
   closingTime: string | null;
   distance: number;
   topServices: string[];
+  isFavorite: boolean;
 }
 
 export interface NearbyShopsResponse {
@@ -284,6 +286,7 @@ export interface ShopDetailsDto {
   workingHours?: WorkingHours;
   photos: string[];
   barbers: PublicBarberDto[];
+  isFavorite: boolean;
 }
 
 export interface AdminShopSearchInput {

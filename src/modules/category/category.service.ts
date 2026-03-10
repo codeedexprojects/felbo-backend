@@ -1,5 +1,6 @@
 import { Logger } from 'winston';
 import { CategoryRepository } from './category.repository';
+import { ServiceRepository } from '../service/service.repository';
 import { ICategory } from './category.model';
 import {
   CreateCategoryInput,
@@ -12,6 +13,7 @@ import { ConflictError, NotFoundError } from '../../shared/errors/index';
 export class CategoryService {
   constructor(
     private readonly categoryRepository: CategoryRepository,
+    private readonly serviceRepository: ServiceRepository,
     private readonly logger: Logger,
   ) {}
 
@@ -99,6 +101,13 @@ export class CategoryService {
     const category = await this.categoryRepository.findById(categoryId);
     if (!category) {
       throw new NotFoundError('Category not found.');
+    }
+
+    const activeServiceCount = await this.serviceRepository.countActiveByCategoryId(categoryId);
+    if (activeServiceCount > 0) {
+      throw new ConflictError(
+        `Cannot delete category: ${activeServiceCount} active service(s) are using it.`,
+      );
     }
 
     await this.categoryRepository.softDelete(categoryId);

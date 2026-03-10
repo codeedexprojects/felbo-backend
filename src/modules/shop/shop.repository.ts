@@ -40,6 +40,12 @@ export default class ShopRepository {
     return ShopModel.findById(id).exec();
   }
 
+  findByIds(ids: string[]): Promise<IShop[]> {
+    return ShopModel.find({ _id: { $in: ids }, status: { $ne: 'DELETED' } })
+      .lean()
+      .exec() as unknown as Promise<IShop[]>;
+  }
+
   findAllByVendorId(vendorId: string): Promise<IShop[]> {
     return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
   }
