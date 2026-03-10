@@ -109,6 +109,7 @@ export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  categoryId?: string;
   userId?: string;
   page?: number;
   limit?: number;
@@ -118,6 +119,7 @@ export interface RecommendedShopsInput {
   longitude: number;
   latitude: number;
   userId: string;
+  categoryId?: string;
   page?: number;
   limit?: number;
 }

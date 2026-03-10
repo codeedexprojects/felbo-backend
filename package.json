@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "dump": "ts-node scripts/dump-folder.ts",
+    "seed:category-test": "npx tsx scripts/seed-category-test.ts",
     "worker:notifications": "node dist/shared/notification/notification.worker.js",
     "worker:notifications:dev": "npx tsx src/shared/notification/notification.worker.ts"
   },
