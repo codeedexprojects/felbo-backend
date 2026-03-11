@@ -41,7 +41,7 @@ export default class ReviewRepository {
           from: 'users',
           localField: 'userId',
           foreignField: '_id',
-          pipeline: [{ $project: { name: 1, photo: 1 } }],
+          pipeline: [{ $project: { name: 1, profileUrl: 1 } }],
           as: 'user',
         },
       },
@@ -66,7 +66,7 @@ export default class ReviewRepository {
       const reviewDoc = { ...r };
       if (r.userRef) {
         reviewDoc.userName = r.userRef.name;
-        reviewDoc.userPhoto = r.userRef.photo;
+        reviewDoc.userPhoto = r.userRef.profileUrl;
       }
       delete reviewDoc.userRef;
       return reviewDoc;
