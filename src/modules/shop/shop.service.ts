@@ -1,4 +1,3 @@
-import type { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
@@ -29,6 +28,8 @@ import {
   OnboardingStatus,
   AdminShopSearchInput,
   AdminShopSearchResponse,
+  ShopServicesResponse,
+  ShopServicesInput,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 import { ConfigService } from '../config/config.service';
@@ -574,7 +575,7 @@ export default class ShopService {
     await this.shopRepository.updateRating(shopId, average, count);
   }
 
-  async getShopIdsByVendorIds(vendorIds: Types.ObjectId[]): Promise<Types.ObjectId[]> {
+  getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
   }
 
@@ -586,5 +587,21 @@ export default class ShopService {
     const { results, total } = await this.shopRepository.adminSearchShops(input.query, skip, limit);
 
     return { shops: results, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getShopServices(input: ShopServicesInput): Promise<ShopServicesResponse> {
+    const shop = await this.shopRepository.findById(input.shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+
+    const categoriesWithServices = await this.serviceService.getServicesWithCategories(
+      input.shopId,
+      input.type,
+    );
+
+    return {
+      categories: categoriesWithServices,
+    };
   }
 }

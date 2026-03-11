@@ -26,9 +26,9 @@ export class PayoutService {
     return this.getShopService();
   }
 
-  private async resolveShopIds() {
+  private async resolveShopIds(): Promise<string[]> {
     const vendorIds = await this.vendorService.getAssociationVendorIds();
-    return this.shopService.getShopIdsByVendorIds(vendorIds);
+    return this.shopService.getShopIdsByVendorIds(vendorIds.map((id) => id.toString()));
   }
 
   async getDashboard(): Promise<PayoutDashboardDto> {

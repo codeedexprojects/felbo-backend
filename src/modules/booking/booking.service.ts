@@ -1,4 +1,3 @@
-import type { Types } from 'mongoose';
 import PaymentService from '../payment/payment.service';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
@@ -259,7 +258,7 @@ export class BookingService {
     return this.bookingRepository.getGlobalDashboardStats();
   }
 
-  async getStatsByShopIds(shopIds: Types.ObjectId[]): Promise<{
+  async getStatsByShopIds(shopIds: string[]): Promise<{
     totalBookings: number;
     todaysBookings: number;
     totalRevenue: number;

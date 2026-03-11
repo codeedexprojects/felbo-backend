@@ -40,15 +40,17 @@ export class BookingRepository {
     };
   }
 
-  async getStatsByShopIds(shopIds: mongoose.Types.ObjectId[]): Promise<{
+  async getStatsByShopIds(shopIds: string[]): Promise<{
     totalBookings: number;
     todaysBookings: number;
     totalRevenue: number;
   }> {
     const { start, end } = this.utcDayRange(new Date());
 
+    const objectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
+
     const result = await BookingModel.aggregate([
-      { $match: { shopId: { $in: shopIds } } },
+      { $match: { shopId: { $in: objectIds } } },
       {
         $facet: {
           totalBookings: [{ $count: 'count' }],

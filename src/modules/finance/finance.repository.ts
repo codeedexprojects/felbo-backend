@@ -91,9 +91,9 @@ export class FinanceRepository {
     };
   }
 
-  async getAssocBookingCount(shopIds: Types.ObjectId[]): Promise<number> {
+  async getAssocBookingCount(shopIds: string[]): Promise<number> {
     return BookingModel.countDocuments({
-      shopId: { $in: shopIds },
+      shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
       status: { $in: [...PAID_STATUSES] },
     }).exec();
   }
@@ -337,14 +337,16 @@ export class FinanceRepository {
   }
 
   async getAssocSummaryStats(
-    shopIds: Types.ObjectId[],
+    shopIds: string[],
   ): Promise<Omit<AssocFinanceSummaryDto, 'vendorCount'>> {
     const todayStart = getTodayStart();
     const weekStart = getWeekStart();
     const monthStart = getMonthStart();
 
+    const objectIds = shopIds.map((id) => new Types.ObjectId(id));
+
     const [result] = await BookingModel.aggregate([
-      { $match: { status: { $in: [...PAID_STATUSES] }, shopId: { $in: shopIds } } },
+      { $match: { status: { $in: [...PAID_STATUSES] }, shopId: { $in: objectIds } } },
       {
         $facet: {
           today: facetBranch(todayStart),
@@ -364,19 +366,21 @@ export class FinanceRepository {
   }
 
   async getAssocVendorRevenueTable(
-    shopIds: Types.ObjectId[],
+    shopIds: string[],
     params: VendorRevenueTableParams,
   ): Promise<{ vendors: VendorRevenueRowDto[]; total: number }> {
     const { from, to, search, sortOrder, minRevenue, maxRevenue, page, limit } = params;
     const skip = (page - 1) * limit;
     const sortDir = sortOrder === 'asc' ? 1 : -1;
 
+    const objectIds = shopIds.map((id) => new Types.ObjectId(id));
+
     const pipeline: PipelineStage[] = [
       {
         $match: {
           status: { $in: [...PAID_STATUSES] },
           createdAt: { $gte: from, $lte: to },
-          shopId: { $in: shopIds },
+          shopId: { $in: objectIds },
         },
       },
       {
