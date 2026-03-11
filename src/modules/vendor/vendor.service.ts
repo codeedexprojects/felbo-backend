@@ -417,9 +417,39 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+    const shops = await this.shopService.getMyShops(vendorId);
+    if (shops.length === 0) {
+      return { onboardingStatus: null, shopDetails: null };
+    }
 
-    return { onboardingStatus };
+    const statusPriority: Record<string, number> = {
+      PENDING_PROFILE: 0,
+      PENDING_SERVICES: 1,
+      PENDING_BARBERS: 2,
+      PENDING_BARBER_SERVICES: 3,
+      COMPLETED: 4,
+    };
+
+    const leastProgressed = shops.reduce((min, shop) =>
+      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
+        ? shop
+        : min,
+    );
+
+    const finalOnboardingStatus = leastProgressed.onboardingStatus;
+
+    return {
+      onboardingStatus: finalOnboardingStatus,
+      shopDetails:
+        finalOnboardingStatus === 'COMPLETED'
+          ? null
+          : {
+              shopId: leastProgressed.id,
+              shopName: leastProgressed.name,
+              address: leastProgressed.address,
+              phoneNo: leastProgressed.phone,
+            },
+    };
   }
 
   async getProfile(vendorId: string): Promise<VendorProfileDto> {

@@ -64,7 +64,6 @@ export class FavoriteService {
       if (names.length < 3) names.push(svc.name);
     }
 
-    // Shops missing from the map were deleted after the favorite was saved; silently skipped.
     const result = favorites
       .map((fav): FavoriteShopCardDto | null => {
         const shopId = fav.shopId.toString();
@@ -78,6 +77,7 @@ export class FavoriteService {
           address: shop.address,
           topServices: servicesByShopId.get(shopId) ?? [],
           isFavorite: true as const,
+          rating: shop.rating,
         };
       })
       .filter((item): item is FavoriteShopCardDto => item !== null);

@@ -14,6 +14,7 @@ export interface FavoriteShopCardDto {
   address: ShopAddress;
   topServices: string[];
   isFavorite: true;
+  rating: { average: number; count: number };
 }
 
 export interface ListFavoritesResponse {
