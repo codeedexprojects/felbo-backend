@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 import { Logger } from 'winston';
 import VendorRepository from './vendor.repository';
 import { IVendor } from './vendor.model';
@@ -15,6 +15,7 @@ import {
   RegisterIndependentConfirmInput,
   RegisterIndependentConfirmResponse,
   RegistrationStatusResponse,
+  OnboardingStatusResponse,
   VendorProfileDto,
   ListVendorsFilter,
   ListVendorsResponse,
@@ -66,6 +67,7 @@ export default class VendorService {
       phone: vendor.phone,
       ownerName: vendor.ownerName,
       email: vendor.email || null,
+      verificationStatus: vendor.verificationStatus,
     };
   }
 
@@ -407,6 +409,17 @@ export default class VendorService {
       rejectionReason: vendor.verificationNote ?? undefined,
       registrationType: vendor.registrationType ?? undefined,
     };
+  }
+
+  async getOnboardingStatus(vendorId: string): Promise<OnboardingStatusResponse> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+
+    return { onboardingStatus };
   }
 
   async getProfile(vendorId: string): Promise<VendorProfileDto> {
