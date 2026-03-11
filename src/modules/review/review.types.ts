@@ -1,13 +1,10 @@
 export interface ReviewDto {
   id: string;
-  bookingId: string;
-  userId: string;
-  shopId: string;
-  barberId: string;
+  username: string;
+  image?: string | null;
   rating: number;
   description?: string;
-  status: string;
-  createdAt: Date;
+  date: Date;
 }
 
 export interface ShopReviewsResponse {
