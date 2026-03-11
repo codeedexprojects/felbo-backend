@@ -20,6 +20,13 @@ router.get(
   vendorController.getRegistrationStatus,
 );
 
+router.get(
+  '/onboarding-status',
+  authenticate,
+  authorize('VENDOR'),
+  vendorController.getOnboardingStatus,
+);
+
 router.post('/refresh-token', vendorController.refreshToken);
 router.post('/logout', authenticate, authorize('VENDOR'), vendorController.logout);
 

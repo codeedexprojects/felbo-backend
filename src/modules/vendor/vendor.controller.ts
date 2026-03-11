@@ -83,6 +83,15 @@ export default class VendorController {
     });
   };
 
+  getOnboardingStatus = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.vendorService.getOnboardingStatus(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   getProfile = async (req: Request, res: Response): Promise<void> => {
     const result = await this.vendorService.getProfile(req.user!.sub);
 

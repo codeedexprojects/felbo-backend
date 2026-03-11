@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
@@ -515,7 +515,7 @@ export default class ShopService {
       };
 
       if ('distance' in s && typeof s.distance === 'number') {
-        dto.distance = Math.round(s.distance);
+        dto.distance = Math.round(s.distance / 100) / 10;
       }
 
       return dto;
