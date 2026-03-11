@@ -12,6 +12,7 @@ import {
   shopIdOnboardingParamSchema,
   completeProfileSchema,
   adminSearchShopsSchema,
+  shopServicesSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -122,6 +123,21 @@ export default class ShopController {
   getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
     const result = await this.shopService.getShopDetails(id, req.user?.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getShopServices = async (req: Request, res: Response): Promise<void> => {
+    const { id } = shopIdParamSchema.parse(req.params);
+    const { type } = shopServicesSchema.parse(req.query);
+
+    const result = await this.shopService.getShopServices({
+      shopId: id,
+      type,
+    });
 
     res.status(200).json({
       success: true,

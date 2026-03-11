@@ -101,6 +101,10 @@ export const shopIdOnboardingParamSchema = z.object({
     .regex(/^[0-9a-fA-F]{24}$/, 'Invalid shop ID'),
 });
 
+export const shopServicesSchema = z.object({
+  type: z.enum(['MENS', 'WOMENS', 'ALL']).optional(),
+});
+
 export const completeProfileSchema = z.object({
   description: z.string().min(1, 'Description is required').max(1000),
   workingHours: workingHoursSchema,
