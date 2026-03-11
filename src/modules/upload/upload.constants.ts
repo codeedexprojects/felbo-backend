@@ -2,6 +2,7 @@ export const MIME_TO_EXT = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'application/pdf': 'pdf',
 } as const;
 
 export type AllowedMimeType = keyof typeof MIME_TO_EXT;

@@ -10,6 +10,7 @@ import homeRoutes from './home.routes';
 import shopRoutes from './shop.routes';
 import bookingRoutes from './booking.routes';
 import favoritesRoutes from './favorites.routes';
+import reviewRoutes from './review.routes';
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use('/home', homeRoutes);
 router.use('/shops', shopRoutes);
 router.use('/favorites', favoritesRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/reviews', reviewRoutes);
 
 export default router;

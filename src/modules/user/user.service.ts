@@ -9,8 +9,15 @@ import {
   VerifyOtpInput,
   VerifyOtpResponse,
   RefreshTokenResponse,
+  ListUsersFilter,
+  ListUsersResponse,
+  UserListItemDto,
+  UserDetailDto,
 } from './user.types';
 import { IUser } from './user.model';
+import { BookingService } from '../booking/booking.service';
+import { UserBookingsResponse } from '../booking/booking.types';
+import { IssueService } from '../issue/issue.service';
 import {
   NotFoundError,
   ForbiddenError,
@@ -34,6 +41,8 @@ export default class UserService {
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
     private readonly logger: Logger,
+    private readonly getIssueService?: () => IssueService,
+    private readonly getBookingService?: () => BookingService,
   ) {}
 
   private toUserDto(user: IUser): UserDto {
@@ -271,5 +280,71 @@ export default class UserService {
     if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
     if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
     await this.userRepository.unblockById(userId);
+  }
+
+  async listUsersForAdmin(filter: ListUsersFilter): Promise<ListUsersResponse> {
+    const [{ users, total }, counts] = await Promise.all([
+      this.userRepository.findAll(filter),
+      this.userRepository.getStatusCounts(),
+    ]);
+
+    const mappedUsers: UserListItemDto[] = users.map((u, i) => ({
+      slNo: total - (filter.page - 1) * filter.limit - i,
+      id: u._id.toString(),
+      name: u.name,
+      phone: u.phone,
+      email: u.email ?? null,
+      status: u.status,
+      walletBalance: u.walletBalance,
+      cancellationCount: u.cancellationCount,
+      lastLoginAt: u.lastLoginAt ?? null,
+      registeredAt: u.createdAt,
+    }));
+
+    return {
+      users: mappedUsers,
+      total,
+      page: filter.page,
+      limit: filter.limit,
+      totalPages: Math.ceil(total / filter.limit),
+      counts,
+    };
+  }
+
+  async getUserDetailForAdmin(userId: string): Promise<UserDetailDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    const issuesReported = this.getIssueService
+      ? await this.getIssueService().getRecentIssuesByUserId(userId)
+      : [];
+
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      email: user.email ?? null,
+      status: user.status,
+      blockReason: user.blockReason ?? null,
+      walletBalance: user.walletBalance,
+      cancellationCount: user.cancellationCount,
+      registeredAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt ?? null,
+      issuesReported,
+      issueCount: issuesReported.length,
+    };
+  }
+
+  async getAdminUserBookings(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<UserBookingsResponse> {
+    if (!this.getBookingService) throw new Error('BookingService not injected');
+
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    return this.getBookingService().getUserBookings(userId, page, limit);
   }
 }

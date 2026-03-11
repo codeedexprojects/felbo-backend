@@ -402,6 +402,7 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
+        rating: shop.rating,
       };
     });
 
@@ -460,6 +461,7 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
+        rating: shop.rating,
       };
     });
 
@@ -509,6 +511,7 @@ export default class ShopService {
         shopType: s.shopType,
         address: s.address,
         services: shopServices,
+        rating: s.rating,
       };
 
       if ('distance' in s && typeof s.distance === 'number') {
@@ -565,6 +568,10 @@ export default class ShopService {
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async updateRating(shopId: string, average: number, count: number): Promise<void> {
+    await this.shopRepository.updateRating(shopId, average, count);
   }
 
   async getShopIdsByVendorIds(vendorIds: Types.ObjectId[]): Promise<Types.ObjectId[]> {
