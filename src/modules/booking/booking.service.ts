@@ -12,6 +12,9 @@ import {
   ConfirmBookingResponse,
   BookingDetailsDto,
   UserBookingsResponse,
+  AdminBookingListParams,
+  AdminBookingListResponse,
+  AdminBookingDetailDto,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -683,6 +686,96 @@ export class BookingService {
   private toMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
     return h * 60 + m;
+  }
+
+  async adminGetBookings(params: AdminBookingListParams): Promise<AdminBookingListResponse> {
+    const { bookings, total } = await this.bookingRepository.adminGetBookings(params);
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        ...(params.role !== 'ASSOCIATION_ADMIN' && { userPhone: b.userPhone }),
+        shopName: b.shopName,
+        barberName: b.barberName,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        totalServiceAmount: b.totalServiceAmount,
+        advancePaid: b.advancePaid,
+        remainingAmount: b.remainingAmount,
+        status: b.status,
+        createdAt: b.createdAt,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetBookingDetail(
+    bookingId: string,
+    role: string,
+    associatedShopIds?: string[],
+  ): Promise<AdminBookingDetailDto> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    if (
+      associatedShopIds &&
+      associatedShopIds.length > 0 &&
+      !associatedShopIds.includes(booking.shopId.toString())
+    ) {
+      throw new ForbiddenError('You do not have permission to view this booking.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      ...(role !== 'ASSOCIATION_ADMIN' && {
+        userId: booking.userId.toString(),
+        userName: booking.userName,
+        userPhone: booking.userPhone,
+      }),
+      shopId: booking.shopId.toString(),
+      shopName: booking.shopName,
+      barberId: booking.barberId.toString(),
+      barberName: booking.barberName,
+      barberSelectionType: booking.barberSelectionType,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      totalDurationMinutes: booking.totalDurationMinutes,
+      services: booking.services.map((s) => ({
+        serviceId: s.serviceId.toString(),
+        serviceName: s.serviceName,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      })),
+      totalServiceAmount: booking.totalServiceAmount,
+      advancePaid: booking.advancePaid,
+      remainingAmount: booking.remainingAmount,
+      paymentMethod: booking.paymentMethod,
+      paymentId: booking.paymentId,
+      razorpayOrderId: booking.razorpayOrderId,
+      status: booking.status,
+      cancellation: booking.cancellation
+        ? {
+            cancelledAt: booking.cancellation.cancelledAt,
+            cancelledBy: booking.cancellation.cancelledBy,
+            reason: booking.cancellation.reason,
+            refundAmount: booking.cancellation.refundAmount,
+            refundType: booking.cancellation.refundType,
+            refundStatus: booking.cancellation.refundStatus,
+          }
+        : undefined,
+      completedAt: booking.completedAt,
+      createdAt: booking.createdAt,
+      updatedAt: booking.updatedAt,
+    };
   }
 
   private fromMinutes(minutes: number): string {

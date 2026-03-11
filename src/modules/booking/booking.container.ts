@@ -8,6 +8,7 @@ import { configService } from '../config/config.container';
 import { userService } from '../user/user.container';
 import { serviceService } from '../service/service.container';
 import { paymentService } from '../payment/payment.container';
+import { vendorService } from '../vendor/vendor.container';
 
 import { logger } from '../../shared/logger/logger';
 
@@ -25,6 +26,6 @@ const bookingService = new BookingService(
   logger,
 );
 
-const bookingController = new BookingController(bookingService);
+const bookingController = new BookingController(bookingService, vendorService, shopService);
 
 export { bookingController, bookingService };
