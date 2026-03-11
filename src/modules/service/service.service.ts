@@ -203,6 +203,8 @@ export class ServiceService {
       description: input.description,
     });
 
+    await this.shopService.syncShopCategory(shopId, input.categoryId);
+
     // Transition onboarding if this is the first service
     if (shop.onboardingStatus === 'PENDING_SERVICES') {
       const count = await this.serviceRepository.countActiveServices(shopId);
@@ -257,6 +259,8 @@ export class ServiceService {
       applicableFor: input.applicableFor,
       description: input.description,
     });
+
+    await this.shopService.syncShopCategory(shopId, input.categoryId);
 
     this.logger.info({
       action: 'SERVICE_CREATED',
@@ -327,7 +331,16 @@ export class ServiceService {
       throw new ConflictError('Cannot delete service assigned to barbers.');
     }
 
+    const categoryId = service.categoryId.toString();
     await this.serviceRepository.softDeleteService(serviceId);
+
+    const remainingCount = await this.serviceRepository.countActiveServicesByShopAndCategory(
+      shopId,
+      categoryId,
+    );
+    if (remainingCount === 0) {
+      await this.shopService.removeCategoryFromShop(shopId, categoryId);
+    }
 
     this.logger.info({
       action: 'SERVICE_DELETED',
@@ -350,6 +363,19 @@ export class ServiceService {
     const newIsActive = !service.isActive;
     const updated = await this.serviceRepository.toggleServiceActive(serviceId, newIsActive);
     if (!updated) throw new NotFoundError('Service not found.');
+
+    const categoryId = service.categoryId.toString();
+    if (newIsActive) {
+      await this.shopService.syncShopCategory(shopId, categoryId);
+    } else {
+      const remainingCount = await this.serviceRepository.countActiveServicesByShopAndCategory(
+        shopId,
+        categoryId,
+      );
+      if (remainingCount === 0) {
+        await this.shopService.removeCategoryFromShop(shopId, categoryId);
+      }
+    }
 
     this.logger.info({
       action: newIsActive ? 'SERVICE_ENABLED' : 'SERVICE_DISABLED',

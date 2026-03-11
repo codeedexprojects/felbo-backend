@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 import PaymentService from '../payment/payment.service';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
@@ -11,6 +11,8 @@ import {
   InitiateBookingResponse,
   ConfirmBookingInput,
   ConfirmBookingResponse,
+  BookingDetailsDto,
+  UserBookingsResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -200,6 +202,46 @@ export class BookingService {
       slotIntervalMinutes,
       workingHours,
       slots,
+    };
+  }
+
+  async getBookingById(bookingId: string): Promise<BookingDetailsDto | null> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) return null;
+    return {
+      id: booking._id.toString(),
+      userId: booking.userId.toString(),
+      shopId: booking.shopId.toString(),
+      barberId: booking.barberId.toString(),
+      status: booking.status,
+    };
+  }
+
+  async getUserBookings(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<UserBookingsResponse> {
+    const { bookings, total } = await this.bookingRepository.findByUserId(userId, page, limit);
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        barberName: b.barberName,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        totalServiceAmount: b.totalServiceAmount,
+        advancePaid: b.advancePaid,
+        remainingAmount: b.remainingAmount,
+        status: b.status,
+        createdAt: b.createdAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 

@@ -66,6 +66,7 @@ export const nearbyShopsSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180),
   latitude: z.coerce.number().min(-90).max(90),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
+  categoryId: mongoIdSchema.optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
 });
@@ -73,6 +74,7 @@ export const nearbyShopsSchema = z.object({
 export const recommendedShopsSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180),
   latitude: z.coerce.number().min(-90).max(90),
+  categoryId: mongoIdSchema.optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
 });

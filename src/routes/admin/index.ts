@@ -10,6 +10,8 @@ import categoryRoutes from './category.routes';
 import shopRoutes from './shop.routes';
 import configRoutes from './config.routes';
 import dashboardRoutes from './dashboard.routes';
+import financeRoutes from './finance.routes';
+import payoutRoutes from './payout.routes';
 
 const router = Router();
 
@@ -25,5 +27,7 @@ router.use('/advertisements', advertisementRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/shops', shopRoutes);
 router.use('/config', configRoutes);
+router.use('/finance', financeRoutes);
+router.use('/payout', payoutRoutes);
 
 export default router;

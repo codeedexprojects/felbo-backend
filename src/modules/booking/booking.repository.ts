@@ -155,4 +155,23 @@ export class BookingRepository {
       { returnDocument: 'after' },
     ).exec();
   }
+
+  async findByUserId(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<{ bookings: IBooking[]; total: number }> {
+    const skip = (page - 1) * limit;
+    const filter = { userId };
+    const [bookings, total] = await Promise.all([
+      BookingModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean<IBooking[]>()
+        .exec(),
+      BookingModel.countDocuments(filter).exec(),
+    ]);
+    return { bookings, total };
+  }
 }

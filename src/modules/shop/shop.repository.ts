@@ -1,7 +1,6 @@
-import mongoose, { PipelineStage } from 'mongoose';
+import mongoose, { PipelineStage, Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { ShopModel, IShop } from './shop.model';
-import { ServiceModel } from '../service/service.model';
 import { CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
@@ -141,11 +140,27 @@ export default class ShopRepository {
     ).exec();
   }
 
+  addCategoryIfMissing(shopId: string, categoryId: string): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      shopId,
+      { $addToSet: { categoryIds: new Types.ObjectId(categoryId) } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  removeCategoryFromShop(shopId: string, categoryId: string): Promise<IShop | null> {
+    return ShopModel.findByIdAndUpdate(
+      shopId,
+      { $pull: { categoryIds: new Types.ObjectId(categoryId) } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
   async findNearby(
     longitude: number,
     latitude: number,
     maxDistanceMeters: number,
-    filter: { shopType?: string },
+    filter: { shopType?: string; categoryId?: string },
     skip: number,
     limit: number,
   ): Promise<NearbyShopPage> {
@@ -156,6 +171,9 @@ export default class ShopRepository {
     };
     if (filter.shopType) {
       matchStage.shopType = filter.shopType;
+    }
+    if (filter.categoryId) {
+      matchStage.categoryIds = new Types.ObjectId(filter.categoryId);
     }
 
     const pipeline: PipelineStage[] = [
@@ -193,6 +211,7 @@ export default class ShopRepository {
     shopTypes: string[] | null,
     skip: number,
     limit: number,
+    categoryId?: string,
   ): Promise<NearbyShopPage> {
     const matchStage: Record<string, unknown> = {
       status: 'ACTIVE',
@@ -201,6 +220,9 @@ export default class ShopRepository {
     };
     if (shopTypes && shopTypes.length > 0) {
       matchStage.shopType = { $in: shopTypes };
+    }
+    if (categoryId) {
+      matchStage.categoryIds = new Types.ObjectId(categoryId);
     }
 
     const pipeline: PipelineStage[] = [
@@ -253,18 +275,9 @@ export default class ShopRepository {
     if (filter.shopType) {
       matchFilter.shopType = filter.shopType;
     }
-    let categoryShopIds: string[] | null = null;
 
     if (filter.categoryId) {
-      const ids = await ServiceModel.distinct('shopId', {
-        categoryId: filter.categoryId,
-        isActive: true,
-      }).exec();
-      categoryShopIds = ids.map(String);
-    }
-
-    if (categoryShopIds !== null) {
-      matchFilter._id = { $in: categoryShopIds };
+      matchFilter.categoryIds = new Types.ObjectId(filter.categoryId);
     }
 
     if (query) {
@@ -365,5 +378,13 @@ export default class ShopRepository {
       })),
       total,
     };
+  }
+
+  updateRating(shopId: string, average: number, count: number): Promise<void> {
+    return ShopModel.findByIdAndUpdate(shopId, {
+      $set: { 'rating.average': average, 'rating.count': count },
+    })
+      .exec()
+      .then(() => undefined);
   }
 }

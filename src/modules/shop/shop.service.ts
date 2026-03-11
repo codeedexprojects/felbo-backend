@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
@@ -369,7 +369,7 @@ export default class ShopService {
       input.longitude,
       input.latitude,
       maxDistance,
-      { shopType: input.shopType },
+      { shopType: input.shopType, categoryId: input.categoryId },
       skip,
       limit,
     );
@@ -402,6 +402,7 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
+        rating: shop.rating,
       };
     });
 
@@ -432,6 +433,7 @@ export default class ShopService {
       shopTypes,
       skip,
       limit,
+      input.categoryId,
     );
 
     const shopIds = results.map((r) => r.shop._id.toString());
@@ -459,6 +461,7 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
+        rating: shop.rating,
       };
     });
 
@@ -508,10 +511,11 @@ export default class ShopService {
         shopType: s.shopType,
         address: s.address,
         services: shopServices,
+        rating: s.rating,
       };
 
       if ('distance' in s && typeof s.distance === 'number') {
-        dto.distance = Math.round(s.distance);
+        dto.distance = Math.round(s.distance / 100) / 10;
       }
 
       return dto;
@@ -531,6 +535,14 @@ export default class ShopService {
 
   async getActiveServicesByIds(serviceIds: string[], shopId: string): Promise<ServiceDto[]> {
     return this.serviceService.getActiveServicesByIds(serviceIds, shopId);
+  }
+
+  async syncShopCategory(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.addCategoryIfMissing(shopId, categoryId);
+  }
+
+  async removeCategoryFromShop(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.removeCategoryFromShop(shopId, categoryId);
   }
 
   async updateOnboardingStatus(
@@ -556,6 +568,10 @@ export default class ShopService {
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async updateRating(shopId: string, average: number, count: number): Promise<void> {
+    await this.shopRepository.updateRating(shopId, average, count);
   }
 
   async getShopIdsByVendorIds(vendorIds: Types.ObjectId[]): Promise<Types.ObjectId[]> {

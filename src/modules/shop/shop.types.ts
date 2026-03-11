@@ -109,6 +109,7 @@ export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  categoryId?: string;
   userId?: string;
   page?: number;
   limit?: number;
@@ -118,6 +119,7 @@ export interface RecommendedShopsInput {
   longitude: number;
   latitude: number;
   userId: string;
+  categoryId?: string;
   page?: number;
   limit?: number;
 }
@@ -141,6 +143,7 @@ export interface ShopSearchResultDto {
   address: ShopAddress;
   services: Array<{ id: string; name: string; basePrice: number }>;
   distance?: number;
+  rating: { average: number; count: number };
 }
 
 export interface SearchShopsResponse {
@@ -196,6 +199,7 @@ export interface NearbyShopCardDto {
   distance: number;
   topServices: string[];
   isFavorite: boolean;
+  rating: { average: number; count: number };
 }
 
 export interface NearbyShopsResponse {

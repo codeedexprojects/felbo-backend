@@ -21,6 +21,7 @@ export interface LoginVerifyOtpResponse {
     phone: string;
     ownerName: string;
     email: string | null;
+    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   };
   onboardingStatus:
     | 'PENDING_PROFILE'
@@ -112,6 +113,16 @@ export interface RegistrationStatusResponse {
   verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   rejectionReason?: string;
   registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
+}
+
+export interface OnboardingStatusResponse {
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
+    | 'COMPLETED'
+    | null;
 }
 
 export interface VendorProfileDto {

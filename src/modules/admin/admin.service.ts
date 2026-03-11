@@ -4,18 +4,12 @@ import {
   AdminLoginInput,
   AdminLoginResponse,
   AdminDTO,
-  ListUsersFilter,
-  ListUsersResponse,
-  UserDetailDto,
-  UserListItemDto,
-  UserIssueDto,
   SuperAdminDashboardDto,
   AssociationAdminDashboardDto,
 } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
-import { IUser } from '../user/user.model';
 import UserService from '../user/user.service';
 import VendorService from '../vendor/vendor.service';
 import { IssueService } from '../issue/issue.service';
@@ -217,68 +211,6 @@ export class AdminService {
   async logout(adminId: string): Promise<void> {
     await this.adminRepository.updateRefreshToken(adminId, null);
     this.logger.info('Admin logged out', { adminId });
-  }
-
-  async listUsers(filter: ListUsersFilter): Promise<ListUsersResponse> {
-    const [{ users, total }, counts] = await Promise.all([
-      this.userService.findAllUsers(filter),
-      this.userService.getUserStatusCounts(),
-    ]);
-
-    return {
-      users: users.map((u, i) =>
-        this.mapUserToListItem(u, total - (filter.page - 1) * filter.limit - i),
-      ),
-      total,
-      page: filter.page,
-      limit: filter.limit,
-      totalPages: Math.ceil(total / filter.limit),
-      counts,
-    };
-  }
-
-  async getUserDetail(userId: string): Promise<UserDetailDto> {
-    const user = await this.userService.findUserForAdmin(userId);
-
-    const issuesReported: UserIssueDto[] = await this.issueService.getRecentIssuesByUserId(userId);
-
-    return {
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      email: user.email ?? null,
-      status: user.status,
-      blockReason: user.blockReason ?? null,
-      walletBalance: user.walletBalance,
-      cancellationCount: user.cancellationCount,
-      registeredAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt ?? null,
-      issuesReported,
-      issueCount: issuesReported.length,
-    };
-  }
-
-  async blockUser(userId: string, reason: string): Promise<void> {
-    await this.userService.blockUser(userId, reason);
-  }
-
-  async unblockUser(userId: string): Promise<void> {
-    await this.userService.unblockUser(userId);
-  }
-
-  private mapUserToListItem(user: IUser, slNo: number): UserListItemDto {
-    return {
-      slNo,
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      email: user.email ?? null,
-      status: user.status,
-      walletBalance: user.walletBalance,
-      cancellationCount: user.cancellationCount,
-      lastLoginAt: user.lastLoginAt ?? null,
-      registeredAt: user.createdAt,
-    };
   }
 
   private mapToDTO(admin: IAdmin): AdminDTO {
