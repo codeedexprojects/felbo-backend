@@ -39,3 +39,27 @@ export const confirmBookingBodySchema = z.object({
   razorpayPaymentId: z.string().min(1),
   razorpaySignature: z.string().min(1),
 });
+
+export const adminBookingListQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(10),
+  search: z.string().optional(),
+  status: z
+    .enum([
+      'PENDING_PAYMENT',
+      'CONFIRMED',
+      'COMPLETED',
+      'CANCELLED_BY_USER',
+      'CANCELLED_BY_VENDOR',
+      'NO_SHOW',
+    ])
+    .optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+});

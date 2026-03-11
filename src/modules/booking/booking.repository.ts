@@ -176,4 +176,56 @@ export class BookingRepository {
     ]);
     return { bookings, total };
   }
+
+  async adminGetBookings(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    associatedShopIds?: string[];
+  }): Promise<{ bookings: IBooking[]; total: number }> {
+    const skip = (params.page - 1) * params.limit;
+    const filter: Record<string, unknown> = {};
+
+    if (params.search) {
+      const escapedQuery = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { bookingNumber: { $regex: escapedQuery, $options: 'i' } },
+        { userPhone: { $regex: escapedQuery, $options: 'i' } },
+        { shopName: { $regex: escapedQuery, $options: 'i' } },
+        { barberName: { $regex: escapedQuery, $options: 'i' } },
+      ];
+    }
+
+    if (params.status) {
+      filter.status = params.status;
+    }
+
+    if (params.startDate || params.endDate) {
+      const dateFilter: Record<string, Date> = {};
+      if (params.startDate) dateFilter.$gte = params.startDate;
+      if (params.endDate) dateFilter.$lte = params.endDate;
+      filter.date = dateFilter;
+    }
+
+    if (params.associatedShopIds && params.associatedShopIds.length > 0) {
+      filter.shopId = {
+        $in: params.associatedShopIds.map((id: string) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    const [bookings, total] = await Promise.all([
+      BookingModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(params.limit)
+        .lean<IBooking[]>()
+        .exec(),
+      BookingModel.countDocuments(filter).exec(),
+    ]);
+
+    return { bookings, total };
+  }
 }

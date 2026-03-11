@@ -120,3 +120,74 @@ export interface UserBookingsResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface AdminBookingListParams {
+  page: number;
+  limit: number;
+  search?: string;
+  status?: string;
+  startDate?: Date;
+  endDate?: Date;
+  associatedShopIds?: string[];
+  role: string;
+}
+
+export interface AdminBookingListItemDto {
+  id: string;
+  bookingNumber: string;
+  userPhone?: string;
+  shopName: string;
+  barberName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  totalServiceAmount: number;
+  advancePaid: number;
+  remainingAmount: number;
+  status: string;
+  createdAt: Date;
+}
+
+export interface AdminBookingListResponse {
+  bookings: AdminBookingListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AdminBookingDetailDto {
+  id: string;
+  bookingNumber: string;
+  userId?: string;
+  userName?: string;
+  userPhone?: string;
+  shopId: string;
+  shopName: string;
+  barberId: string;
+  barberName: string;
+  barberSelectionType: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  totalDurationMinutes: number;
+  services: BookingServiceSnapshot[];
+  totalServiceAmount: number;
+  advancePaid: number;
+  remainingAmount: number;
+  paymentMethod: string;
+  paymentId?: string;
+  razorpayOrderId?: string;
+  status: string;
+  cancellation?: {
+    cancelledAt: Date;
+    cancelledBy: string;
+    reason: string;
+    refundAmount: number;
+    refundType: string;
+    refundStatus: string;
+  };
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}

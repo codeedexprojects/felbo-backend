@@ -12,6 +12,7 @@ import configRoutes from './config.routes';
 import dashboardRoutes from './dashboard.routes';
 import financeRoutes from './finance.routes';
 import payoutRoutes from './payout.routes';
+import bookingRoutes from './booking.routes';
 
 const router = Router();
 
@@ -29,5 +30,6 @@ router.use('/shops', shopRoutes);
 router.use('/config', configRoutes);
 router.use('/finance', financeRoutes);
 router.use('/payout', payoutRoutes);
+router.use('/bookings', bookingRoutes);
 
 export default router;
