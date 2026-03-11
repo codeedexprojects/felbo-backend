@@ -5,6 +5,27 @@ export type OnboardingStatus =
   | 'PENDING_BARBER_SERVICES'
   | 'COMPLETED';
 
+export interface ShopServicesInput {
+  shopId: string;
+  type?: 'MENS' | 'WOMENS' | 'ALL';
+}
+
+export interface ShopServiceItemDto {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number;
+}
+
+export interface ShopServicesCategoryDto {
+  categoryName: string;
+  services: ShopServiceItemDto[];
+}
+
+export interface ShopServicesResponse {
+  categories: ShopServicesCategoryDto[];
+}
+
 export interface ShopAddress {
   line1: string;
   line2?: string;

@@ -49,14 +49,13 @@ export default class ShopRepository {
     return ShopModel.find({ vendorId, status: { $ne: 'DELETED' } }).exec();
   }
 
-  async findIdsByVendorIds(
-    vendorIds: mongoose.Types.ObjectId[],
-  ): Promise<mongoose.Types.ObjectId[]> {
-    const shops = await ShopModel.find({ vendorId: { $in: vendorIds }, status: { $ne: 'DELETED' } })
+  async findIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
+    const objectIds = vendorIds.map((id) => new mongoose.Types.ObjectId(id));
+    const shops = await ShopModel.find({ vendorId: { $in: objectIds }, status: { $ne: 'DELETED' } })
       .select('_id')
       .lean<{ _id: mongoose.Types.ObjectId }[]>()
       .exec();
-    return shops.map((s) => s._id);
+    return shops.map((s) => s._id.toString());
   }
 
   updateById(

@@ -33,7 +33,9 @@ export class FinanceService {
       this.financeRepository.getRefundStats(),
     ]);
 
-    const shopIds = await this.shopService.getShopIdsByVendorIds(vendorIds);
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
 
     const assocBookingCount = await this.financeRepository.getAssocBookingCount(shopIds);
 
@@ -63,7 +65,9 @@ export class FinanceService {
 
   async getAssocSummary(): Promise<AssocFinanceSummaryDto> {
     const vendorIds = await this.vendorService.getAssociationVendorIds();
-    const shopIds = await this.shopService.getShopIdsByVendorIds(vendorIds);
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
     const stats = await this.financeRepository.getAssocSummaryStats(shopIds);
     return {
       vendorCount: vendorIds.length,
@@ -84,7 +88,9 @@ export class FinanceService {
     params: VendorRevenueTableParams,
   ): Promise<VendorRevenueTableResponse> {
     const vendorIds = await this.vendorService.getAssociationVendorIds();
-    const shopIds = await this.shopService.getShopIdsByVendorIds(vendorIds);
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
     const { vendors, total } = await this.financeRepository.getAssocVendorRevenueTable(
       shopIds,
       params,

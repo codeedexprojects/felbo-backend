@@ -436,4 +436,29 @@ export class ServiceService {
       basePrice: s.basePrice,
     }));
   }
+
+  async getServicesWithCategories(
+    shopId: string,
+    shopType?: 'MENS' | 'WOMENS' | 'ALL',
+  ): Promise<
+    Array<{
+      categoryName: string;
+      services: Array<{ id: string; name: string; durationMinutes: number; price: number }>;
+    }>
+  > {
+    const categoriesWithServices = await this.serviceRepository.findServicesByCategoryForShop(
+      shopId,
+      shopType,
+    );
+
+    return categoriesWithServices.map((cat) => ({
+      categoryName: cat.name,
+      services: cat.services.map((s) => ({
+        id: s._id.toString(),
+        name: s.name,
+        durationMinutes: s.baseDurationMinutes,
+        price: s.basePrice,
+      })),
+    }));
+  }
 }

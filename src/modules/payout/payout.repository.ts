@@ -5,9 +5,9 @@ import { PAID_STATUSES } from '../finance/finance.types';
 import { PayoutListParams } from './payout.types';
 
 export class PayoutRepository {
-  async getAssocBookingCount(shopIds: Types.ObjectId[]): Promise<number> {
+  async getAssocBookingCount(shopIds: string[]): Promise<number> {
     return BookingModel.countDocuments({
-      shopId: { $in: shopIds },
+      shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
       status: { $in: [...PAID_STATUSES] },
     }).exec();
   }

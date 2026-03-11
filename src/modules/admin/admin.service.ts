@@ -58,7 +58,9 @@ export class AdminService {
   async getAssociationAdminDashboard(): Promise<AssociationAdminDashboardDto> {
     const vendorIds = await this.vendorService.getAssociationVendorIds();
 
-    const shopIds = await this.shopService.getShopIdsByVendorIds(vendorIds);
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
 
     const bookingStats = await this.bookingService.getStatsByShopIds(shopIds);
 

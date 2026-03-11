@@ -1,3 +1,4 @@
+import { PipelineStage, Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { BarberServiceModel, IBarberService, ServiceModel, IService } from './service.model';
 
@@ -183,5 +184,44 @@ export class ServiceRepository {
 
   countActiveServicesByShopAndCategory(shopId: string, categoryId: string): Promise<number> {
     return ServiceModel.countDocuments({ shopId, categoryId, isActive: true }).exec();
+  }
+
+  async findServicesByCategoryForShop(
+    shopId: string,
+    shopType?: 'MENS' | 'WOMENS' | 'ALL',
+  ): Promise<Array<{ _id: Types.ObjectId; name: string; services: IService[] }>> {
+    const matchStage: Record<string, unknown> = {
+      shopId: new Types.ObjectId(shopId),
+      isActive: true,
+      status: 'ACTIVE',
+    };
+
+    if (shopType && shopType !== 'ALL') {
+      matchStage.applicableFor = { $in: [shopType, 'ALL'] };
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      { $unwind: '$category' },
+      {
+        $group: {
+          _id: '$category._id',
+          name: { $first: '$category.name' },
+          displayOrder: { $first: '$category.displayOrder' },
+          services: { $push: '$$ROOT' },
+        },
+      },
+      { $sort: { displayOrder: 1 } },
+    ];
+
+    return ServiceModel.aggregate(pipeline).exec();
   }
 }
