@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import ReviewModel, { IReview } from './review.model';
 
 export interface ReviewPage {
-  reviews: IReview[];
+  reviews: Array<IReview & { userName?: string; userPhoto?: string }>;
   total: number;
 }
 
@@ -29,17 +29,48 @@ export default class ReviewRepository {
 
   async findPublishedByShop(shopId: string, page: number, limit: number): Promise<ReviewPage> {
     const skip = (page - 1) * limit;
-    const filter = { shopId, status: 'PUBLISHED' };
+    const matchFilter = { shopId: new mongoose.Types.ObjectId(shopId), status: 'PUBLISHED' };
 
-    const [reviews, total] = await Promise.all([
-      ReviewModel.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean<IReview[]>()
-        .exec(),
-      ReviewModel.countDocuments(filter).exec(),
+    const pipeline: mongoose.PipelineStage[] = [
+      { $match: matchFilter },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          pipeline: [{ $project: { name: 1, photo: 1 } }],
+          as: 'user',
+        },
+      },
+      {
+        $addFields: {
+          userRef: { $arrayElemAt: ['$user', 0] },
+        },
+      },
+      {
+        $project: {
+          user: 0,
+        },
+      },
+    ];
+
+    const [reviewsRaw, total] = await Promise.all([
+      ReviewModel.aggregate(pipeline).exec(),
+      ReviewModel.countDocuments(matchFilter).exec(),
     ]);
+
+    const reviews = reviewsRaw.map((r) => {
+      const reviewDoc = { ...r };
+      if (r.userRef) {
+        reviewDoc.userName = r.userRef.name;
+        reviewDoc.userPhoto = r.userRef.photo;
+      }
+      delete reviewDoc.userRef;
+      return reviewDoc;
+    });
 
     return { reviews, total };
   }

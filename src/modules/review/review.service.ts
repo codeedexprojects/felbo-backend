@@ -84,17 +84,14 @@ export default class ReviewService {
     };
   }
 
-  private toDto(review: IReview): ReviewDto {
+  private toDto(review: IReview & { userName?: string; userPhoto?: string }): ReviewDto {
     return {
       id: review._id.toString(),
-      bookingId: review.bookingId.toString(),
-      userId: review.userId.toString(),
-      shopId: review.shopId.toString(),
-      barberId: review.barberId.toString(),
+      username: review.userName ?? 'Anonymous',
+      image: review.userPhoto ?? null,
       rating: review.rating,
       description: review.description,
-      status: review.status,
-      createdAt: review.createdAt,
+      date: review.createdAt,
     };
   }
 }
