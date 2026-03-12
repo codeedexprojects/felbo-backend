@@ -15,6 +15,7 @@ export interface ShopServiceItemDto {
   name: string;
   durationMinutes: number;
   price: number;
+  isAvailable: boolean;
 }
 
 export interface ShopServicesCategoryDto {

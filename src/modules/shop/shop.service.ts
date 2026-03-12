@@ -40,6 +40,7 @@ import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.type
 import { ServiceService } from '../service/service.service';
 import UserService from '../user/user.service';
 import { FavoriteService } from '../favorite/favorite.service';
+import { formatRating } from '../../shared/utils/rating';
 
 export default class ShopService {
   constructor(
@@ -81,7 +82,10 @@ export default class ShopService {
       location: shop.location,
       workingHours: shop.workingHours,
       photos: shop.photos,
-      rating: shop.rating,
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
       isAvailable: shop.isAvailable,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
@@ -107,7 +111,10 @@ export default class ShopService {
       name: barber.name,
       phone: barber.phone,
       photo: barber.photo,
-      rating: barber.rating,
+      rating: {
+        average: formatRating(barber.rating.average),
+        count: barber.rating.count,
+      },
       status: barber.status,
       isAvailable: barber.isAvailable,
       services: barberServices.map((bs) => this.toBarberServiceDto(bs)),
@@ -330,7 +337,10 @@ export default class ShopService {
       id: b.id,
       name: b.name,
       photo: b.photo,
-      rating: b.rating,
+      rating: {
+        average: formatRating(b.rating.average),
+        count: b.rating.count,
+      },
       isAvailableToday: b.isAvailable,
     }));
 
@@ -403,7 +413,10 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
-        rating: shop.rating,
+        rating: {
+          average: formatRating(shop.rating.average),
+          count: shop.rating.count,
+        },
       };
     });
 
@@ -462,7 +475,10 @@ export default class ShopService {
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
         isFavorite: favoriteShopIds.has(shopId),
-        rating: shop.rating,
+        rating: {
+          average: formatRating(shop.rating.average),
+          count: shop.rating.count,
+        },
       };
     });
 
@@ -512,7 +528,10 @@ export default class ShopService {
         shopType: s.shopType,
         address: s.address,
         services: shopServices,
-        rating: s.rating,
+        rating: {
+          average: formatRating(s.rating.average),
+          count: s.rating.count,
+        },
       };
 
       if ('distance' in s && typeof s.distance === 'number') {

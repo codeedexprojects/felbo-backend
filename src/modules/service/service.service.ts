@@ -443,13 +443,19 @@ export class ServiceService {
   ): Promise<
     Array<{
       categoryName: string;
-      services: Array<{ id: string; name: string; durationMinutes: number; price: number }>;
+      services: Array<{
+        id: string;
+        name: string;
+        durationMinutes: number;
+        price: number;
+        isAvailable: boolean;
+      }>;
     }>
   > {
-    const categoriesWithServices = await this.serviceRepository.findServicesByCategoryForShop(
-      shopId,
-      shopType,
-    );
+    const [categoriesWithServices, availableServiceIds] = await Promise.all([
+      this.serviceRepository.findServicesByCategoryForShop(shopId, shopType),
+      this.barberService.getAvailableServiceIds(shopId),
+    ]);
 
     return categoriesWithServices.map((cat) => ({
       categoryName: cat.name,
@@ -458,6 +464,7 @@ export class ServiceService {
         name: s.name,
         durationMinutes: s.baseDurationMinutes,
         price: s.basePrice,
+        isAvailable: availableServiceIds.has(s._id.toString()),
       })),
     }));
   }

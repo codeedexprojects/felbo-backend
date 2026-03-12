@@ -197,7 +197,7 @@ export class ServiceRepository {
     };
 
     if (shopType && shopType !== 'ALL') {
-      matchStage.applicableFor = { $in: [shopType, 'ALL'] };
+      matchStage.applicableFor = shopType;
     }
 
     const pipeline: PipelineStage[] = [

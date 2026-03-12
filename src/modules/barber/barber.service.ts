@@ -47,6 +47,7 @@ import { generateToken, hashToken } from '../../shared/utils/token';
 import { getRedisClient } from '../../shared/redis/redis';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { formatRating } from '../../shared/utils/rating';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -227,7 +228,10 @@ export class BarberService {
       phone: barber.phone,
       email: barber.email,
       photo: barber.photo,
-      rating: barber.rating,
+      rating: {
+        average: formatRating(barber.rating.average),
+        count: barber.rating.count,
+      },
       status: barber.status,
       isAvailable: barber.isAvailable,
     };
@@ -682,7 +686,10 @@ export class BarberService {
       email: barber.email,
       photo: barber.photo,
       username: barber.username ?? '',
-      rating: barber.rating,
+      rating: {
+        average: formatRating(barber.rating.average),
+        count: barber.rating.count,
+      },
       status: barber.status,
       isAvailable: barber.isAvailable,
       createdAt: barber.createdAt,
@@ -812,5 +819,30 @@ export class BarberService {
       startTime: b.startTime,
       endTime: b.endTime,
     }));
+  }
+
+  async getAvailableServiceIds(shopId: string): Promise<Set<string>> {
+    const barbers = await this.barberRepository.findAllActiveByShopId(shopId);
+    const availableBarbers = barbers.filter((b) => b.isAvailable);
+
+    if (availableBarbers.length === 0) {
+      return new Set();
+    }
+
+    const barberIds = availableBarbers.map((b) => b._id.toString());
+    const serviceIds = new Set<string>();
+
+    await Promise.all(
+      barberIds.map(async (barberId) => {
+        const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+        links.forEach((l) => {
+          if (l.isActive) {
+            serviceIds.add(l.serviceId.toString());
+          }
+        });
+      }),
+    );
+
+    return serviceIds;
   }
 }
