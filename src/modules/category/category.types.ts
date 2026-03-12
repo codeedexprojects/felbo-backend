@@ -9,6 +9,7 @@ export interface UpdateCategoryInput {
   image?: string;
   displayOrder?: number;
   isActive?: boolean;
+  status?: 'ACTIVE' | 'INACTIVE' | 'DELETED';
 }
 
 export interface CategoryDto {
