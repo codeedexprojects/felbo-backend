@@ -212,6 +212,12 @@ export class ServiceRepository {
       },
       { $unwind: '$category' },
       {
+        $match: {
+          'category.status': 'ACTIVE',
+          'category.isActive': true,
+        },
+      },
+      {
         $group: {
           _id: '$category._id',
           name: { $first: '$category.name' },

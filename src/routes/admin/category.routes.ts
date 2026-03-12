@@ -19,6 +19,7 @@ router.post(
 router.post('/', categoryController.create);
 router.get('/', categoryController.getAllAdmin);
 router.patch('/:categoryId', categoryController.update);
+router.patch('/:categoryId/toggle', categoryController.toggleStatus);
 router.delete('/:categoryId', categoryController.delete);
 
 export default router;
