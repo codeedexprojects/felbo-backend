@@ -31,6 +31,7 @@ import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import PaymentService from '../payment/payment.service';
 import ShopService from '../shop/shop.service';
 import { BarberService } from '../barber/barber.service';
+import { formatRating } from '../../shared/utils/rating';
 import {
   UnauthorizedError,
   ForbiddenError,
@@ -87,13 +88,15 @@ export default class VendorService {
     };
   }
 
-  private async getShopOnboardingStatus(
-    vendorId: string,
-  ): Promise<VendorProfileDto['onboardingStatus']> {
+  private async getOnboardingInfo(vendorId: string): Promise<{
+    onboardingStatus: OnboardingStatusResponse['onboardingStatus'];
+    shopDetails: OnboardingStatusResponse['shopDetails'];
+  }> {
     const shops = await this.shopService.getMyShops(vendorId);
-    if (shops.length === 0) return null;
+    if (shops.length === 0) {
+      return { onboardingStatus: null, shopDetails: null };
+    }
 
-    // Return the least-progressed onboarding status across all shops
     const statusPriority: Record<string, number> = {
       PENDING_PROFILE: 0,
       PENDING_SERVICES: 1,
@@ -108,7 +111,20 @@ export default class VendorService {
         : min,
     );
 
-    return leastProgressed.onboardingStatus;
+    const onboardingStatus = leastProgressed.onboardingStatus;
+
+    return {
+      onboardingStatus,
+      shopDetails:
+        onboardingStatus === 'COMPLETED'
+          ? null
+          : {
+              shopId: leastProgressed.id,
+              shopName: leastProgressed.name,
+              address: leastProgressed.address,
+              phoneNo: leastProgressed.phone,
+            },
+    };
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
@@ -179,7 +195,7 @@ export default class VendorService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
 
-    const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendor._id.toString());
 
     this.logger.info({
       action: 'VENDOR_LOGIN',
@@ -188,7 +204,7 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus };
+    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus, shopDetails };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
@@ -417,38 +433,12 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const shops = await this.shopService.getMyShops(vendorId);
-    if (shops.length === 0) {
-      return { onboardingStatus: null, shopDetails: null };
-    }
-
-    const statusPriority: Record<string, number> = {
-      PENDING_PROFILE: 0,
-      PENDING_SERVICES: 1,
-      PENDING_BARBERS: 2,
-      PENDING_BARBER_SERVICES: 3,
-      COMPLETED: 4,
-    };
-
-    const leastProgressed = shops.reduce((min, shop) =>
-      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-        ? shop
-        : min,
-    );
-
-    const finalOnboardingStatus = leastProgressed.onboardingStatus;
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
 
     return {
-      onboardingStatus: finalOnboardingStatus,
-      shopDetails:
-        finalOnboardingStatus === 'COMPLETED'
-          ? null
-          : {
-              shopId: leastProgressed.id,
-              shopName: leastProgressed.name,
-              address: leastProgressed.address,
-              phoneNo: leastProgressed.phone,
-            },
+      vendorName: vendor.ownerName,
+      onboardingStatus,
+      shopDetails,
     };
   }
 
@@ -458,7 +448,7 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+    const { onboardingStatus } = await this.getOnboardingInfo(vendorId);
 
     return this.toProfileDto(vendor, onboardingStatus);
   }
@@ -591,7 +581,10 @@ export default class VendorService {
           shopType: shopDto.shopType,
           phone: shopDto.phone,
           address: shopDto.address,
-          rating: shopDto.rating,
+          rating: {
+            average: formatRating(shopDto.rating.average),
+            count: shopDto.rating.count,
+          },
           onboardingStatus: shopDto.onboardingStatus,
           status: shopDto.status,
           isAvailable: shopDto.isAvailable,
