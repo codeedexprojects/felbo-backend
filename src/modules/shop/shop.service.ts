@@ -86,7 +86,7 @@ export default class ShopService {
         average: formatRating(shop.rating.average),
         count: shop.rating.count,
       },
-      isAvailable: shop.isAvailable,
+      isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
     };
@@ -351,12 +351,24 @@ export default class ShopService {
       shopType: shop.shopType,
       address: shop.address,
       location: shop.location,
-      rating: shop.rating,
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
       workingHours: shop.workingHours,
       photos: shop.photos,
       barbers: publicBarbers,
+      isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
       isFavorite: favoriteShopIds.has(shopId),
     };
+  }
+
+  private isShopOpenToday(shop: IShop): boolean {
+    if (!shop.workingHours) return true;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = days[new Date().getDay()] as keyof typeof shop.workingHours;
+    const todayHours = shop.workingHours[todayKey];
+    return !!(todayHours && todayHours.isOpen);
   }
 
   private getTodayClosingTime(shop: IShop): string | null {
@@ -408,7 +420,7 @@ export default class ShopService {
         name: shop.name,
         shopType: shop.shopType,
         address: shop.address,
-        isAvailable: shop.isAvailable,
+        isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
         closingTime: this.getTodayClosingTime(shop),
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
@@ -470,7 +482,7 @@ export default class ShopService {
         name: shop.name,
         shopType: shop.shopType,
         address: shop.address,
-        isAvailable: shop.isAvailable,
+        isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
         closingTime: this.getTodayClosingTime(shop),
         distance: Math.round(r.distance / 100) / 10,
         topServices: servicesByShopId.get(shopId) ?? [],
@@ -528,6 +540,7 @@ export default class ShopService {
         shopType: s.shopType,
         address: s.address,
         services: shopServices,
+        isAvailable: s.isAvailable && this.isShopOpenToday(s),
         rating: {
           average: formatRating(s.rating.average),
           count: s.rating.count,
