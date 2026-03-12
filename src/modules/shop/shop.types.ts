@@ -165,6 +165,7 @@ export interface ShopSearchResultDto {
   address: ShopAddress;
   services: Array<{ id: string; name: string; basePrice: number }>;
   distance?: number;
+  isAvailable: boolean;
   rating: { average: number; count: number };
 }
 
@@ -312,6 +313,7 @@ export interface ShopDetailsDto {
   workingHours?: WorkingHours;
   photos: string[];
   barbers: PublicBarberDto[];
+  isAvailable: boolean;
   isFavorite: boolean;
 }
 
