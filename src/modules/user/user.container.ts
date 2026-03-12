@@ -8,6 +8,10 @@ import UserService from './user.service';
 import UserController from './user.controller';
 import type { IssueService } from '../issue/issue.service';
 import type { BookingService } from '../booking/booking.service';
+import type { FavoriteService } from '../favorite/favorite.service';
+import { issueService } from '../issue/issue.container';
+import { bookingService } from '../booking/booking.container';
+import { favoriteService } from '../favorite/favorite.container';
 
 const userRepository = new UserRepository();
 
@@ -30,10 +34,9 @@ const userService = new UserService(
   otpSessionService,
   jwtService,
   logger,
-  (): IssueService =>
-    (require('../issue/issue.container') as { issueService: IssueService }).issueService,
-  (): BookingService =>
-    (require('../booking/booking.container') as { bookingService: BookingService }).bookingService,
+  (): IssueService => issueService,
+  (): BookingService => bookingService,
+  (): FavoriteService => favoriteService,
 );
 
 const userController = new UserController(userService);

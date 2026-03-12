@@ -1,3 +1,12 @@
+import { BookingListItemDto } from '../booking/booking.types';
+
+export interface UserFavoriteShopDto {
+  shopId: string;
+  name: string;
+  image: string | null;
+  rating: number;
+}
+
 export interface UserDto {
   id: string;
   phone: string;
@@ -114,6 +123,7 @@ export interface UserDetailDto {
   name: string;
   phone: string;
   email: string | null;
+  profileUrl: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason: string | null;
   walletBalance: number;
@@ -122,4 +132,6 @@ export interface UserDetailDto {
   lastLoginAt: Date | null;
   issuesReported: UserIssueDto[];
   issueCount: number;
+  favorites: UserFavoriteShopDto[];
+  recentBookings: BookingListItemDto[];
 }

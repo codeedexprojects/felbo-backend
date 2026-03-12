@@ -320,6 +320,7 @@ export interface VendorAdminDetail {
     onboardingStatus: string;
     status: string;
     isAvailable: boolean;
+    photos: string[];
 
     barbers: {
       id: string;
@@ -371,6 +372,7 @@ export interface VendorRequestAdminDetail {
       type: 'Point';
       coordinates: [number, number];
     };
+    photos: string[];
   };
 }
 

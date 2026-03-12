@@ -36,6 +36,7 @@ const shopDetailsSchema = z.object({
   type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
   address: addressSchema,
   location: locationSchema,
+  photos: z.array(z.string().url('Enter valid image URL')).optional().default([]),
 });
 
 export const sendOtpSchema = z.object({

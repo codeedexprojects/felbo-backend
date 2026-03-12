@@ -31,12 +31,28 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 export class IssueService {
   constructor(
     private readonly issueRepository: IssueRepository,
-    private readonly vendorService: VendorService,
-    private readonly shopService: ShopService,
-    private readonly paymentService: PaymentService,
-    private readonly bookingService: BookingService,
+    private readonly getVendorService: () => VendorService,
+    private readonly getShopService: () => ShopService,
+    private readonly getPaymentService: () => PaymentService,
+    private readonly getBookingService: () => BookingService,
     private readonly configService: ConfigService,
   ) {}
+
+  private get vendorService(): VendorService {
+    return this.getVendorService();
+  }
+
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
+
+  private get paymentService(): PaymentService {
+    return this.getPaymentService();
+  }
+
+  private get bookingService(): BookingService {
+    return this.getBookingService();
+  }
 
   async listIssues(filter: ListIssuesFilter): Promise<ListIssuesResponse> {
     const { issues, total } = await this.issueRepository.findAll(filter);
