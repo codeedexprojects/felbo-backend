@@ -102,7 +102,12 @@ export const shopIdOnboardingParamSchema = z.object({
 });
 
 export const shopServicesSchema = z.object({
-  type: z.enum(['MENS', 'WOMENS', 'ALL']).optional(),
+  type: z
+    .preprocess(
+      (val) => (typeof val === 'string' ? val.toUpperCase() : val),
+      z.enum(['MENS', 'WOMENS', 'ALL', 'UNISEX']),
+    )
+    .optional(),
 });
 
 export const completeProfileSchema = z.object({

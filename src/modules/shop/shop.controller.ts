@@ -136,7 +136,7 @@ export default class ShopController {
 
     const result = await this.shopService.getShopServices({
       shopId: id,
-      type,
+      type: type === 'UNISEX' ? 'ALL' : (type as 'MENS' | 'WOMENS' | 'ALL' | undefined),
     });
 
     res.status(200).json({
