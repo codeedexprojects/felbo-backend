@@ -76,18 +76,24 @@ export class CategoryService {
 
   async updateCategory(categoryId: string, input: UpdateCategoryInput): Promise<CategoryDto> {
     const category = await this.categoryRepository.findById(categoryId);
-    if (!category) {
+    if (!category || category.status === 'DELETED') {
       throw new NotFoundError('Category not found.');
     }
 
     if (input.name && input.name !== category.name) {
       const duplicate = await this.categoryRepository.findByName(input.name);
-      if (duplicate) {
+      if (duplicate && duplicate.status !== 'DELETED') {
         throw new ConflictError('A category with this name already exists.');
       }
     }
 
-    const updated = await this.categoryRepository.updateById(categoryId, input);
+    // Map isActive to status if provided
+    const updateData: UpdateCategoryInput = { ...input };
+    if (input.isActive !== undefined) {
+      updateData.status = input.isActive ? 'ACTIVE' : 'INACTIVE';
+    }
+
+    const updated = await this.categoryRepository.updateById(categoryId, updateData);
     if (!updated) {
       throw new NotFoundError('Category not found.');
     }
@@ -101,9 +107,44 @@ export class CategoryService {
     return this.toCategoryDto(updated);
   }
 
+  async toggleCategoryStatus(categoryId: string, isActive: boolean): Promise<CategoryDto> {
+    const category = await this.categoryRepository.findById(categoryId);
+    if (!category || category.status === 'DELETED') {
+      throw new NotFoundError('Category not found.');
+    }
+
+    // If disabling, check for services
+    if (!isActive) {
+      const activeServiceCount = await this.serviceService.countActiveByCategoryId(categoryId);
+      if (activeServiceCount > 0) {
+        throw new ConflictError(
+          `Cannot disable category: ${activeServiceCount} active service(s) are using it.`,
+        );
+      }
+    }
+
+    const updated = await this.categoryRepository.updateById(categoryId, {
+      isActive,
+      status: isActive ? 'ACTIVE' : 'INACTIVE',
+    });
+
+    if (!updated) {
+      throw new NotFoundError('Category not found.');
+    }
+
+    this.logger.info({
+      action: 'CATEGORY_STATUS_TOGGLED',
+      module: 'category',
+      categoryId,
+      isActive,
+    });
+
+    return this.toCategoryDto(updated);
+  }
+
   async deleteCategory(categoryId: string): Promise<void> {
     const category = await this.categoryRepository.findById(categoryId);
-    if (!category) {
+    if (!category || category.status === 'DELETED') {
       throw new NotFoundError('Category not found.');
     }
 
@@ -125,7 +166,7 @@ export class CategoryService {
 
   async categoryExists(categoryId: string): Promise<boolean> {
     const category = await this.categoryRepository.findById(categoryId);
-    return !!category && category.isActive;
+    return !!category && category.status === 'ACTIVE' && category.isActive;
   }
 
   async getCategoryNamesByIds(ids: string[]): Promise<Map<string, string>> {

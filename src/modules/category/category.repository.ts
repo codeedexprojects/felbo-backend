@@ -25,7 +25,9 @@ export class CategoryRepository {
   }
 
   findAllActive(): Promise<ICategory[]> {
-    return CategoryModel.find({ isActive: true }).sort({ displayOrder: 1 }).exec();
+    return CategoryModel.find({ status: 'ACTIVE', isActive: true })
+      .sort({ displayOrder: 1 })
+      .exec();
   }
 
   async findAllActivePaginated(
@@ -35,20 +37,22 @@ export class CategoryRepository {
     const skip = (page - 1) * limit;
 
     const [categories, total] = await Promise.all([
-      CategoryModel.find({ isActive: true })
+      CategoryModel.find({ status: 'ACTIVE', isActive: true })
         .sort({ displayOrder: 1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean()
         .exec(),
-      CategoryModel.countDocuments({ isActive: true }).exec(),
+      CategoryModel.countDocuments({ status: 'ACTIVE', isActive: true }).exec(),
     ]);
 
     return { categories, total };
   }
 
   findAll(): Promise<ICategory[]> {
-    return CategoryModel.find().sort({ displayOrder: 1 }).exec();
+    return CategoryModel.find({ status: { $ne: 'DELETED' } })
+      .sort({ displayOrder: 1 })
+      .exec();
   }
 
   updateById(id: string, data: UpdateCategoryInput): Promise<ICategory | null> {
@@ -58,7 +62,7 @@ export class CategoryRepository {
   softDelete(id: string): Promise<ICategory | null> {
     return CategoryModel.findByIdAndUpdate(
       id,
-      { $set: { isActive: false } },
+      { $set: { status: 'DELETED', isActive: false } },
       { returnDocument: 'after' },
     ).exec();
   }
