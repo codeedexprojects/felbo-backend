@@ -9,15 +9,8 @@ import {
   adminBookingListQuerySchema,
 } from './booking.validators';
 
-import VendorService from '../vendor/vendor.service';
-import ShopService from '../shop/shop.service';
-
 export class BookingController {
-  constructor(
-    private readonly bookingService: BookingService,
-    private readonly vendorService: VendorService,
-    private readonly shopService: ShopService,
-  ) {}
+  constructor(private readonly bookingService: BookingService) {}
 
   getSlots = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
@@ -57,12 +50,6 @@ export class BookingController {
   adminGetBookings = async (req: Request, res: Response): Promise<void> => {
     const query = adminBookingListQuerySchema.parse(req.query);
     const role = req.user!.role;
-    let associatedShopIds: string[] | undefined;
-
-    if (role === 'ASSOCIATION_ADMIN') {
-      const vendorIds = await this.vendorService.getAssociationVendorIds();
-      associatedShopIds = await this.shopService.getShopIdsByVendorIds(vendorIds.map(String));
-    }
 
     const result = await this.bookingService.adminGetBookings({
       page: query.page,
@@ -71,7 +58,6 @@ export class BookingController {
       status: query.status,
       startDate: query.startDate ? new Date(query.startDate) : undefined,
       endDate: query.endDate ? new Date(query.endDate) : undefined,
-      associatedShopIds,
       role,
     });
 
@@ -81,18 +67,8 @@ export class BookingController {
   adminGetBookingDetail = async (req: Request, res: Response): Promise<void> => {
     const { bookingId } = bookingIdParamSchema.parse(req.params);
     const role = req.user!.role;
-    let associatedShopIds: string[] | undefined;
 
-    if (role === 'ASSOCIATION_ADMIN') {
-      const vendorIds = await this.vendorService.getAssociationVendorIds();
-      associatedShopIds = await this.shopService.getShopIdsByVendorIds(vendorIds.map(String));
-    }
-
-    const result = await this.bookingService.adminGetBookingDetail(
-      bookingId,
-      role,
-      associatedShopIds,
-    );
+    const result = await this.bookingService.adminGetBookingDetail(bookingId, role);
 
     res.status(200).json({ success: true, data: result });
   };

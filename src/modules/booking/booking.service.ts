@@ -23,6 +23,7 @@ import { BarberAvailabilityService } from '../barberAvailability/barberAvailabil
 import ShopService from '../shop/shop.service';
 import UserService from '../user/user.service';
 import { ServiceService } from '../service/service.service';
+import VendorService from '../vendor/vendor.service';
 import { IWorkingHours } from '../shop/shop.model';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
@@ -46,6 +47,7 @@ export class BookingService {
     private readonly getUserService: () => UserService,
     private readonly getServiceService: () => ServiceService,
     private readonly getPaymentService: () => PaymentService,
+    private readonly getVendorService: () => VendorService,
     private readonly logger: Logger,
   ) {}
 
@@ -71,6 +73,10 @@ export class BookingService {
 
   private get paymentService(): PaymentService {
     return this.getPaymentService();
+  }
+
+  private get vendorService(): VendorService {
+    return this.getVendorService();
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
@@ -689,6 +695,13 @@ export class BookingService {
   }
 
   async adminGetBookings(params: AdminBookingListParams): Promise<AdminBookingListResponse> {
+    if (params.role === 'ASSOCIATION_ADMIN') {
+      const vendorIds = await this.vendorService.getAssociationVendorIds();
+      params.associatedShopIds = await this.shopService.getShopIdsByVendorIds(
+        vendorIds.map((id) => id.toString()),
+      );
+    }
+
     const { bookings, total } = await this.bookingRepository.adminGetBookings(params);
 
     return {
@@ -714,11 +727,16 @@ export class BookingService {
     };
   }
 
-  async adminGetBookingDetail(
-    bookingId: string,
-    role: string,
-    associatedShopIds?: string[],
-  ): Promise<AdminBookingDetailDto> {
+  async adminGetBookingDetail(bookingId: string, role: string): Promise<AdminBookingDetailDto> {
+    let associatedShopIds: string[] | undefined;
+
+    if (role === 'ASSOCIATION_ADMIN') {
+      const vendorIds = await this.vendorService.getAssociationVendorIds();
+      associatedShopIds = await this.shopService.getShopIdsByVendorIds(
+        vendorIds.map((id) => id.toString()),
+      );
+    }
+
     const booking = await this.bookingRepository.findBookingById(bookingId);
     if (!booking) {
       throw new NotFoundError('Booking not found.');
