@@ -149,7 +149,7 @@ export interface RecommendedShopsInput {
 export interface SearchShopsInput {
   query?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
-  categoryId?: string;
+  categoryIds?: string[];
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;

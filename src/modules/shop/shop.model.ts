@@ -165,5 +165,6 @@ shopSchema.index({ 'rating.average': -1 });
 shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });
 shopSchema.index({ categoryIds: 1, status: 1, isAvailable: 1 });
+shopSchema.index({ name: 'text', 'address.area': 'text' });
 
 export const ShopModel = mongoose.model<IShop>('Shop', shopSchema);

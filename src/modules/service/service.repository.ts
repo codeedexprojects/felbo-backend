@@ -138,6 +138,7 @@ export class ServiceRepository {
   findServicesByShopIds(shopIds: string[]): Promise<IService[]> {
     return ServiceModel.find({
       shopId: { $in: shopIds },
+      isActive: true,
     })
       .lean()
       .exec();
