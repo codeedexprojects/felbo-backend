@@ -120,4 +120,12 @@ export const DEFAULT_CONFIGS: SeedConfigItem[] = [
     displayName: 'Issue Proximity Limit (meters)',
     description: 'Maximum distance from shop allowed to raise an issue',
   },
+  {
+    key: CONFIG_KEYS.SHOP_CANCEL_WEEKLY_LIMIT,
+    value: '5',
+    valueType: 'number',
+    category: 'abuse_limits',
+    displayName: 'Shop Cancel Weekly Limit',
+    description: 'Max weekly vendor-initiated cancellations per shop before vendor is flagged',
+  },
 ];

@@ -364,7 +364,7 @@ export default class VendorService {
       documents: input.documents,
       shopDetails: input.shopDetails,
       registrationPaymentOrderId: orderId,
-      verificationStatus: 'PENDING',
+      verificationStatus: 'PAYMENT_PENDING',
       status: 'PENDING',
     });
 
@@ -387,6 +387,9 @@ export default class VendorService {
     }
     if (vendor.registrationPaymentOrderId !== input.orderId) {
       throw new ValidationError('Order ID mismatch.');
+    }
+    if (vendor.verificationStatus !== 'PAYMENT_PENDING') {
+      throw new ConflictError('Payment already confirmed or not initiated.');
     }
 
     await this.paymentService.verifyVendorRegistrationPayment({

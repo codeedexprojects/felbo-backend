@@ -6,6 +6,16 @@ export const shopIdParamSchema = z.object({
   shopId: mongoIdSchema,
 });
 
+export const getBarbersForServicesQuerySchema = z.object({
+  serviceIds: z
+    .string()
+    .min(1, 'serviceIds is required')
+    .refine(
+      (val) => val.split(',').every((id) => /^[0-9a-fA-F]{24}$/.test(id.trim())),
+      'serviceIds must be comma-separated valid IDs',
+    ),
+});
+
 export const getSlotsQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
   serviceIds: z
@@ -38,6 +48,18 @@ export const confirmBookingBodySchema = z.object({
   razorpayOrderId: z.string().min(1),
   razorpayPaymentId: z.string().min(1),
   razorpaySignature: z.string().min(1),
+});
+
+export const cancelBookingByBarberBodySchema = z.object({
+  reason: z.enum(['BARBER_SICK', 'EMERGENCY', 'SHOP_CLOSING', 'EQUIPMENT_ISSUE', 'OTHER']),
+});
+
+export const barberBookingListQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
+  status: z
+    .enum(['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'])
+    .optional(),
 });
 
 export const adminBookingListQuerySchema = z.object({

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { BarberService } from './barber.service';
+import { ForbiddenError } from '../../shared/errors/index';
 import {
   createBarberSchema,
   updateBarberSchema,
@@ -23,6 +24,20 @@ import {
 
 export class BarberController {
   constructor(private readonly barberService: BarberService) {}
+
+  private getBarberId(req: Request): string {
+    const user = req.user!;
+    if (user.role === 'BARBER') {
+      return user.sub;
+    }
+    if (user.role === 'VENDOR_BARBER') {
+      if (!user.barberId) {
+        throw new ForbiddenError('Barber profile not found in token.');
+      }
+      return user.barberId;
+    }
+    throw new ForbiddenError('Access denied.');
+  }
 
   listBarbers = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
@@ -140,7 +155,7 @@ export class BarberController {
   createSlotBlock = async (req: Request, res: Response): Promise<void> => {
     const validated = createSlotBlockSchema.parse(req.body);
     const result = await this.barberService.createSlotBlock({
-      barberId: req.user!.sub,
+      barberId: this.getBarberId(req),
       serviceIds: validated.serviceIds,
       reason: validated.reason,
     });
@@ -155,7 +170,7 @@ export class BarberController {
     const { blockId } = releaseSlotBlockParamSchema.parse(req.params);
     const result = await this.barberService.releaseSlotBlock({
       blockId,
-      barberId: req.user!.sub,
+      barberId: this.getBarberId(req),
     });
     res.status(200).json({
       success: true,
@@ -166,7 +181,7 @@ export class BarberController {
 
   listSlotBlocks = async (req: Request, res: Response): Promise<void> => {
     const validated = listSlotBlocksQuerySchema.parse(req.query);
-    const result = await this.barberService.listSlotBlocks(req.user!.sub, validated);
+    const result = await this.barberService.listSlotBlocks(this.getBarberId(req), validated);
 
     res.status(200).json({
       success: true,

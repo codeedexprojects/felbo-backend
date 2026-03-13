@@ -56,7 +56,7 @@ export interface IVendor extends Document {
   shopDetails?: IVendorShopDetails;
 
   // Verification
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   verifiedAt?: Date;
   verifiedBy?: mongoose.Types.ObjectId;
