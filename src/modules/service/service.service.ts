@@ -90,17 +90,23 @@ export class ServiceService {
       serviceCount: newLinks.length,
     });
 
-    const serviceNameMap = new Map(validServices.map((s) => [s.id, s.name]));
+    const serviceMap = new Map(
+      validServices.map((s) => [s.id, { name: s.name, price: s.basePrice }]),
+    );
 
-    return newLinks.map((l) => ({
-      id: l._id.toString(),
-      barberId: l.barberId.toString(),
-      serviceId: l.serviceId.toString(),
-      shopId: l.shopId.toString(),
-      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
-      durationMinutes: l.durationMinutes,
-      isActive: l.isActive,
-    }));
+    return newLinks.map((l) => {
+      const serviceInfo = serviceMap.get(l.serviceId.toString());
+      return {
+        id: l._id.toString(),
+        barberId: l.barberId.toString(),
+        serviceId: l.serviceId.toString(),
+        shopId: l.shopId.toString(),
+        serviceName: serviceInfo?.name ?? '',
+        price: serviceInfo?.price ?? 0,
+        duration: l.durationMinutes,
+        isActive: l.isActive,
+      };
+    });
   }
 
   async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
@@ -114,7 +120,8 @@ export class ServiceService {
       serviceId: l.serviceId._id.toString(),
       shopId: l.shopId.toString(),
       serviceName: l.serviceId.name,
-      durationMinutes: l.durationMinutes,
+      price: l.serviceId.basePrice,
+      duration: l.durationMinutes,
       isActive: l.isActive,
     }));
   }

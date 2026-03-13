@@ -380,3 +380,15 @@ export interface RefreshTokenResponse {
   token: string;
   refreshToken: string;
 }
+
+export interface UpdateProfileInput {
+  ownerName?: string;
+  email?: string;
+}
+
+export interface UpdateProfileResponse {
+  id: string;
+  phone: string;
+  ownerName: string;
+  email: string | null;
+}
