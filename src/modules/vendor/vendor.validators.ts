@@ -104,10 +104,15 @@ export const updateProfileSchema = z
       .max(100, 'Name must be at most 100 characters')
       .optional(),
     email: z.string().email('Enter valid email').optional(),
+    profilePhoto: z.string().url('Enter valid image URL').optional(),
   })
-  .refine((data) => data.ownerName !== undefined || data.email !== undefined, {
-    message: 'At least one field (ownerName or email) must be provided',
-  });
+  .refine(
+    (data) =>
+      data.ownerName !== undefined || data.email !== undefined || data.profilePhoto !== undefined,
+    {
+      message: 'At least one field (ownerName, email or profilePhoto) must be provided',
+    },
+  );
 
 export const dashboardStatsQuerySchema = z.object({
   shopId: z.string().min(1).optional(),

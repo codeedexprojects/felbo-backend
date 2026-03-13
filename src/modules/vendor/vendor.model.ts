@@ -38,6 +38,7 @@ export interface IVendor extends Document {
   phone: string;
   email?: string;
   ownerName: string;
+  profilePhoto?: string;
 
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
 
@@ -135,6 +136,10 @@ const vendorSchema = new Schema<IVendor>(
     ownerName: {
       type: String,
       default: '',
+    },
+    profilePhoto: {
+      type: String,
+      default: null,
     },
 
     registrationType: {
