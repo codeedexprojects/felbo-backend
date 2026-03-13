@@ -3,7 +3,7 @@ import { ClientSession } from '../../shared/database/transaction';
 import { BarberServiceModel, IBarberService, ServiceModel, IService } from './service.model';
 
 export interface IBarberServicePopulated extends Omit<IBarberService, 'serviceId'> {
-  serviceId: Pick<IService, '_id' | 'name'>;
+  serviceId: Pick<IService, '_id' | 'name' | 'basePrice'>;
 }
 
 export class ServiceRepository {
@@ -34,7 +34,7 @@ export class ServiceRepository {
 
   findBarberServicesByBarberIdPopulated(barberId: string): Promise<IBarberServicePopulated[]> {
     return BarberServiceModel.find({ barberId, isActive: true })
-      .populate<Pick<IBarberServicePopulated, 'serviceId'>>('serviceId', 'name')
+      .populate<Pick<IBarberServicePopulated, 'serviceId'>>('serviceId', 'name basePrice')
       .lean()
       .exec() as unknown as Promise<IBarberServicePopulated[]>;
   }

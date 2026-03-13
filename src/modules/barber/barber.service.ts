@@ -48,6 +48,7 @@ import { getRedisClient } from '../../shared/redis/redis';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { formatRating } from '../../shared/utils/rating';
+import { getCurrentIstDate, getTodayInIst } from '../../shared/utils/time';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -89,8 +90,16 @@ export class BarberService {
       throw new ForbiddenError('You do not have access to this shop.');
 
     const { barbers, total } = await this.barberRepository.findByShopId(shopId, filter);
+    const serviceLinks = await this.barberRepository.findBarberServicesByShopId(shopId);
+
+    const countsMap = new Map<string, number>();
+    for (const link of serviceLinks) {
+      const bId = link.barberId.toString();
+      countsMap.set(bId, (countsMap.get(bId) || 0) + 1);
+    }
+
     return {
-      barbers: barbers.map((b) => this.toDto(b)),
+      barbers: barbers.map((b) => this.toDto(b, countsMap.get(b._id.toString()) || 0)),
       total,
       page: filter.page,
       limit: filter.limit,
@@ -119,7 +128,24 @@ export class BarberService {
     const barber = await this.barberRepository.findById(barberId);
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
-    return this.toDto(barber);
+
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    if (links.length === 0) {
+      return this.toDto(barber, 0, []);
+    }
+
+    const serviceIds = links.map((l) => l.serviceId.toString());
+    const serviceDetails = await this.shopService.getActiveServicesByIds(
+      serviceIds,
+      barber.shopId.toString(),
+    );
+
+    const services = serviceDetails.map((s) => ({
+      id: s.id,
+      name: s.name,
+    }));
+
+    return this.toDto(barber, services.length, services);
   }
 
   async getBarberById(barberId: string): Promise<BarberManagementDto> {
@@ -234,6 +260,7 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      serviceCount: 0,
     };
   }
 
@@ -531,7 +558,7 @@ export class BarberService {
 
     const totalDurationMinutes = serviceDurationMinutes + 5;
 
-    const now = new Date();
+    const now = getCurrentIstDate();
     const startTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const endTimeObj = new Date(now.getTime() + totalDurationMinutes * 60_000);
     const endTime = `${endTimeObj.getHours().toString().padStart(2, '0')}:${endTimeObj.getMinutes().toString().padStart(2, '0')}`;
@@ -568,9 +595,12 @@ export class BarberService {
       }
     }
 
+    const nowIst = getCurrentIstDate();
+    const blockDate = getTodayInIst();
+
     const overlapping = await this.barberRepository.findOverlappingActiveBlocks(
       input.barberId,
-      now,
+      nowIst,
       startTime,
       endTime,
     );
@@ -579,9 +609,6 @@ export class BarberService {
         `You already have an active block from ${this.formatTime(startTime)} to ${this.formatTime(endTime)}. Please release it first.`,
       );
     }
-
-    const blockDate = new Date(now);
-    blockDate.setHours(0, 0, 0, 0);
 
     const slotBlock = await this.barberRepository.createSlotBlock({
       shopId,
@@ -676,7 +703,11 @@ export class BarberService {
     });
   }
 
-  private toDto(barber: IBarber): BarberManagementDto {
+  private toDto(
+    barber: IBarber,
+    serviceCount: number = 0,
+    services?: { id: string; name: string }[],
+  ): BarberManagementDto {
     return {
       id: barber._id.toString(),
       shopId: barber.shopId.toString(),
@@ -692,6 +723,8 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      serviceCount,
+      services,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
     };
