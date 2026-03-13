@@ -20,80 +20,59 @@ import {
   releaseSlotBlockParamSchema,
   listSlotBlocksQuerySchema,
 } from './barber.validators';
-import { ForbiddenError } from '@shared/errors';
 
 export class BarberController {
   constructor(private readonly barberService: BarberService) {}
 
-  private getBarberId(req: Request): string {
-    const user = req.user!;
-    if (user.role === 'BARBER') {
-      return user.sub;
-    }
-    if (user.role === 'VENDOR_BARBER') {
-      if (!user.barberId) {
-        throw new ForbiddenError('Barber profile not found in token.');
-      }
-      return user.barberId;
-    }
-    throw new ForbiddenError('Access denied.');
-  }
   listBarbers = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
     const filter = listBarberQuerySchema.parse(req.query);
-    const result = await this.barberService.listBarbers(shopId, this.getBarberId(req), filter);
+    const result = await this.barberService.listBarbers(shopId, req.user!.sub, filter);
     res.status(200).json({ success: true, data: result });
   };
 
   createBarber = async (req: Request, res: Response): Promise<void> => {
     const validated = createBarberSchema.parse(req.body);
-    const barber = await this.barberService.createBarber(validated, this.getBarberId(req));
+    const barber = await this.barberService.createBarber(validated, req.user!.sub);
     res.status(201).json({ success: true, data: barber });
   };
 
   getBarber = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
-    const barber = await this.barberService.getBarber(barberId, this.getBarberId(req));
+    const barber = await this.barberService.getBarber(barberId, req.user!.sub);
     res.status(200).json({ success: true, data: barber });
   };
 
   updateBarber = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
     const validated = updateBarberSchema.parse(req.body);
-    const barber = await this.barberService.updateBarber(
-      barberId,
-      validated,
-      this.getBarberId(req),
-    );
+    const barber = await this.barberService.updateBarber(barberId, validated, req.user!.sub);
     res.status(200).json({ success: true, data: barber });
   };
 
   deleteBarber = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
-    await this.barberService.deleteBarber(barberId, this.getBarberId(req));
+    await this.barberService.deleteBarber(barberId, req.user!.sub);
     res.status(200).json({ success: true, message: 'Barber deleted successfully.' });
   };
 
   toggleBarberAvailability = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
-    const barber = await this.barberService.toggleBarberAvailability(
-      barberId,
-      this.getBarberId(req),
-    );
+    const barber = await this.barberService.toggleBarberAvailability(barberId, req.user!.sub);
     res.status(200).json({ success: true, data: barber });
   };
 
   updateCredentials = async (req: Request, res: Response): Promise<void> => {
     const { barberId } = barberIdParamSchema.parse(req.params);
     const validated = updateCredentialsSchema.parse(req.body);
-    await this.barberService.updateCredentials(barberId, validated, this.getBarberId(req));
+    await this.barberService.updateCredentials(barberId, validated, req.user!.sub);
     res.status(200).json({ success: true, message: 'Credentials updated successfully.' });
   };
 
   addBarber = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
     const validated = onboardBarberSchema.parse(req.body);
-    const result = await this.barberService.addBarber(shopId, this.getBarberId(req), validated);
+    const result = await this.barberService.addBarber(shopId, req.user!.sub, validated);
     res.status(201).json({ success: true, data: result });
   };
 
@@ -103,7 +82,7 @@ export class BarberController {
     const result = await this.barberService.addBarberServices(
       shopId,
       barberId,
-      this.getBarberId(req),
+      req.user!.sub,
       validated,
     );
     res.status(201).json({ success: true, data: result });
@@ -143,18 +122,14 @@ export class BarberController {
   };
 
   logout = async (req: Request, res: Response): Promise<void> => {
-    await this.barberService.logout(this.getBarberId(req));
+    await this.barberService.logout(req.user!.sub);
     res.status(200).json({ success: true, message: 'Logged out successfully.' });
   };
 
   addSelfAsBarber = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
     const validated = addSelfAsBarberSchema.parse(req.body);
-    const result = await this.barberService.addSelfAsBarber(
-      shopId,
-      this.getBarberId(req),
-      validated,
-    );
+    const result = await this.barberService.addSelfAsBarber(shopId, req.user!.sub, validated);
     res.status(201).json({
       success: true,
       data: result,
@@ -165,7 +140,7 @@ export class BarberController {
   createSlotBlock = async (req: Request, res: Response): Promise<void> => {
     const validated = createSlotBlockSchema.parse(req.body);
     const result = await this.barberService.createSlotBlock({
-      barberId: this.getBarberId(req),
+      barberId: req.user!.sub,
       serviceIds: validated.serviceIds,
       reason: validated.reason,
     });
@@ -180,7 +155,7 @@ export class BarberController {
     const { blockId } = releaseSlotBlockParamSchema.parse(req.params);
     const result = await this.barberService.releaseSlotBlock({
       blockId,
-      barberId: this.getBarberId(req),
+      barberId: req.user!.sub,
     });
     res.status(200).json({
       success: true,
