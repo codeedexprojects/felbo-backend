@@ -15,6 +15,9 @@ import {
   AdminBookingListParams,
   AdminBookingListResponse,
   AdminBookingDetailDto,
+  CancellationReason,
+  CancelBookingByBarberResponse,
+  BarberBookingListResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -579,6 +582,112 @@ export class BookingService {
         status: confirmed.status,
         paymentId: input.razorpayPaymentId,
       },
+    };
+  }
+
+  async cancelBookingByBarber(
+    bookingId: string,
+    reason: CancellationReason,
+    barberId: string,
+  ): Promise<CancelBookingByBarberResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ValidationError('Only confirmed bookings can be cancelled.');
+    }
+
+    if (!booking.paymentId) {
+      throw new ValidationError('No payment record found for this booking.');
+    }
+
+    const weeklyLimit = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.SHOP_CANCEL_WEEKLY_LIMIT,
+    );
+
+    await this.paymentService.refundBookingAdvance(booking.paymentId, booking.advancePaid * 100);
+
+    const cancelled = await this.bookingRepository.updateBookingCancelled(bookingId, {
+      cancelledBy: 'VENDOR',
+      reason,
+      refundAmount: booking.advancePaid,
+      refundType: 'ORIGINAL',
+      refundStatus: 'PENDING',
+    });
+    if (!cancelled || !cancelled.cancellation) throw new NotFoundError('Booking not found.');
+
+    const { cancellationsThisWeek, vendorId } =
+      await this.shopService.incrementShopCancellationCount(booking.shopId.toString());
+
+    let flagged = false;
+    if (cancellationsThisWeek >= weeklyLimit) {
+      await this.vendorService.flagVendor(vendorId);
+      flagged = true;
+    }
+
+    this.logger.info({
+      action: 'BOOKING_CANCELLED_BY_BARBER',
+      module: 'booking',
+      bookingId,
+      barberId,
+      shopId: booking.shopId.toString(),
+      reason,
+      flagged,
+    });
+
+    return {
+      booking: {
+        id: cancelled._id.toString(),
+        bookingNumber: cancelled.bookingNumber,
+        status: cancelled.status,
+        cancellation: {
+          cancelledAt: cancelled.cancellation.cancelledAt.toISOString(),
+          cancelledBy: cancelled.cancellation.cancelledBy,
+          reason: cancelled.cancellation.reason,
+          refundAmount: cancelled.cancellation.refundAmount,
+          refundStatus: cancelled.cancellation.refundStatus,
+        },
+      },
+    };
+  }
+
+  async getBarberBookings(
+    barberId: string,
+    page: number,
+    limit: number,
+    status?: string,
+  ): Promise<BarberBookingListResponse> {
+    const { bookings, total } = await this.bookingRepository.findByBarberId(
+      barberId,
+      page,
+      limit,
+      status,
+    );
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userName: b.userName,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        services: b.services.map((s) => ({
+          serviceId: s.serviceId.toString(),
+          serviceName: s.serviceName,
+          price: s.price,
+          durationMinutes: s.durationMinutes,
+        })),
+        totalServiceAmount: b.totalServiceAmount,
+        status: b.status,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 

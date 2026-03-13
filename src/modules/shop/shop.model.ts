@@ -48,6 +48,9 @@ export interface IShop extends Document {
   };
   isAvailable: boolean;
   status: 'ACTIVE' | 'DELETED';
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+  lastCancellationAt?: Date;
   onboardingStatus:
     | 'PENDING_PROFILE'
     | 'PENDING_SERVICES'
@@ -129,6 +132,9 @@ const shopSchema = new Schema<IShop>(
       count: { type: Number, default: 0 },
     },
     isAvailable: { type: Boolean, default: true },
+    cancellationCount: { type: Number, default: 0 },
+    cancellationsThisWeek: { type: Number, default: 0 },
+    lastCancellationAt: { type: Date },
     status: {
       type: String,
       enum: ['ACTIVE', 'DELETED'],

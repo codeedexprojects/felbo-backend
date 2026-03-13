@@ -603,6 +603,17 @@ export default class ShopService {
     return this.serviceService.getServicesByShopIds(shopIds);
   }
 
+  async incrementShopCancellationCount(
+    shopId: string,
+  ): Promise<{ cancellationsThisWeek: number; vendorId: string }> {
+    const updated = await this.shopRepository.incrementCancellation(shopId);
+    if (!updated) throw new NotFoundError('Shop not found.');
+    return {
+      cancellationsThisWeek: updated.cancellationsThisWeek,
+      vendorId: updated.vendorId.toString(),
+    };
+  }
+
   async updateRating(shopId: string, average: number, count: number): Promise<void> {
     await this.shopRepository.updateRating(shopId, average, count);
   }

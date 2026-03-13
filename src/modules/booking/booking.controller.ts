@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { BookingService } from './booking.service';
+import { ForbiddenError } from '../../shared/errors/index';
 import {
   shopIdParamSchema,
   getSlotsQuerySchema,
@@ -7,10 +8,26 @@ import {
   bookingIdParamSchema,
   confirmBookingBodySchema,
   adminBookingListQuerySchema,
+  cancelBookingByBarberBodySchema,
+  barberBookingListQuerySchema,
 } from './booking.validators';
 
 export class BookingController {
   constructor(private readonly bookingService: BookingService) {}
+
+  private getBarberId(req: Request): string {
+    const user = req.user!;
+    if (user.role === 'BARBER') {
+      return user.sub;
+    }
+    if (user.role === 'VENDOR_BARBER') {
+      if (!user.barberId) {
+        throw new ForbiddenError('Barber profile not found in token.');
+      }
+      return user.barberId;
+    }
+    throw new ForbiddenError('Access denied.');
+  }
 
   getSlots = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
@@ -71,5 +88,33 @@ export class BookingController {
     const result = await this.bookingService.adminGetBookingDetail(bookingId, role);
 
     res.status(200).json({ success: true, data: result });
+  };
+
+  cancelBookingByBarber = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    const body = cancelBookingByBarberBodySchema.parse(req.body);
+    const barberId = this.getBarberId(req);
+
+    const result = await this.bookingService.cancelBookingByBarber(
+      bookingId,
+      body.reason,
+      barberId,
+    );
+
+    res.json({ success: true, data: result });
+  };
+
+  getBarberBookings = async (req: Request, res: Response): Promise<void> => {
+    const query = barberBookingListQuerySchema.parse(req.query);
+    const barberId = this.getBarberId(req);
+
+    const result = await this.bookingService.getBarberBookings(
+      barberId,
+      query.page,
+      query.limit,
+      query.status,
+    );
+
+    res.json({ success: true, data: result });
   };
 }

@@ -40,6 +40,18 @@ export const confirmBookingBodySchema = z.object({
   razorpaySignature: z.string().min(1),
 });
 
+export const cancelBookingByBarberBodySchema = z.object({
+  reason: z.enum(['BARBER_SICK', 'EMERGENCY', 'SHOP_CLOSING', 'EQUIPMENT_ISSUE', 'OTHER']),
+});
+
+export const barberBookingListQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
+  status: z
+    .enum(['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'])
+    .optional(),
+});
+
 export const adminBookingListQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(10),

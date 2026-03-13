@@ -156,6 +156,48 @@ export interface AdminBookingListResponse {
   totalPages: number;
 }
 
+export type CancellationReason =
+  | 'BARBER_SICK'
+  | 'EMERGENCY'
+  | 'SHOP_CLOSING'
+  | 'EQUIPMENT_ISSUE'
+  | 'OTHER';
+
+export interface CancelBookingByBarberResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    cancellation: {
+      cancelledAt: string;
+      cancelledBy: string;
+      reason: string;
+      refundAmount: number;
+      refundStatus: string;
+    };
+  };
+}
+
+export interface BarberBookingListItem {
+  id: string;
+  bookingNumber: string;
+  userName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  services: BookingServiceSnapshot[];
+  totalServiceAmount: number;
+  status: string;
+}
+
+export interface BarberBookingListResponse {
+  bookings: BarberBookingListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface AdminBookingDetailDto {
   id: string;
   bookingNumber: string;
