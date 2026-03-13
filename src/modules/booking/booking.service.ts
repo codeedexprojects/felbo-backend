@@ -18,6 +18,7 @@ import {
   CancellationReason,
   CancelBookingByBarberResponse,
   BarberBookingListResponse,
+  GetBarbersForServicesResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -80,6 +81,14 @@ export class BookingService {
 
   private get vendorService(): VendorService {
     return this.getVendorService();
+  }
+
+  async getBarbersForServices(
+    shopId: string,
+    serviceIds: string[],
+  ): Promise<GetBarbersForServicesResponse> {
+    const barbers = await this.barberService.getBarbersForServices(shopId, serviceIds);
+    return { barbers };
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {

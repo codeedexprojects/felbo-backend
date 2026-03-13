@@ -27,6 +27,7 @@ import {
   ReleaseSlotBlockInput,
   ListSlotBlocksQuery,
   SlotBlockRange,
+  PublicBarberDto,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -851,6 +852,32 @@ export class BarberService {
     return blocks.map((b) => ({
       startTime: b.startTime,
       endTime: b.endTime,
+    }));
+  }
+
+  async getBarbersForServices(shopId: string, serviceIds: string[]): Promise<PublicBarberDto[]> {
+    const uniqueServiceIds = [...new Set(serviceIds)];
+
+    const barberIds = await this.barberRepository.findBarberIdsWithAllServices(
+      shopId,
+      uniqueServiceIds,
+    );
+
+    if (barberIds.length === 0) {
+      return [];
+    }
+
+    const barbers = await this.barberRepository.findActiveBarbersByIds(barberIds);
+
+    return barbers.map((b) => ({
+      id: b._id.toString(),
+      name: b.name,
+      photo: b.photo,
+      rating: {
+        average: formatRating(b.rating.average),
+        count: b.rating.count,
+      },
+      isAvailable: b.isAvailable,
     }));
   }
 

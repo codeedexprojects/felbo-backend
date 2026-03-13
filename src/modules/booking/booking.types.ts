@@ -1,3 +1,13 @@
+export interface GetBarbersForServicesResponse {
+  barbers: {
+    id: string;
+    name: string;
+    photo?: string;
+    rating: { average: number; count: number };
+    isAvailable: boolean;
+  }[];
+}
+
 export interface GetSlotsInput {
   shopId: string;
   date: string;

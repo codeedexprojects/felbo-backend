@@ -4,6 +4,7 @@ import { ForbiddenError } from '../../shared/errors/index';
 import {
   shopIdParamSchema,
   getSlotsQuerySchema,
+  getBarbersForServicesQuerySchema,
   initiateBookingBodySchema,
   bookingIdParamSchema,
   confirmBookingBodySchema,
@@ -28,6 +29,16 @@ export class BookingController {
     }
     throw new ForbiddenError('Access denied.');
   }
+
+  getBarbersForServices = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdParamSchema.parse(req.params);
+    const { serviceIds: rawServiceIds } = getBarbersForServicesQuerySchema.parse(req.query);
+
+    const serviceIds = rawServiceIds.split(',').map((id) => id.trim());
+    const result = await this.bookingService.getBarbersForServices(shopId, serviceIds);
+
+    res.json({ success: true, data: result });
+  };
 
   getSlots = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdParamSchema.parse(req.params);
