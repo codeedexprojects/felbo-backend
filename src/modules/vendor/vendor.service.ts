@@ -51,12 +51,20 @@ export default class VendorService {
     private readonly otpService: OtpService,
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
-    private readonly paymentService: PaymentService,
-    private readonly shopService: ShopService,
+    private readonly getPaymentService: () => PaymentService,
+    private readonly getShopService: () => ShopService,
     private readonly getBarberService: () => BarberService,
     private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
+
+  private get paymentService(): PaymentService {
+    return this.getPaymentService();
+  }
+
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
 
   private get barberService(): BarberService {
     return this.getBarberService();
@@ -588,6 +596,7 @@ export default class VendorService {
           onboardingStatus: shopDto.onboardingStatus,
           status: shopDto.status,
           isAvailable: shopDto.isAvailable,
+          photos: shopDto.photos,
 
           barbers: barberList.map((b) => ({
             id: b.id.toString(),
@@ -662,6 +671,7 @@ export default class VendorService {
             type: vendor.shopDetails.type,
             address: vendor.shopDetails.address,
             location: vendor.shopDetails.location,
+            photos: vendor.shopDetails.photos || [],
           }
         : undefined,
     };

@@ -18,6 +18,7 @@ import { IUser } from './user.model';
 import { BookingService } from '../booking/booking.service';
 import { UserBookingsResponse } from '../booking/booking.types';
 import { IssueService } from '../issue/issue.service';
+import { FavoriteService } from '../favorite/favorite.service';
 import {
   NotFoundError,
   ForbiddenError,
@@ -43,6 +44,7 @@ export default class UserService {
     private readonly logger: Logger,
     private readonly getIssueService?: () => IssueService,
     private readonly getBookingService?: () => BookingService,
+    private readonly getFavoriteService?: () => FavoriteService,
   ) {}
 
   private toUserDto(user: IUser): UserDto {
@@ -319,11 +321,20 @@ export default class UserService {
       ? await this.getIssueService().getRecentIssuesByUserId(userId)
       : [];
 
+    const favoritesResponse = this.getFavoriteService
+      ? await this.getFavoriteService().listFavorites(userId, 1, 10)
+      : { favorites: [] };
+
+    const bookingsResponse = this.getBookingService
+      ? await this.getBookingService().getUserBookings(userId, 1, 10)
+      : { bookings: [] };
+
     return {
       id: user._id.toString(),
       name: user.name,
       phone: user.phone,
       email: user.email ?? null,
+      profileUrl: user.profileUrl ?? null,
       status: user.status,
       blockReason: user.blockReason ?? null,
       walletBalance: user.walletBalance,
@@ -332,6 +343,13 @@ export default class UserService {
       lastLoginAt: user.lastLoginAt ?? null,
       issuesReported,
       issueCount: issuesReported.length,
+      recentBookings: bookingsResponse.bookings,
+      favorites: favoritesResponse.favorites.map((f) => ({
+        shopId: f.shopId,
+        name: f.name,
+        image: f.image,
+        rating: f.rating.average,
+      })),
     };
   }
 

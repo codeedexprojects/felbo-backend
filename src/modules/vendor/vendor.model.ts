@@ -20,6 +20,7 @@ export interface IVendorShopDetails {
   type: 'MENS' | 'WOMENS' | 'UNISEX';
   address: IVendorAddress;
   location: IVendorLocation;
+  photos: string[];
 }
 
 export interface IVendorRegistrationPayment {
@@ -115,6 +116,7 @@ const shopDetailsSchema = new Schema(
     type: { type: String, enum: ['MENS', 'WOMENS', 'UNISEX'] },
     address: { type: addressSchema },
     location: { type: locationSchema },
+    photos: { type: [String], default: [] },
   },
   { _id: false },
 );

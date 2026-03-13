@@ -7,8 +7,12 @@ export function getTodayInIst(): Date {
   return new Date(Date.UTC(nowInIst.getFullYear(), nowInIst.getMonth(), nowInIst.getDate()));
 }
 
+export function getCurrentIstDate(): Date {
+  return toZonedTime(new Date(), SHOP_TIMEZONE);
+}
+
 export function getCurrentIstMinutes(): number {
-  const nowInIst = toZonedTime(new Date(), SHOP_TIMEZONE);
+  const nowInIst = getCurrentIstDate();
   return nowInIst.getHours() * 60 + nowInIst.getMinutes();
 }
 

@@ -10,10 +10,10 @@ import { configService } from '../config/config.container';
 const issueRepository = new IssueRepository();
 export const issueService = new IssueService(
   issueRepository,
-  vendorService,
-  shopService,
-  paymentService,
-  bookingService,
+  () => vendorService,
+  () => shopService,
+  () => paymentService,
+  () => bookingService,
   configService,
 );
 export const issueController = new IssueController(issueService);

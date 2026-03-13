@@ -12,6 +12,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../shared/erro
 import { withTransaction } from '../../shared/database/transaction';
 import { BarberService } from '../barber/barber.service';
 import ShopService from '../shop/shop.service';
+import { getTodayInIst, getCurrentIstDate } from '../../shared/utils/time';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -32,8 +33,7 @@ export class BarberAvailabilityService {
   }
 
   private getTodayDate(): Date {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    return getTodayInIst();
   }
 
   private toMinutes(time: string): number {
@@ -82,7 +82,7 @@ export class BarberAvailabilityService {
     workingHours: { start: string; end: string },
   ): Promise<void> {
     const shop = await this.shopService.getShopById(shopId);
-    const today = new Date();
+    const today = getCurrentIstDate();
     const dayName = DAY_NAMES[today.getDay()] as keyof NonNullable<typeof shop.workingHours>;
 
     if (!shop.workingHours || !shop.workingHours[dayName]) return;
@@ -282,7 +282,7 @@ export class BarberAvailabilityService {
     const barber = await this.barberService.getBarberById(barberId);
     const shop = await this.shopService.getShopById(barber.shopId);
 
-    const today = new Date();
+    const today = getCurrentIstDate();
     const dayName = DAY_NAMES[today.getDay()] as keyof NonNullable<typeof shop.workingHours>;
 
     if (!shop.workingHours || !shop.workingHours[dayName]) {

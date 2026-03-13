@@ -13,7 +13,8 @@ export interface BarberAssignedServiceDto {
   serviceId: string;
   shopId: string;
   serviceName: string;
-  durationMinutes: number;
+  price: number;
+  duration: number;
   isActive: boolean;
 }
 

@@ -23,9 +23,10 @@ const bookingService = new BookingService(
   () => userService,
   () => serviceService,
   () => paymentService,
+  () => vendorService,
   logger,
 );
 
-const bookingController = new BookingController(bookingService, vendorService, shopService);
+const bookingController = new BookingController(bookingService);
 
 export { bookingController, bookingService };
