@@ -257,7 +257,7 @@ export default class ShopRepository {
     query: string | undefined,
     filter: {
       shopType?: string;
-      categoryId?: string;
+      categoryIds?: string[];
       latitude?: number;
       longitude?: number;
       maxDistanceMeters?: number;
@@ -265,57 +265,65 @@ export default class ShopRepository {
     skip: number,
     limit: number,
   ): Promise<{ shops: Array<IShop & { distance?: number }>; total: number }> {
-    const matchFilter: Record<string, unknown> = {
+    const baseFilter: Record<string, unknown> = {
       status: 'ACTIVE',
-      isAvailable: { $ne: false },
+      isAvailable: true,
       onboardingStatus: 'COMPLETED',
     };
 
     if (filter.shopType) {
-      matchFilter.shopType = filter.shopType;
+      baseFilter.shopType = filter.shopType;
     }
 
-    if (filter.categoryId) {
-      matchFilter.categoryIds = new Types.ObjectId(filter.categoryId);
-    }
-
-    if (query) {
-      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      matchFilter.$or = [
-        { name: { $regex: escapedQuery, $options: 'i' } },
-        { 'address.area': { $regex: escapedQuery, $options: 'i' } },
-      ];
+    if (filter.categoryIds && filter.categoryIds.length > 0) {
+      baseFilter.categoryIds = { $in: filter.categoryIds.map((id) => new Types.ObjectId(id)) };
     }
 
     if (filter.latitude !== undefined && filter.longitude !== undefined) {
       const maxDistance = filter.maxDistanceMeters ?? 10_000;
 
-      const pipeline: PipelineStage[] = [
-        {
-          $geoNear: {
-            near: { type: 'Point', coordinates: [filter.longitude, filter.latitude] },
-            distanceField: 'distance',
-            maxDistance,
-            query: matchFilter,
-            spherical: true,
-          },
-        },
-        {
-          $facet: {
-            shops: [{ $skip: skip }, { $limit: limit }],
-            total: [{ $count: 'count' }],
-          },
-        },
-      ];
+      // $text cannot be used inside $geoNear.query, so fall back to $regex for geo path
+      const geoFilter = { ...baseFilter };
+      if (query) {
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        geoFilter.$or = [
+          { name: { $regex: escaped, $options: 'i' } },
+          { 'address.area': { $regex: escaped, $options: 'i' } },
+        ];
+      }
 
-      const [result] = await ShopModel.aggregate(pipeline).exec();
-      const total = (result.total as Array<{ count: number }>)[0]?.count ?? 0;
-      return { shops: result.shops as Array<IShop & { distance: number }>, total };
+      const geoNearStage: PipelineStage = {
+        $geoNear: {
+          near: { type: 'Point', coordinates: [filter.longitude, filter.latitude] },
+          distanceField: 'distance',
+          maxDistance,
+          query: geoFilter,
+          spherical: true,
+        },
+      };
+
+      const [shops, countResult] = await Promise.all([
+        ShopModel.aggregate<IShop & { distance: number }>([
+          geoNearStage,
+          { $skip: skip },
+          { $limit: limit },
+        ]).exec(),
+        ShopModel.aggregate<{ count: number }>([geoNearStage, { $count: 'count' }]).exec(),
+      ]);
+
+      const total = countResult[0]?.count ?? 0;
+      return { shops, total };
+    }
+
+    // Non-geo path: use $text index for full-text search
+    const textFilter = { ...baseFilter };
+    if (query) {
+      textFilter.$text = { $search: query };
     }
 
     const [shops, total] = await Promise.all([
-      ShopModel.find(matchFilter).sort({ 'rating.average': -1 }).skip(skip).limit(limit).exec(),
-      ShopModel.countDocuments(matchFilter).exec(),
+      ShopModel.find(textFilter).sort({ 'rating.average': -1 }).skip(skip).limit(limit).exec(),
+      ShopModel.countDocuments(textFilter).exec(),
     ]);
 
     return { shops, total };

@@ -515,7 +515,7 @@ export default class ShopService {
       input.query,
       {
         shopType: input.shopType,
-        categoryId: input.categoryId,
+        categoryIds: input.categoryIds,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
@@ -536,7 +536,7 @@ export default class ShopService {
 
     const result: ShopSearchResultDto[] = shops.map((s) => {
       const shopId = s._id.toString();
-      const shopServices = (servicesByShopId.get(shopId) ?? []).map((svc) => ({
+      const shopServices = (servicesByShopId.get(shopId) ?? []).slice(0, 5).map((svc) => ({
         id: svc.id,
         name: svc.name,
         basePrice: svc.basePrice,

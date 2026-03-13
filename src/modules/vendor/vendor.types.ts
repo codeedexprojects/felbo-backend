@@ -21,6 +21,7 @@ export interface LoginVerifyOtpResponse {
     phone: string;
     ownerName: string;
     email: string | null;
+    profilePhoto: string | null;
     verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   };
   onboardingStatus:
@@ -143,6 +144,7 @@ export interface VendorProfileDto {
   phone: string;
   ownerName: string;
   email: string | null;
+  profilePhoto: string | null;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
@@ -384,6 +386,7 @@ export interface RefreshTokenResponse {
 export interface UpdateProfileInput {
   ownerName?: string;
   email?: string;
+  profilePhoto?: string;
 }
 
 export interface UpdateProfileResponse {
@@ -391,6 +394,13 @@ export interface UpdateProfileResponse {
   phone: string;
   ownerName: string;
   email: string | null;
+  profilePhoto: string | null;
+}
+
+export interface VendorDashboardCountsDto {
+  totalBookings: number;
+  staffWorking: number;
+  staffOnLeave: number;
 }
 
 export interface VendorDashboardCountsDto {
