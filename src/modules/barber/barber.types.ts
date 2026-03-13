@@ -29,6 +29,8 @@ export interface BarberManagementDto {
   rating: { average: number; count: number };
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  serviceCount: number;
+  services?: { id: string; name: string }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +68,7 @@ export interface OnboardBarberDto {
   rating: { average: number; count: number };
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  serviceCount: number;
 }
 
 export interface AddBarberServiceItemInput {
@@ -124,16 +127,6 @@ export interface AssignServiceItemInput {
 
 export interface AssignServicesInput {
   services: AssignServiceItemInput[];
-}
-
-export interface BarberAssignedServiceDto {
-  id: string;
-  barberId: string;
-  serviceId: string;
-  shopId: string;
-  serviceName: string;
-  durationMinutes: number;
-  isActive: boolean;
 }
 
 export interface BarberSendOtpInput {
