@@ -24,6 +24,8 @@ import {
   VendorAdminDetail,
   VendorRequestAdminDetail,
   RefreshTokenResponse,
+  UpdateProfileInput,
+  UpdateProfileResponse,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -755,6 +757,35 @@ export default class VendorService {
       limit,
       totalPages: Math.ceil(total / limit),
       counts,
+    };
+  }
+
+  async updateProfile(vendorId: string, input: UpdateProfileInput): Promise<UpdateProfileResponse> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    const updateData: { ownerName?: string; email?: string } = {};
+    if (input.ownerName !== undefined) updateData.ownerName = input.ownerName;
+    if (input.email !== undefined) updateData.email = input.email;
+
+    const updated = await this.vendorRepository.updateProfile(vendorId, updateData);
+    if (!updated) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    this.logger.info({
+      action: 'VENDOR_PROFILE_UPDATED',
+      module: 'vendor',
+      vendorId,
+    });
+
+    return {
+      id: updated._id.toString(),
+      phone: updated.phone,
+      ownerName: updated.ownerName,
+      email: updated.email || null,
     };
   }
 
