@@ -216,4 +216,16 @@ export default class VendorRepository {
   removeFcmToken(vendorId: string, token: string): Promise<unknown> {
     return VendorModel.updateOne({ _id: vendorId }, { $pull: { fcmTokens: token } }).exec();
   }
+
+  updateProfile(
+    id: string,
+    data: { ownerName?: string; email?: string },
+    session?: ClientSession,
+  ): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
 }

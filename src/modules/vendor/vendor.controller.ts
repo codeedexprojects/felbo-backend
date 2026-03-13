@@ -9,6 +9,7 @@ import {
   registerIndependentConfirmSchema,
   refreshTokenSchema,
   fcmTokenSchema,
+  updateProfileSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -94,6 +95,16 @@ export default class VendorController {
 
   getProfile = async (req: Request, res: Response): Promise<void> => {
     const result = await this.vendorService.getProfile(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  updateProfile = async (req: Request, res: Response): Promise<void> => {
+    const validated = updateProfileSchema.parse(req.body);
+    const result = await this.vendorService.updateProfile(req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
