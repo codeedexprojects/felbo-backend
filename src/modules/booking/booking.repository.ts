@@ -177,6 +177,50 @@ export class BookingRepository {
     return { bookings, total };
   }
 
+  updateBookingCancelled(
+    id: string,
+    cancellation: {
+      cancelledBy: 'USER' | 'VENDOR';
+      reason: string;
+      refundAmount: number;
+      refundType: 'WALLET' | 'ORIGINAL';
+      refundStatus: 'PENDING' | 'COMPLETED';
+    },
+  ): Promise<IBooking | null> {
+    return BookingModel.findByIdAndUpdate(
+      id,
+      {
+        status: 'CANCELLED_BY_VENDOR',
+        cancellation: {
+          ...cancellation,
+          cancelledAt: new Date(),
+        },
+      },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  async findByBarberId(
+    barberId: string,
+    page: number,
+    limit: number,
+    status?: string,
+  ): Promise<{ bookings: IBooking[]; total: number }> {
+    const skip = (page - 1) * limit;
+    const filter: Record<string, unknown> = { barberId };
+    if (status) filter.status = status;
+    const [bookings, total] = await Promise.all([
+      BookingModel.find(filter)
+        .sort({ date: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean<IBooking[]>()
+        .exec(),
+      BookingModel.countDocuments(filter).exec(),
+    ]);
+    return { bookings, total };
+  }
+
   async adminGetBookings(params: {
     page: number;
     limit: number;

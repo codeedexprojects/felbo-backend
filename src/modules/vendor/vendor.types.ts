@@ -21,7 +21,7 @@ export interface LoginVerifyOtpResponse {
     phone: string;
     ownerName: string;
     email: string | null;
-    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   };
   onboardingStatus:
     | 'PENDING_PROFILE'
@@ -116,7 +116,7 @@ export interface RegisterIndependentConfirmResponse {
 }
 
 export interface RegistrationStatusResponse {
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   rejectionReason?: string;
   registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
 }
@@ -144,7 +144,7 @@ export interface VendorProfileDto {
   ownerName: string;
   email: string | null;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
@@ -198,7 +198,7 @@ export interface UpsertVendorData {
     };
   };
   registrationPaymentOrderId?: string;
-  verificationStatus: 'PENDING';
+  verificationStatus: 'PAYMENT_PENDING';
   status: 'PENDING';
 }
 
@@ -249,7 +249,7 @@ export interface VendorListSlimDto {
   ownerName: string;
   phone: string;
   type: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   registered: Date;
 }
@@ -295,7 +295,7 @@ export interface VendorAdminDetail {
   ownerName: string;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   verifiedAt?: Date;
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
@@ -351,7 +351,7 @@ export interface VendorRequestAdminDetail {
   ownerName: string;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   associationMemberId?: string;
   associationIdProofUrl?: string;

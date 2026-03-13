@@ -215,6 +215,23 @@ export default class PaymentService {
     });
   }
 
+  async refundBookingAdvance(razorpayPaymentId: string, amountPaise: number): Promise<string> {
+    const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
+      amount: amountPaise,
+      notes: { reason: 'Booking cancelled by barber' },
+    });
+
+    this.logger.info({
+      action: 'BOOKING_ADVANCE_REFUND_INITIATED',
+      module: 'payment',
+      paymentId: razorpayPaymentId,
+      refundId: refund.id,
+      amountPaise,
+    });
+
+    return refund.id;
+  }
+
   async refundIssuePayment(razorpayPaymentId: string, amountPaise: number): Promise<string> {
     const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
       amount: amountPaise,

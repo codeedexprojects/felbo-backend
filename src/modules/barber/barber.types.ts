@@ -207,3 +207,12 @@ export interface SlotBlockRange {
   startTime: string;
   endTime: string;
 }
+
+// Public-facing barber DTO used in booking flow (select barber screen)
+export interface PublicBarberDto {
+  id: string;
+  name: string;
+  photo?: string;
+  rating: { average: number; count: number };
+  isAvailable: boolean;
+}

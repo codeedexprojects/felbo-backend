@@ -186,7 +186,7 @@ export class AdminService {
 
     if (!isValid) {
       await this.adminRepository.updateRefreshToken(admin._id.toString(), null);
-      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+      this.logger.warn('Refresh token reuse detected - cleared stored token', {
         adminId: admin._id,
       });
       throw new UnauthorizedError('Invalid refresh token. Please login again.');

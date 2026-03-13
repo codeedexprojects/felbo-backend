@@ -379,6 +379,34 @@ export default class ShopRepository {
     };
   }
 
+  incrementCancellation(shopId: string): Promise<IShop | null> {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return ShopModel.findByIdAndUpdate(
+      shopId,
+      [
+        {
+          $set: {
+            cancellationCount: { $add: ['$cancellationCount', 1] },
+            cancellationsThisWeek: {
+              $cond: {
+                if: {
+                  $or: [
+                    { $eq: ['$lastCancellationAt', null] },
+                    { $lt: ['$lastCancellationAt', oneWeekAgo] },
+                  ],
+                },
+                then: 1,
+                else: { $add: ['$cancellationsThisWeek', 1] },
+              },
+            },
+            lastCancellationAt: new Date(),
+          },
+        },
+      ],
+      { returnDocument: 'after', updatePipeline: true },
+    ).exec();
+  }
+
   updateRating(shopId: string, average: number, count: number): Promise<void> {
     return ShopModel.findByIdAndUpdate(shopId, {
       $set: { 'rating.average': average, 'rating.count': count },

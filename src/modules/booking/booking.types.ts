@@ -1,3 +1,13 @@
+export interface GetBarbersForServicesResponse {
+  barbers: {
+    id: string;
+    name: string;
+    photo?: string;
+    rating: { average: number; count: number };
+    isAvailable: boolean;
+  }[];
+}
+
 export interface GetSlotsInput {
   shopId: string;
   date: string;
@@ -150,6 +160,48 @@ export interface AdminBookingListItemDto {
 
 export interface AdminBookingListResponse {
   bookings: AdminBookingListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export type CancellationReason =
+  | 'BARBER_SICK'
+  | 'EMERGENCY'
+  | 'SHOP_CLOSING'
+  | 'EQUIPMENT_ISSUE'
+  | 'OTHER';
+
+export interface CancelBookingByBarberResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    cancellation: {
+      cancelledAt: string;
+      cancelledBy: string;
+      reason: string;
+      refundAmount: number;
+      refundStatus: string;
+    };
+  };
+}
+
+export interface BarberBookingListItem {
+  id: string;
+  bookingNumber: string;
+  userName: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  services: BookingServiceSnapshot[];
+  totalServiceAmount: number;
+  status: string;
+}
+
+export interface BarberBookingListResponse {
+  bookings: BarberBookingListItem[];
   total: number;
   page: number;
   limit: number;

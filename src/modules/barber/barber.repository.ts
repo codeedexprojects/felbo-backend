@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { BarberModel, IBarber, SlotBlockModel, ISlotBlock } from './barber.model';
 import { BarberServiceModel, IBarberService } from '../service/service.model';
@@ -258,6 +259,39 @@ export class BarberRepository {
   async existsByServiceId(serviceId: string): Promise<boolean> {
     const doc = await BarberServiceModel.exists({ serviceId }).exec();
     return doc !== null;
+  }
+
+  async findBarberIdsWithAllServices(shopId: string, serviceIds: string[]): Promise<string[]> {
+    const results = await BarberServiceModel.aggregate<{ _id: mongoose.Types.ObjectId }>([
+      {
+        $match: {
+          shopId: new mongoose.Types.ObjectId(shopId),
+          serviceId: { $in: serviceIds.map((id) => new mongoose.Types.ObjectId(id)) },
+          isActive: true,
+        },
+      },
+      {
+        $group: {
+          _id: '$barberId',
+          matchedCount: { $sum: 1 },
+        },
+      },
+      {
+        $match: { matchedCount: serviceIds.length },
+      },
+    ]).exec();
+
+    return results.map((r) => r._id.toString());
+  }
+
+  findActiveBarbersByIds(ids: string[]): Promise<IBarber[]> {
+    return BarberModel.find({
+      _id: { $in: ids },
+      status: 'ACTIVE',
+      isAvailable: true,
+    })
+      .lean<IBarber[]>()
+      .exec();
   }
 
   async createSlotBlock(data: {
