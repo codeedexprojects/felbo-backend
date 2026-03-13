@@ -112,3 +112,19 @@ export const updateProfileSchema = z
 export const dashboardStatsQuerySchema = z.object({
   shopId: z.string().min(1).optional(),
 });
+
+export const vendorBookingsQuerySchema = z.object({
+  shopId: z.string().min(1).optional(),
+  status: z
+    .enum([
+      'CONFIRMED',
+      'COMPLETED',
+      'CANCELLED_BY_USER',
+      'CANCELLED_BY_VENDOR',
+      'NO_SHOW',
+      'CANCELLED',
+    ])
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});

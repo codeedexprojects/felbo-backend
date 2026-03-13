@@ -1,5 +1,6 @@
 import mongoose, { ClientSession } from 'mongoose';
 import { BookingModel, IBooking, SlotLockModel, ISlotLock } from './booking.model';
+import { VendorBookingListParams } from './booking.types';
 
 export class BookingRepository {
   private utcDayRange(date: Date): { start: Date; end: Date } {
@@ -271,5 +272,75 @@ export class BookingRepository {
     ]);
 
     return { bookings, total };
+  }
+
+  async vendorGetBookings(params: VendorBookingListParams): Promise<{
+    bookings: Array<{
+      _id: mongoose.Types.ObjectId;
+      bookingNumber: string;
+      userName: string;
+      userImage: string | null;
+      date: Date;
+      startTime: string;
+      endTime: string;
+      services: Array<{ serviceName: string }>;
+      status: string;
+    }>;
+    total: number;
+  }> {
+    const skip = (params.page - 1) * params.limit;
+    const shopObjectIds = params.shopIds.map((id) => new mongoose.Types.ObjectId(id));
+
+    const statusFilter =
+      params.status === 'CANCELLED'
+        ? ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW']
+        : params.status
+          ? [params.status]
+          : ['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'];
+
+    const matchStage: Record<string, unknown> = {
+      shopId: { $in: shopObjectIds },
+      status: { $in: statusFilter },
+    };
+
+    const [result] = await BookingModel.aggregate([
+      { $match: matchStage },
+      {
+        $facet: {
+          bookings: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: params.limit },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'userId',
+                foreignField: '_id',
+                as: 'user',
+                pipeline: [{ $project: { profileUrl: 1 } }],
+              },
+            },
+            {
+              $project: {
+                bookingNumber: 1,
+                userName: 1,
+                userImage: { $ifNull: [{ $arrayElemAt: ['$user.profileUrl', 0] }, null] },
+                date: 1,
+                startTime: 1,
+                endTime: 1,
+                services: 1,
+                status: 1,
+              },
+            },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    return {
+      bookings: result.bookings,
+      total: result.total[0]?.count ?? 0,
+    };
   }
 }

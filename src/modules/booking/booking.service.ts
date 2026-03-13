@@ -19,6 +19,8 @@ import {
   CancelBookingByBarberResponse,
   BarberBookingListResponse,
   GetBarbersForServicesResponse,
+  VendorBookingListParams,
+  VendorBookingListResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -911,6 +913,28 @@ export class BookingService {
       completedAt: booking.completedAt,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,
+    };
+  }
+
+  async vendorGetBookings(params: VendorBookingListParams): Promise<VendorBookingListResponse> {
+    const { bookings, total } = await this.bookingRepository.vendorGetBookings(params);
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userName: b.userName,
+        userImage: b.userImage,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
     };
   }
 

@@ -28,6 +28,7 @@ import {
   UpdateProfileResponse,
   VendorDashboardCountsDto,
 } from './vendor.types';
+import { VendorBookingListResponse, VendorBookingStatus } from '../booking/booking.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
@@ -871,5 +872,34 @@ export default class VendorService {
       staffWorking,
       staffOnLeave: totalActive - staffWorking,
     };
+  }
+
+  async getVendorBookings(
+    vendorId: string,
+    query: { shopId?: string; status?: VendorBookingStatus; page: number; limit: number },
+  ): Promise<VendorBookingListResponse> {
+    let shopIds: string[];
+
+    if (query.shopId) {
+      const shop = await this.shopService.getShopById(query.shopId);
+      if (shop.vendorId !== vendorId) {
+        throw new ForbiddenError('You do not own this shop.');
+      }
+      shopIds = [query.shopId];
+    } else {
+      const shops = await this.shopService.getMyShops(vendorId);
+      shopIds = shops.map((s) => s.id);
+    }
+
+    if (shopIds.length === 0) {
+      return { bookings: [], total: 0, page: query.page, limit: query.limit, totalPages: 0 };
+    }
+
+    return this.bookingService.vendorGetBookings({
+      shopIds,
+      status: query.status,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 }
