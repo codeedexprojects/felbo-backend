@@ -39,7 +39,7 @@ export interface ShopAddress {
 
 export interface ShopLocation {
   type: 'Point';
-  coordinates: [number, number]; // [longitude, latitude]
+  coordinates: [number, number];
 }
 
 export interface DayHours {
@@ -205,6 +205,14 @@ export interface ShopDto {
 
 export interface VendorShopDto extends ShopDto {
   myBarberProfile: MyBarberProfile | null;
+}
+
+export interface VendorShopListDto {
+  id: string;
+  name: string;
+  address: string;
+  serviceCount: number;
+  barberCount: number;
 }
 
 export interface NearbyShopDto extends ShopDto {

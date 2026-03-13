@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { BarberModel, IBarber, SlotBlockModel, ISlotBlock } from './barber.model';
 import { BarberServiceModel, IBarberService } from '../service/service.model';
@@ -166,6 +167,12 @@ export class BarberRepository {
 
   findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ shopId, isActive: true }).lean<IBarberService[]>().exec();
+  }
+
+  findBarberServicesByShopIds(shopIds: string[]): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ shopId: { $in: shopIds }, isActive: true })
+      .lean<IBarberService[]>()
+      .exec();
   }
 
   findAllActiveByShopId(shopId: string): Promise<IBarber[]> {
@@ -404,5 +411,30 @@ export class BarberRepository {
     }
 
     return SlotBlockModel.find(query).sort({ startTime: 1 }).lean<ISlotBlock[]>().exec();
+  }
+
+  countActiveByShopIds(shopIds: string[]): Promise<number> {
+    return BarberModel.countDocuments({
+      shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
+      status: 'ACTIVE',
+    }).exec();
+  }
+
+  async countBarbersByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    const results = await BarberModel.aggregate([
+      {
+        $match: {
+          shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
+          status: 'ACTIVE',
+        },
+      },
+      { $group: { _id: '$shopId', count: { $sum: 1 } } },
+    ]).exec();
+
+    const countsMap = new Map<string, number>();
+    for (const r of results) {
+      countsMap.set(r._id.toString(), r.count);
+    }
+    return countsMap;
   }
 }

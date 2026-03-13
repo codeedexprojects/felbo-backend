@@ -230,4 +230,22 @@ export class ServiceRepository {
 
     return ServiceModel.aggregate(pipeline).exec();
   }
+
+  async countServicesByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    const results = await ServiceModel.aggregate([
+      {
+        $match: {
+          shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
+          isActive: true,
+        },
+      },
+      { $group: { _id: '$shopId', count: { $sum: 1 } } },
+    ]).exec();
+
+    const countsMap = new Map<string, number>();
+    for (const r of results) {
+      countsMap.set(r._id.toString(), r.count);
+    }
+    return countsMap;
+  }
 }

@@ -475,4 +475,8 @@ export class ServiceService {
       })),
     }));
   }
+
+  async countServicesByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    return this.serviceRepository.countServicesByShopIds(shopIds);
+  }
 }
