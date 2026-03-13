@@ -91,21 +91,30 @@ export class BarberService {
       throw new ForbiddenError('You do not have access to this shop.');
 
     const { barbers, total } = await this.barberRepository.findByShopId(shopId, filter);
-    const serviceLinks = await this.barberRepository.findBarberServicesByShopId(shopId);
-
-    const countsMap = new Map<string, number>();
-    for (const link of serviceLinks) {
-      const bId = link.barberId.toString();
-      countsMap.set(bId, (countsMap.get(bId) || 0) + 1);
-    }
+    const serviceCounts = await this.getServiceCountsForShop(shopId);
 
     return {
-      barbers: barbers.map((b) => this.toDto(b, countsMap.get(b._id.toString()) || 0)),
+      barbers: barbers.map((b) => this.toDto(b, serviceCounts.get(b._id.toString()) || 0)),
       total,
       page: filter.page,
       limit: filter.limit,
       totalPages: Math.ceil(total / filter.limit),
     };
+  }
+
+  private async getServiceCountsForShop(shopId: string): Promise<Map<string, number>> {
+    const serviceLinks = await this.barberRepository.findBarberServicesByShopId(shopId);
+    const countsMap = new Map<string, number>();
+    for (const link of serviceLinks) {
+      const bId = link.barberId.toString();
+      countsMap.set(bId, (countsMap.get(bId) || 0) + 1);
+    }
+    return countsMap;
+  }
+
+  private async getServiceCountForBarber(barberId: string): Promise<number> {
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    return links.length;
   }
 
   async createBarber(input: CreateBarberInput, vendorId: string): Promise<BarberManagementDto> {
@@ -152,7 +161,8 @@ export class BarberService {
   async getBarberById(barberId: string): Promise<BarberManagementDto> {
     const barber = await this.barberRepository.findById(barberId);
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
-    return this.toDto(barber);
+    const count = await this.getServiceCountForBarber(barberId);
+    return this.toDto(barber, count);
   }
 
   async updateBarber(
@@ -261,7 +271,7 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
-      serviceCount: 0,
+      serviceCount: await this.getServiceCountForBarber(barber._id.toString()),
     };
   }
 
@@ -789,12 +799,29 @@ export class BarberService {
 
   async getBarbersByShopId(shopId: string): Promise<BarberManagementDto[]> {
     const barbers = await this.barberRepository.findAllActiveByShopId(shopId);
-    return barbers.map((b) => this.toDto(b));
+    const serviceCounts = await this.getServiceCountsForShop(shopId);
+    return barbers.map((b) => this.toDto(b, serviceCounts.get(b._id.toString()) || 0));
   }
 
   async getBarbersByShopIds(shopIds: string[]): Promise<BarberManagementDto[]> {
     const barbers = await this.barberRepository.findBarbersByShopIds(shopIds);
-    return barbers.map((b) => this.toDto(b as IBarber));
+    const serviceLinks = await this.barberRepository.findBarberServicesByShopIds(shopIds);
+
+    const countsMap = new Map<string, number>();
+    for (const link of serviceLinks) {
+      const bId = link.barberId.toString();
+      countsMap.set(bId, (countsMap.get(bId) || 0) + 1);
+    }
+
+    return barbers.map((b) => this.toDto(b as IBarber, countsMap.get(b._id.toString()) || 0));
+  }
+
+  async countBarbersByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    return this.barberRepository.countBarbersByShopIds(shopIds);
+  }
+
+  async countActiveByShopIds(shopIds: string[]): Promise<number> {
+    return this.barberRepository.countActiveByShopIds(shopIds);
   }
 
   async getBarberServicesByShopId(shopId: string): Promise<BarberServiceLinkDto[]> {

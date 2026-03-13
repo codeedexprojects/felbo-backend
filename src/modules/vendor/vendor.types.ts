@@ -392,3 +392,9 @@ export interface UpdateProfileResponse {
   ownerName: string;
   email: string | null;
 }
+
+export interface VendorDashboardCountsDto {
+  totalBookings: number;
+  staffWorking: number;
+  staffOnLeave: number;
+}

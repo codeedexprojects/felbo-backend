@@ -10,6 +10,7 @@ import {
   refreshTokenSchema,
   fcmTokenSchema,
   updateProfileSchema,
+  dashboardStatsQuerySchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -148,6 +149,16 @@ export default class VendorController {
     res.status(200).json({
       success: true,
       message: 'Token removed',
+    });
+  };
+
+  getDashboardStats = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = dashboardStatsQuerySchema.parse(req.query);
+    const result = await this.vendorService.getDashboardCounts(req.user!.sub, shopId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
     });
   };
 }

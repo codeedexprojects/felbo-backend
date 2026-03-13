@@ -108,3 +108,7 @@ export const updateProfileSchema = z
   .refine((data) => data.ownerName !== undefined || data.email !== undefined, {
     message: 'At least one field (ownerName or email) must be provided',
   });
+
+export const dashboardStatsQuerySchema = z.object({
+  shopId: z.string().min(1).optional(),
+});

@@ -89,4 +89,16 @@ export class BarberAvailabilityRepository {
   async findByBarberId(barberId: string): Promise<IBarberAvailability | null> {
     return BarberAvailabilityModel.findOne({ barberId }).lean<IBarberAvailability>().exec();
   }
+
+  async countWorkingByShopIds(
+    shopIds: string[],
+    todayStart: Date,
+    todayEnd: Date,
+  ): Promise<number> {
+    return BarberAvailabilityModel.countDocuments({
+      shopId: { $in: shopIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      isWorking: true,
+      date: { $gte: todayStart, $lt: todayEnd },
+    }).exec();
+  }
 }
