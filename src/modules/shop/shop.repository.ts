@@ -403,7 +403,7 @@ export default class ShopRepository {
           },
         },
       ],
-      { returnDocument: 'after' },
+      { returnDocument: 'after', updatePipeline: true },
     ).exec();
   }
 

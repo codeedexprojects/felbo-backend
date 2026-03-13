@@ -608,6 +608,7 @@ export default class ShopService {
   ): Promise<{ cancellationsThisWeek: number; vendorId: string }> {
     const updated = await this.shopRepository.incrementCancellation(shopId);
     if (!updated) throw new NotFoundError('Shop not found.');
+
     return {
       cancellationsThisWeek: updated.cancellationsThisWeek,
       vendorId: updated.vendorId.toString(),
