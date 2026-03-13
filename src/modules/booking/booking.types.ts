@@ -208,6 +208,41 @@ export interface BarberBookingListResponse {
   totalPages: number;
 }
 
+export type VendorBookingStatus =
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'CANCELLED_BY_USER'
+  | 'CANCELLED_BY_VENDOR'
+  | 'NO_SHOW'
+  | 'CANCELLED';
+
+export interface VendorBookingListParams {
+  shopIds: string[];
+  status?: VendorBookingStatus;
+  page: number;
+  limit: number;
+}
+
+export interface VendorBookingListItem {
+  id: string;
+  bookingNumber: string;
+  userName: string;
+  userImage: string | null;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  services: string[];
+  status: string;
+}
+
+export interface VendorBookingListResponse {
+  bookings: VendorBookingListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface AdminBookingDetailDto {
   id: string;
   bookingNumber: string;
