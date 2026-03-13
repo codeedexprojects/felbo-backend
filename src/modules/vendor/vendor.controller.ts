@@ -11,6 +11,7 @@ import {
   fcmTokenSchema,
   updateProfileSchema,
   dashboardStatsQuerySchema,
+  vendorBookingsQuerySchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -155,6 +156,21 @@ export default class VendorController {
   getDashboardStats = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = dashboardStatsQuerySchema.parse(req.query);
     const result = await this.vendorService.getDashboardCounts(req.user!.sub, shopId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getVendorBookings = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, status, page, limit } = vendorBookingsQuerySchema.parse(req.query);
+    const result = await this.vendorService.getVendorBookings(req.user!.sub, {
+      shopId,
+      status,
+      page,
+      limit,
+    });
 
     res.status(200).json({
       success: true,
