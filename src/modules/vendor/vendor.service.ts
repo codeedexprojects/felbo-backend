@@ -92,6 +92,7 @@ export default class VendorService {
       phone: vendor.phone,
       ownerName: vendor.ownerName,
       email: vendor.email || null,
+      profilePhoto: vendor.profilePhoto || null,
       verificationStatus: vendor.verificationStatus,
     };
   }
@@ -105,6 +106,7 @@ export default class VendorService {
       phone: vendor.phone,
       ownerName: vendor.ownerName,
       email: vendor.email || null,
+      profilePhoto: vendor.profilePhoto || null,
       registrationType: vendor.registrationType,
       verificationStatus: vendor.verificationStatus,
       status: vendor.status,
@@ -783,9 +785,10 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const updateData: { ownerName?: string; email?: string } = {};
+    const updateData: { ownerName?: string; email?: string; profilePhoto?: string } = {};
     if (input.ownerName !== undefined) updateData.ownerName = input.ownerName;
     if (input.email !== undefined) updateData.email = input.email;
+    if (input.profilePhoto !== undefined) updateData.profilePhoto = input.profilePhoto;
 
     const updated = await this.vendorRepository.updateProfile(vendorId, updateData);
     if (!updated) {
@@ -803,6 +806,7 @@ export default class VendorService {
       phone: updated.phone,
       ownerName: updated.ownerName,
       email: updated.email || null,
+      profilePhoto: updated.profilePhoto || null,
     };
   }
 
