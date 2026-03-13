@@ -13,6 +13,7 @@ router.post('/register/independent/initiate', vendorController.registerIndepende
 router.post('/register/independent/confirm', vendorController.registerIndependentConfirm);
 
 router.get('/profile', authenticate, authorize('VENDOR'), vendorController.getProfile);
+router.patch('/profile', authenticate, authorize('VENDOR'), vendorController.updateProfile);
 router.get(
   '/registration-status',
   authenticate,

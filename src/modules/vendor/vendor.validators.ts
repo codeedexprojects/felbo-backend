@@ -95,3 +95,16 @@ export const refreshTokenSchema = z.object({
 export const fcmTokenSchema = z.object({
   token: z.string().min(1, 'Token is required'),
 });
+
+export const updateProfileSchema = z
+  .object({
+    ownerName: z
+      .string()
+      .min(2, 'Name must be at least 2 characters')
+      .max(100, 'Name must be at most 100 characters')
+      .optional(),
+    email: z.string().email('Enter valid email').optional(),
+  })
+  .refine((data) => data.ownerName !== undefined || data.email !== undefined, {
+    message: 'At least one field (ownerName or email) must be provided',
+  });
