@@ -26,6 +26,7 @@ import {
   RefreshTokenResponse,
   UpdateProfileInput,
   UpdateProfileResponse,
+  VendorDashboardCountsDto,
 } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
@@ -33,6 +34,8 @@ import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import PaymentService from '../payment/payment.service';
 import ShopService from '../shop/shop.service';
 import { BarberService } from '../barber/barber.service';
+import { BookingService } from '../booking/booking.service';
+import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import { formatRating } from '../../shared/utils/rating';
 import {
   UnauthorizedError,
@@ -56,6 +59,8 @@ export default class VendorService {
     private readonly getPaymentService: () => PaymentService,
     private readonly getShopService: () => ShopService,
     private readonly getBarberService: () => BarberService,
+    private readonly getBookingService: () => BookingService,
+    private readonly getAvailabilityService: () => BarberAvailabilityService,
     private readonly registrationFee: number,
     private readonly logger: Logger,
   ) {}
@@ -70,6 +75,14 @@ export default class VendorService {
 
   private get barberService(): BarberService {
     return this.getBarberService();
+  }
+
+  private get bookingService(): BookingService {
+    return this.getBookingService();
+  }
+
+  private get availabilityService(): BarberAvailabilityService {
+    return this.getAvailabilityService();
   }
 
   private toVendorDto(vendor: IVendor): LoginVerifyOtpResponse['vendor'] {
@@ -827,5 +840,36 @@ export default class VendorService {
 
   async getAssociationVendorIds(): Promise<Types.ObjectId[]> {
     return this.vendorRepository.findIdsByRegistrationType('ASSOCIATION');
+  }
+
+  async getDashboardCounts(vendorId: string, shopId?: string): Promise<VendorDashboardCountsDto> {
+    let shopIds: string[];
+
+    if (shopId) {
+      const shop = await this.shopService.getShopById(shopId);
+      if (shop.vendorId !== vendorId) {
+        throw new ForbiddenError('You do not own this shop.');
+      }
+      shopIds = [shopId];
+    } else {
+      const shops = await this.shopService.getMyShops(vendorId);
+      shopIds = shops.map((s) => s.id);
+    }
+
+    if (shopIds.length === 0) {
+      return { totalBookings: 0, staffWorking: 0, staffOnLeave: 0 };
+    }
+
+    const [bookingStats, staffWorking, totalActive] = await Promise.all([
+      this.bookingService.getStatsByShopIds(shopIds),
+      this.availabilityService.countWorkingByShopIds(shopIds),
+      this.barberService.countActiveByShopIds(shopIds),
+    ]);
+
+    return {
+      totalBookings: bookingStats.totalBookings,
+      staffWorking,
+      staffOnLeave: totalActive - staffWorking,
+    };
   }
 }

@@ -15,7 +15,6 @@ import {
   SearchShopsResponse,
   ShopSearchResultDto,
   ShopDto,
-  VendorShopDto,
   NearbyShopCardDto,
   NearbyShopsResponse,
   ServiceDto,
@@ -30,6 +29,8 @@ import {
   AdminShopSearchResponse,
   ShopServicesResponse,
   ShopServicesInput,
+  VendorShopListDto,
+  ShopAddress,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 import { ConfigService } from '../config/config.service';
@@ -152,23 +153,31 @@ export default class ShopService {
     return shops.map((shop) => this.toShopDto(shop));
   }
 
-  async getMyShopsWithBarberProfile(vendorId: string): Promise<VendorShopDto[]> {
+  async getMyShopsWithBarberProfile(vendorId: string): Promise<VendorShopListDto[]> {
     const shops = await this.shopRepository.findAllByVendorId(vendorId);
-    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+    if (shops.length === 0) return [];
+
+    const shopIds = shops.map((s) => s._id.toString());
+    const [barberCounts, serviceCounts] = await Promise.all([
+      this.barberService.countBarbersByShopIds(shopIds),
+      this.serviceService.countServicesByShopIds(shopIds),
+    ]);
 
     return shops.map((shop) => {
       const shopId = shop._id.toString();
-      const myBarberProfile =
-        barberProfile && barberProfile.shopId === shopId
-          ? {
-              id: barberProfile.id,
-              name: barberProfile.name,
-              isAvailable: barberProfile.isAvailable,
-            }
-          : null;
-
-      return { ...this.toShopDto(shop), myBarberProfile };
+      return {
+        id: shopId,
+        name: shop.name,
+        address: this.formatAddress(shop.address),
+        serviceCount: serviceCounts.get(shopId) || 0,
+        barberCount: barberCounts.get(shopId) || 0,
+      };
     });
+  }
+
+  private formatAddress(address: ShopAddress): string {
+    const parts = [address.line1, address.line2, address.area, address.city].filter(Boolean);
+    return parts.join(', ');
   }
 
   async getShop(shopId: string, vendorId: string): Promise<ShopDto> {

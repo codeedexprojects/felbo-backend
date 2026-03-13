@@ -8,6 +8,7 @@ import shopRoutes from './shop.routes';
 import categoryRoutes from './category.routes';
 import serviceRoutes from './service.routes';
 import barberRoutes from './barber.routes';
+import dashboardRoutes from './dashboard.routes';
 import fcmRoutes from './fcm.routes';
 
 const router = Router();
@@ -22,6 +23,7 @@ router.use('/shops', shopRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/shops/:shopId/services', serviceRoutes);
 router.use('/barbers', barberRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/fcm-token', fcmRoutes);
 
 export default router;

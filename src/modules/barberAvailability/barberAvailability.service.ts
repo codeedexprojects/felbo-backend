@@ -278,6 +278,12 @@ export class BarberAvailabilityService {
     return this.toAvailabilityDto(record);
   }
 
+  async countWorkingByShopIds(shopIds: string[]): Promise<number> {
+    const todayDate = this.getTodayDate();
+    const nextDay = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
+    return this.availabilityRepository.countWorkingByShopIds(shopIds, todayDate, nextDay);
+  }
+
   async getTodayDefault(barberId: string): Promise<Partial<AvailabilityDto>> {
     const barber = await this.barberService.getBarberById(barberId);
     const shop = await this.shopService.getShopById(barber.shopId);

@@ -6,6 +6,8 @@ import { JwtService } from '../../shared/services/jwt.service';
 import { paymentService } from '../payment/payment.container';
 import { shopService } from '../shop/shop.container';
 import { barberService } from '../barber/barber.container';
+import { bookingService } from '../booking/booking.container';
+import { availabilityService } from '../barberAvailability/barberAvailability.container';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -20,7 +22,7 @@ const otpSessionService = new OtpSessionService();
 
 const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
 
-const vendorService = new VendorService(
+const vendorService: VendorService = new VendorService(
   vendorRepository,
   otpService,
   otpSessionService,
@@ -28,6 +30,8 @@ const vendorService = new VendorService(
   () => paymentService,
   () => shopService,
   () => barberService,
+  () => bookingService,
+  () => availabilityService,
   config.vendor.registrationFee,
   logger,
 );
