@@ -13,6 +13,9 @@ import {
   completeProfileSchema,
   adminSearchShopsSchema,
   shopServicesSchema,
+  addAdditionalShopSchema,
+  pendingShopsQuerySchema,
+  rejectShopSchema,
 } from './shop.validators';
 
 export default class ShopController {
@@ -33,6 +36,19 @@ export default class ShopController {
       success: true,
       data: result,
     });
+  };
+
+  addAdditionalShop = async (req: Request, res: Response): Promise<void> => {
+    const validated = addAdditionalShopSchema.parse(req.body);
+    const result = await this.shopService.addAdditionalShop(req.user!.sub, {
+      ...validated,
+      location: {
+        type: 'Point',
+        coordinates: [validated.location.longitude, validated.location.latitude],
+      },
+    });
+
+    res.status(201).json({ success: true, data: result });
   };
 
   getMyShops = async (req: Request, res: Response): Promise<void> => {
@@ -163,6 +179,28 @@ export default class ShopController {
       success: true,
       data: result,
     });
+  };
+
+  listPendingShops = async (req: Request, res: Response): Promise<void> => {
+    const { page, limit } = pendingShopsQuerySchema.parse(req.query);
+    const result = await this.shopService.getPendingApprovalShops(page, limit);
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  approveShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    await this.shopService.approveShop(shopId);
+
+    res.status(200).json({ success: true, message: 'Shop approved.' });
+  };
+
+  rejectShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const { reason } = rejectShopSchema.parse(req.body);
+    await this.shopService.rejectShop(shopId, reason);
+
+    res.status(200).json({ success: true, message: 'Shop rejected.' });
   };
 
   toggleShopAvailable = async (req: Request, res: Response): Promise<void> => {

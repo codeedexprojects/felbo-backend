@@ -1,2018 +1,940 @@
 // ========================================
-// File: src/modules/vendor/vendor.container.ts
+// File: src/routes/admin/advertisement.routes.ts
 // ========================================
-import { config } from '../../shared/config/config.service';
-import { logger } from '../../shared/logger/logger';
-import { TwoFactorOtpService, DevOtpService } from '../../shared/services/otp.service';
-import { OtpSessionService } from '../../shared/services/otp-session.service';
-import { JwtService } from '../../shared/services/jwt.service';
-import { paymentService } from '../payment/payment.container';
-import { shopService } from '../shop/shop.container';
-import { barberService } from '../barber/barber.container';
-import VendorRepository from './vendor.repository';
-import VendorService from './vendor.service';
-import VendorController from './vendor.controller';
+import { Router } from 'express';
+import { advertisementController } from '../../modules/advertisement/advertisement.container';
+import { authorize } from '../../shared/middleware/authorize';
+import { uploadController } from '../../modules/upload/upload.container';
 
-const vendorRepository = new VendorRepository();
+const router = Router();
 
-const otpService = config.isProduction
-  ? new TwoFactorOtpService(logger, config.otp.twoFactorApiKey)
-  : new DevOtpService(logger, config.otp.devFixedOtp);
-
-const otpSessionService = new OtpSessionService();
-
-const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
-
-const vendorService = new VendorService(
-  vendorRepository,
-  otpService,
-  otpSessionService,
-  jwtService,
-  () => paymentService,
-  () => shopService,
-  () => barberService,
-  config.vendor.registrationFee,
-  logger,
+// Generate presigned S3 PUT URL and verify for admin banner image uploads
+router.post(
+  '/upload-url',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  uploadController.generateUploadUrl('advertisements/', false, 'banners'),
+);
+router.post(
+  '/verify-upload',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  uploadController.verifyUpload('advertisements/', false, 'banners'),
 );
 
-const vendorController = new VendorController(vendorService);
+router.post('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.createAd);
+router.get('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.listAds);
+router.get('/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.getAd);
+router.put('/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.updateAd);
+router.delete('/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), advertisementController.deleteAd);
 
-export { vendorController, vendorService };
-
-
-
-// ========================================
-// File: src/modules/vendor/vendor.controller.ts
-// ========================================
-import { Request, Response } from 'express';
-import VendorService from './vendor.service';
-import {
-  sendOtpSchema,
-  loginVerifyOtpSchema,
-  registerVerifyOtpSchema,
-  registerAssociationSchema,
-  registerIndependentInitiateSchema,
-  registerIndependentConfirmSchema,
-  refreshTokenSchema,
-  fcmTokenSchema,
-  updateProfileSchema,
-} from './vendor.validators';
-
-export default class VendorController {
-  constructor(private readonly vendorService: VendorService) {}
-
-  sendOtp = async (req: Request, res: Response): Promise<void> => {
-    const validated = sendOtpSchema.parse(req.body);
-    const result = await this.vendorService.sendOtp(validated.phone);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  loginVerifyOtp = async (req: Request, res: Response): Promise<void> => {
-    const validated = loginVerifyOtpSchema.parse(req.body);
-    const result = await this.vendorService.loginVerifyOtp(validated);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  registerVerifyOtp = async (req: Request, res: Response): Promise<void> => {
-    const validated = registerVerifyOtpSchema.parse(req.body);
-    const result = await this.vendorService.registerVerifyOtp(validated);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  registerAssociation = async (req: Request, res: Response): Promise<void> => {
-    const validated = registerAssociationSchema.parse(req.body);
-    const result = await this.vendorService.registerAssociation(validated);
-
-    res.status(201).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  registerIndependentInitiate = async (req: Request, res: Response): Promise<void> => {
-    const validated = registerIndependentInitiateSchema.parse(req.body);
-    const result = await this.vendorService.registerIndependentInitiate(validated);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  registerIndependentConfirm = async (req: Request, res: Response): Promise<void> => {
-    const validated = registerIndependentConfirmSchema.parse(req.body);
-    const result = await this.vendorService.registerIndependentConfirm(validated);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  getRegistrationStatus = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getRegistrationStatus(req.user!.sub);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  getOnboardingStatus = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getOnboardingStatus(req.user!.sub);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  getProfile = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.vendorService.getProfile(req.user!.sub);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  updateProfile = async (req: Request, res: Response): Promise<void> => {
-    const validated = updateProfileSchema.parse(req.body);
-    const result = await this.vendorService.updateProfile(req.user!.sub, validated);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  refreshToken = async (req: Request, res: Response): Promise<void> => {
-    const { refreshToken } = refreshTokenSchema.parse(req.body);
-    const result = await this.vendorService.refreshAccessToken(refreshToken);
-
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  };
-
-  logout = async (req: Request, res: Response): Promise<void> => {
-    await this.vendorService.logout(req.user!.sub);
-
-    res.status(200).json({
-      success: true,
-      message: 'Logged out successfully.',
-    });
-  };
-
-  registerFcmToken = async (req: Request, res: Response): Promise<void> => {
-    const { token } = fcmTokenSchema.parse(req.body);
-    await this.vendorService.registerFcmToken(req.user!.sub, token);
-
-    res.status(200).json({
-      success: true,
-      message: 'Token registered',
-    });
-  };
-
-  unregisterFcmToken = async (req: Request, res: Response): Promise<void> => {
-    const { token } = fcmTokenSchema.parse(req.body);
-    await this.vendorService.unregisterFcmToken(req.user!.sub, token);
-
-    res.status(200).json({
-      success: true,
-      message: 'Token removed',
-    });
-  };
-}
+export default router;
 
 
 
 // ========================================
-// File: src/modules/vendor/vendor.model.ts
+// File: src/routes/admin/auth.routes.ts
 // ========================================
-import mongoose, { Schema, Document } from 'mongoose';
+import { Router } from 'express';
+import { adminController } from '../../modules/admin/admin.container';
+import { authenticate } from '../../shared/middleware/authenticate';
 
-export interface IVendorAddress {
-  line1: string;
-  line2?: string;
-  area: string;
-  city: string;
-  district: string;
-  state: string;
-  pincode: string;
-}
+const router = Router();
 
-export interface IVendorLocation {
-  type: 'Point';
-  coordinates: [number, number]; // [longitude, latitude]
-}
+router.post('/login', adminController.login);
+router.post('/refresh-token', adminController.refreshToken);
 
-export interface IVendorShopDetails {
-  name: string;
-  type: 'MENS' | 'WOMENS' | 'UNISEX';
-  address: IVendorAddress;
-  location: IVendorLocation;
-  photos: string[];
-}
+router.post('/logout', authenticate, adminController.logout);
 
-export interface IVendorRegistrationPayment {
-  amount: number;
-  paymentId: string;
-  paidAt: Date;
-}
+export default router;
 
-export interface IVendorDocuments {
-  shopLicense?: string;
-  ownerIdProof?: string;
-}
 
-export interface IVendor extends Document {
-  phone: string;
-  email?: string;
-  ownerName: string;
 
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
+// ========================================
+// File: src/routes/admin/booking.routes.ts
+// ========================================
+import { Router } from 'express';
+import { bookingController } from '../../modules/booking/booking.container';
+import { authorize } from '../../shared/middleware/authorize';
 
-  // Association details
-  associationMemberId?: string;
-  associationIdProofUrl?: string;
+const router = Router();
 
-  // Independent payment
-  registrationPayment?: IVendorRegistrationPayment;
-  registrationPaymentOrderId?: string;
-
-  // Documents
-  documents?: IVendorDocuments;
-
-  // Shop details (temporary storage during registration)
-  shopDetails?: IVendorShopDetails;
-
-  // Verification
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  verificationNote?: string;
-  verifiedAt?: Date;
-  verifiedBy?: mongoose.Types.ObjectId;
-
-  // Notification settings
-  notificationSettings: {
-    voiceAnnouncements: boolean;
-  };
-
-  // Cancellation tracking
-  cancellationCount: number;
-  cancellationsThisWeek: number;
-  lastCancellationAt?: Date;
-  isFlagged: boolean;
-  flaggedAt?: Date;
-
-  // Fcm tokens for push notifications
-  fcmTokens: string[];
-
-  // Block status
-  isBlocked: boolean;
-  blockedAt?: Date;
-  blockedBy?: mongoose.Types.ObjectId;
-  blockReason?: string;
-
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  refreshTokenHash?: string | null;
-  lastLoginAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const addressSchema = new Schema(
-  {
-    line1: { type: String },
-    line2: { type: String },
-    area: { type: String },
-    city: { type: String },
-    district: { type: String },
-    state: { type: String },
-    pincode: { type: String },
-  },
-  { _id: false },
+router.get('/', authorize('SUPER_ADMIN', 'ASSOCIATION_ADMIN'), bookingController.adminGetBookings);
+router.get(
+  '/:bookingId',
+  authorize('SUPER_ADMIN', 'ASSOCIATION_ADMIN'),
+  bookingController.adminGetBookingDetail,
 );
 
-const locationSchema = new Schema(
-  {
-    type: { type: String, default: 'Point' },
-    coordinates: { type: [Number] },
-  },
-  { _id: false },
+export default router;
+
+
+
+// ========================================
+// File: src/routes/admin/category.routes.ts
+// ========================================
+import { Router } from 'express';
+import { categoryController } from '../../modules/category/category.container';
+import { authorize } from '../../shared/middleware/authorize';
+import { uploadController } from '../../modules/upload/upload.container';
+
+const router = Router();
+
+router.post(
+  '/upload-url',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  uploadController.generateUploadUrl('categories/', false, 'images'),
+);
+router.post(
+  '/verify-upload',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  uploadController.verifyUpload('categories/', false, 'images'),
 );
 
-const shopDetailsSchema = new Schema(
-  {
-    name: { type: String },
-    type: { type: String, enum: ['MENS', 'WOMENS', 'UNISEX'] },
-    address: { type: addressSchema },
-    location: { type: locationSchema },
-    photos: { type: [String], default: [] },
-  },
-  { _id: false },
+router.post('/', categoryController.create);
+router.get('/', categoryController.getAllAdmin);
+router.patch('/:categoryId', categoryController.update);
+router.patch('/:categoryId/toggle', categoryController.toggleStatus);
+router.delete('/:categoryId', categoryController.delete);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/admin/config.routes.ts
+// ========================================
+import { Router } from 'express';
+import { configController } from '../../modules/config/config.container';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.get('/', authorize('SUPER_ADMIN'), configController.getAll);
+router.get('/:category', authorize('SUPER_ADMIN'), configController.getByCategory);
+router.patch('/:key', authorize('SUPER_ADMIN'), configController.updateConfig);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/admin/dashboard.routes.ts
+// ========================================
+import { Router } from 'express';
+import { adminController } from '../../modules/admin/admin.container';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.get('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.getSuperAdminDashboard);
+
+router.get(
+  '/association',
+  authorize('ASSOCIATION_ADMIN'),
+  adminController.getAssociationAdminDashboard,
 );
 
-const vendorSchema = new Schema<IVendor>(
-  {
-    phone: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    email: {
-      type: String,
-      default: null,
-    },
-    ownerName: {
-      type: String,
-      default: '',
-    },
+export default router;
 
-    registrationType: {
-      type: String,
-      enum: ['ASSOCIATION', 'INDEPENDENT'],
-    },
 
-    // Association details
-    associationMemberId: { type: String },
-    associationIdProofUrl: { type: String },
 
-    // Independent payment
-    registrationPayment: {
-      amount: { type: Number },
-      paymentId: { type: String },
-      paidAt: { type: Date },
-    },
-    registrationPaymentOrderId: { type: String },
+// ========================================
+// File: src/routes/admin/finance.routes.ts
+// ========================================
+import { Router } from 'express';
+import { financeController } from '../../modules/finance/finance.container';
+import { authorize } from '../../shared/middleware/authorize';
 
-    // Documents
-    documents: {
-      shopLicense: { type: String },
-      ownerIdProof: { type: String },
-    },
+const router = Router();
 
-    // Shop details
-    shopDetails: { type: shopDetailsSchema },
+router.get('/stats', authorize('SUPER_ADMIN'), financeController.getFinanceSummary);
+router.get('/chart', authorize('SUPER_ADMIN'), financeController.getRevenueChart);
+router.get('/vendors', authorize('SUPER_ADMIN'), financeController.getVendorRevenueTable);
+router.get('/refunds', authorize('SUPER_ADMIN'), financeController.getRefundHistory);
 
-    // Verification
-    verificationStatus: {
-      type: String,
-      enum: ['PENDING', 'APPROVED', 'REJECTED'],
-      default: 'PENDING',
-    },
-    verificationNote: { type: String },
-    verifiedAt: { type: Date },
-    verifiedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
-
-    // Notification settings
-    notificationSettings: {
-      voiceAnnouncements: { type: Boolean, default: true },
-    },
-
-    // Cancellation tracking
-    cancellationCount: { type: Number, default: 0 },
-    cancellationsThisWeek: { type: Number, default: 0 },
-    lastCancellationAt: { type: Date },
-    isFlagged: { type: Boolean, default: false },
-    flaggedAt: { type: Date },
-
-    fcmTokens: {
-      type: [String],
-      default: [],
-      select: false,
-    },
-
-    // Block status
-    isBlocked: { type: Boolean, default: false },
-    blockedAt: { type: Date },
-    blockedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
-    blockReason: { type: String },
-
-    status: {
-      type: String,
-      enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED'],
-      default: 'PENDING',
-    },
-    refreshTokenHash: { type: String, default: null },
-    lastLoginAt: { type: Date },
-  },
-  {
-    timestamps: true,
-  },
+router.get(
+  '/assoc/stats',
+  authorize('ASSOCIATION_ADMIN'),
+  financeController.getAssocFinanceSummary,
+);
+router.get(
+  '/assoc/vendors',
+  authorize('ASSOCIATION_ADMIN'),
+  financeController.getAssocVendorRevenueTable,
 );
 
-// Indexes
-vendorSchema.index({ verificationStatus: 1 });
-vendorSchema.index({ status: 1 });
-vendorSchema.index({ isBlocked: 1 });
-vendorSchema.index({ isFlagged: 1 });
-vendorSchema.index({ registrationType: 1 });
-vendorSchema.index({ 'shopDetails.location': '2dsphere' });
-
-export const VendorModel = mongoose.model<IVendor>('Vendor', vendorSchema);
+export default router;
 
 
 
 // ========================================
-// File: src/modules/vendor/vendor.repository.ts
+// File: src/routes/admin/index.ts
 // ========================================
-import mongoose from 'mongoose';
-import { ClientSession } from '../../shared/database/transaction';
-import { VendorModel, IVendor } from './vendor.model';
-import { CreateVendorData, UpsertVendorData } from './vendor.types';
+import { Router } from 'express';
+import { authenticate } from '../../shared/middleware/authenticate';
 
-export default class VendorRepository {
-  findByPhone(phone: string): Promise<IVendor | null> {
-    return VendorModel.findOne({ phone }).exec();
-  }
+import authRoutes from './auth.routes';
+import vendorRoutes from './vendor.routes';
+import userRoutes from './user.routes';
+import issueRoutes from './issue.routes';
+import advertisementRoutes from './advertisement.routes';
+import categoryRoutes from './category.routes';
+import shopRoutes from './shop.routes';
+import configRoutes from './config.routes';
+import dashboardRoutes from './dashboard.routes';
+import financeRoutes from './finance.routes';
+import payoutRoutes from './payout.routes';
+import bookingRoutes from './booking.routes';
 
-  findById(id: string): Promise<IVendor | null> {
-    return VendorModel.findById(id).exec();
-  }
+const router = Router();
 
-  async create(data: CreateVendorData, session?: ClientSession): Promise<IVendor> {
-    const [vendor] = await VendorModel.create([data], { session });
-    return vendor;
-  }
+router.use('/auth', authRoutes);
 
-  upsertByPhone(
-    phone: string,
-    data: UpsertVendorData,
-    session?: ClientSession,
-  ): Promise<IVendor | null> {
-    return VendorModel.findOneAndUpdate(
-      { phone },
-      { $set: { ...data, phone } },
-      { upsert: true, returnDocument: 'after', session },
-    ).exec();
-  }
+router.use(authenticate);
 
-  updateLastLogin(id: string, session?: ClientSession): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { lastLoginAt: new Date() },
-      { returnDocument: 'after', session },
-    ).exec();
-  }
+router.use('/dashboard', dashboardRoutes);
+router.use('/vendors', vendorRoutes);
+router.use('/users', userRoutes);
+router.use('/issues', issueRoutes);
+router.use('/advertisements', advertisementRoutes);
+router.use('/categories', categoryRoutes);
+router.use('/shops', shopRoutes);
+router.use('/config', configRoutes);
+router.use('/finance', financeRoutes);
+router.use('/payout', payoutRoutes);
+router.use('/bookings', bookingRoutes);
 
-  updateRegistrationPayment(
-    id: string,
-    data: { amount: number; paymentId: string; paidAt: Date },
-    session?: ClientSession,
-  ): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { registrationPayment: data },
-      { returnDocument: 'after', session },
-    ).exec();
-  }
-
-  setVerificationStatus(
-    id: string,
-    status: 'PENDING' | 'APPROVED' | 'REJECTED',
-    note?: string,
-    session?: ClientSession,
-  ): Promise<IVendor | null> {
-    const update: Record<string, unknown> = { verificationStatus: status };
-
-    if (note !== undefined) {
-      update.verificationNote = note;
-    }
-
-    if (status === 'APPROVED') {
-      update.verifiedAt = new Date();
-    }
-    return VendorModel.findByIdAndUpdate(id, update, { returnDocument: 'after', session }).exec();
-  }
-
-  setStatus(
-    id: string,
-    status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED',
-    session?: ClientSession,
-  ): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { status },
-      { returnDocument: 'after', session },
-    ).exec();
-  }
-
-  async getStatusCounts(registrationType?: 'ASSOCIATION' | 'INDEPENDENT'): Promise<{
-    total: number;
-    active: number;
-    pendingVerification: number;
-    suspended: number;
-  }> {
-    const scope = registrationType ? { registrationType } : {};
-
-    const total = await VendorModel.countDocuments(scope).exec();
-    const active = await VendorModel.countDocuments({ ...scope, status: 'ACTIVE' }).exec();
-    const pendingVerification = await VendorModel.countDocuments({
-      ...scope,
-      verificationStatus: 'PENDING',
-    }).exec();
-    const suspended = await VendorModel.countDocuments({ ...scope, status: 'SUSPENDED' }).exec();
-
-    return { total, active, pendingVerification, suspended };
-  }
-
-  async getVerificationRequestCounts(): Promise<{
-    pending: number;
-    association: number;
-    independent: number;
-  }> {
-    const pending = await VendorModel.countDocuments({ verificationStatus: 'PENDING' }).exec();
-    const association = await VendorModel.countDocuments({
-      verificationStatus: 'PENDING',
-      registrationType: 'ASSOCIATION',
-    }).exec();
-    const independent = await VendorModel.countDocuments({
-      verificationStatus: 'PENDING',
-      registrationType: 'INDEPENDENT',
-    }).exec();
-
-    return { pending, association, independent };
-  }
-
-  async getDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
-    const result = await VendorModel.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          pendingVerifications: {
-            $sum: { $cond: [{ $eq: ['$verificationStatus', 'PENDING'] }, 1, 0] },
-          },
-        },
-      },
-    ]).exec();
-
-    return {
-      total: result[0]?.total ?? 0,
-      pendingVerifications: result[0]?.pendingVerifications ?? 0,
-    };
-  }
-
-  async findIdsByRegistrationType(
-    registrationType: 'ASSOCIATION' | 'INDEPENDENT',
-  ): Promise<mongoose.Types.ObjectId[]> {
-    const vendors = await VendorModel.find({ registrationType })
-      .select('_id')
-      .lean<{ _id: mongoose.Types.ObjectId }[]>()
-      .exec();
-    return vendors.map((v) => v._id);
-  }
-
-  async findAll(
-    filter: Record<string, unknown>,
-    page: number,
-    limit: number,
-  ): Promise<{ vendors: IVendor[]; total: number }> {
-    const skip = (page - 1) * limit;
-
-    const [result] = await VendorModel.aggregate<{
-      vendors: IVendor[];
-      totalCount: { count: number }[];
-    }>([
-      { $match: filter },
-      {
-        $facet: {
-          vendors: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
-          totalCount: [{ $count: 'count' }],
-        },
-      },
-    ]).exec();
-
-    const vendors = (result?.vendors ?? []) as unknown as IVendor[];
-    const total = result?.totalCount[0]?.count ?? 0;
-
-    return { vendors, total };
-  }
-
-  flagById(id: string): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { isFlagged: true, flaggedAt: new Date() },
-      { returnDocument: 'after' },
-    ).exec();
-  }
-
-  async getAllPhotoKeys(): Promise<string[]> {
-    const vendors = await VendorModel.find(
-      {},
-      { 'documents.shopLicense': 1, 'documents.ownerIdProof': 1, associationIdProofUrl: 1 },
-    )
-      .lean()
-      .exec();
-
-    const keys: string[] = [];
-    for (const v of vendors) {
-      if (v.documents?.shopLicense) keys.push(v.documents.shopLicense);
-      if (v.documents?.ownerIdProof) keys.push(v.documents.ownerIdProof);
-      if (v.associationIdProofUrl) keys.push(v.associationIdProofUrl);
-    }
-
-    return [...new Set(keys)];
-  }
-
-  updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { refreshTokenHash },
-      { returnDocument: 'after' },
-    ).exec();
-  }
-
-  findByIdWithRefreshToken(id: string): Promise<IVendor | null> {
-    return VendorModel.findById(id).select('+refreshTokenHash').exec();
-  }
-
-  addFcmToken(vendorId: string, token: string): Promise<unknown> {
-    return VendorModel.updateOne({ _id: vendorId }, { $addToSet: { fcmTokens: token } }).exec();
-  }
-
-  removeFcmToken(vendorId: string, token: string): Promise<unknown> {
-    return VendorModel.updateOne({ _id: vendorId }, { $pull: { fcmTokens: token } }).exec();
-  }
-
-  updateProfile(
-    id: string,
-    data: { ownerName?: string; email?: string },
-    session?: ClientSession,
-  ): Promise<IVendor | null> {
-    return VendorModel.findByIdAndUpdate(
-      id,
-      { $set: data },
-      { returnDocument: 'after', session },
-    ).exec();
-  }
-}
+export default router;
 
 
 
 // ========================================
-// File: src/modules/vendor/vendor.service.ts
+// File: src/routes/admin/issue.routes.ts
 // ========================================
-import type { Types } from 'mongoose';
-import { Logger } from 'winston';
-import VendorRepository from './vendor.repository';
-import { IVendor } from './vendor.model';
-import {
-  SendOtpResponse,
-  LoginVerifyOtpInput,
-  LoginVerifyOtpResponse,
-  RegisterVerifyOtpInput,
-  RegisterVerifyOtpResponse,
-  RegisterAssociationInput,
-  RegisterAssociationResponse,
-  RegisterIndependentInitiateInput,
-  RegisterIndependentInitiateResponse,
-  RegisterIndependentConfirmInput,
-  RegisterIndependentConfirmResponse,
-  RegistrationStatusResponse,
-  OnboardingStatusResponse,
-  VendorProfileDto,
-  ListVendorsFilter,
-  ListVendorsResponse,
-  ListVerificationRequestsResponse,
-  VerificationRequestItemDto,
-  VendorAdminDetail,
-  VendorRequestAdminDetail,
-  RefreshTokenResponse,
-  UpdateProfileInput,
-  UpdateProfileResponse,
-} from './vendor.types';
-import { OtpService } from '../../shared/services/otp.service';
-import { OtpSessionService } from '../../shared/services/otp-session.service';
-import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import PaymentService from '../payment/payment.service';
-import ShopService from '../shop/shop.service';
-import { BarberService } from '../barber/barber.service';
-import { formatRating } from '../../shared/utils/rating';
-import {
-  UnauthorizedError,
-  ForbiddenError,
-  NotFoundError,
-  ConflictError,
-  ValidationError,
-} from '../../shared/errors/index';
-import { withTransaction } from '../../shared/database/transaction';
-
-function last4(phone: string): string {
-  return phone.slice(-4);
-}
-
-export default class VendorService {
-  constructor(
-    private readonly vendorRepository: VendorRepository,
-    private readonly otpService: OtpService,
-    private readonly otpSessionService: OtpSessionService,
-    private readonly jwtService: JwtService,
-    private readonly getPaymentService: () => PaymentService,
-    private readonly getShopService: () => ShopService,
-    private readonly getBarberService: () => BarberService,
-    private readonly registrationFee: number,
-    private readonly logger: Logger,
-  ) {}
-
-  private get paymentService(): PaymentService {
-    return this.getPaymentService();
-  }
-
-  private get shopService(): ShopService {
-    return this.getShopService();
-  }
-
-  private get barberService(): BarberService {
-    return this.getBarberService();
-  }
-
-  private toVendorDto(vendor: IVendor): LoginVerifyOtpResponse['vendor'] {
-    return {
-      id: vendor._id.toString(),
-      phone: vendor.phone,
-      ownerName: vendor.ownerName,
-      email: vendor.email || null,
-      verificationStatus: vendor.verificationStatus,
-    };
-  }
-
-  private toProfileDto(
-    vendor: IVendor,
-    onboardingStatus: VendorProfileDto['onboardingStatus'],
-  ): VendorProfileDto {
-    return {
-      id: vendor._id.toString(),
-      phone: vendor.phone,
-      ownerName: vendor.ownerName,
-      email: vendor.email || null,
-      registrationType: vendor.registrationType,
-      verificationStatus: vendor.verificationStatus,
-      status: vendor.status,
-      onboardingStatus,
-    };
-  }
-
-  private async getOnboardingInfo(vendorId: string): Promise<{
-    onboardingStatus: OnboardingStatusResponse['onboardingStatus'];
-    shopDetails: OnboardingStatusResponse['shopDetails'];
-  }> {
-    const shops = await this.shopService.getMyShops(vendorId);
-    if (shops.length === 0) {
-      return { onboardingStatus: null, shopDetails: null };
-    }
-
-    const statusPriority: Record<string, number> = {
-      PENDING_PROFILE: 0,
-      PENDING_SERVICES: 1,
-      PENDING_BARBERS: 2,
-      PENDING_BARBER_SERVICES: 3,
-      COMPLETED: 4,
-    };
-
-    const leastProgressed = shops.reduce((min, shop) =>
-      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-        ? shop
-        : min,
-    );
-
-    const onboardingStatus = leastProgressed.onboardingStatus;
-
-    return {
-      onboardingStatus,
-      shopDetails:
-        onboardingStatus === 'COMPLETED'
-          ? null
-          : {
-              shopId: leastProgressed.id,
-              shopName: leastProgressed.name,
-              address: leastProgressed.address,
-              phoneNo: leastProgressed.phone,
-            },
-    };
-  }
-
-  async sendOtp(phone: string): Promise<SendOtpResponse> {
-    const phoneWithCode = `91${phone}`;
-    const result = await this.otpService.sendOtp(phoneWithCode, 'VENDOR');
-
-    await this.otpSessionService.storeSession(result.sessionId, phone);
-
-    this.logger.info({
-      action: 'VENDOR_OTP_SENT',
-      module: 'vendor',
-      phone: last4(phone),
-    });
-
-    return {
-      sessionId: result.sessionId,
-      message: 'OTP sent successfully',
-    };
-  }
-
-  async loginVerifyOtp(input: LoginVerifyOtpInput): Promise<LoginVerifyOtpResponse> {
-    await this.otpSessionService.verifySessionPhone(input.sessionId, input.phone);
-
-    const otpResult = await this.otpService.verifyOtp(input.sessionId, input.otp);
-    if (!otpResult.verified) {
-      throw new UnauthorizedError('Invalid OTP. Please try again.');
-    }
-
-    await this.otpSessionService.deleteSession(input.sessionId);
-
-    const vendor = await this.vendorRepository.findByPhone(input.phone);
-
-    if (!vendor) {
-      throw new NotFoundError('No vendor account found. Please register.');
-    }
-
-    if (vendor.verificationStatus === 'PENDING') {
-      throw new ForbiddenError('Your account is awaiting verification.');
-    }
-
-    if (vendor.verificationStatus === 'REJECTED') {
-      throw new ForbiddenError(
-        'Your application was not approved: ' + (vendor.verificationNote || 'Contact support.'),
-      );
-    }
-
-    if (vendor.status === 'SUSPENDED') {
-      throw new ForbiddenError('Your account has been suspended. Contact support.');
-    }
-
-    if (vendor.status === 'DELETED') {
-      throw new ForbiddenError('This account no longer exists.');
-    }
-
-    await this.vendorRepository.updateLastLogin(vendor._id.toString());
-
-    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
-
-    const tokenPayload: TokenPayload = {
-      sub: vendor._id.toString(),
-      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
-      ...(barberProfile ? { barberId: barberProfile.id } : {}),
-    };
-
-    const token = this.jwtService.signToken(tokenPayload);
-    const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
-
-    const refreshTokenHash = this.jwtService.hashToken(refreshToken);
-    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
-
-    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendor._id.toString());
-
-    this.logger.info({
-      action: 'VENDOR_LOGIN',
-      module: 'vendor',
-      vendorId: vendor._id.toString(),
-      phone: last4(input.phone),
-    });
-
-    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus, shopDetails };
-  }
-
-  async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
-    const decoded = this.jwtService.verifyRefreshToken(refreshToken);
-
-    const vendor = await this.vendorRepository.findByIdWithRefreshToken(decoded.sub);
-
-    if (!vendor || vendor.status === 'SUSPENDED' || vendor.status === 'DELETED') {
-      throw new UnauthorizedError('Invalid refresh token. Please login again.');
-    }
-
-    if (!vendor.refreshTokenHash) {
-      throw new UnauthorizedError('Invalid refresh token. Please login again.');
-    }
-
-    const isValid = this.jwtService.compareTokenHash(refreshToken, vendor.refreshTokenHash);
-
-    if (!isValid) {
-      await this.vendorRepository.updateRefreshToken(vendor._id.toString(), null);
-      this.logger.warn('Refresh token reuse detected — cleared stored token', {
-        vendorId: vendor._id,
-      });
-      throw new UnauthorizedError('Invalid refresh token. Please login again.');
-    }
-
-    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
-
-    const tokenPayload: TokenPayload = {
-      sub: vendor._id.toString(),
-      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
-      ...(barberProfile ? { barberId: barberProfile.id } : {}),
-    };
-
-    const newToken = this.jwtService.signToken(tokenPayload);
-    const newRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
-
-    const newRefreshTokenHash = this.jwtService.hashToken(newRefreshToken);
-    await this.vendorRepository.updateRefreshToken(vendor._id.toString(), newRefreshTokenHash);
-
-    return { token: newToken, refreshToken: newRefreshToken };
-  }
-
-  async logout(vendorId: string): Promise<void> {
-    await this.vendorRepository.updateRefreshToken(vendorId, null);
-    this.logger.info('Vendor logged out', { vendorId });
-  }
-
-  async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
-    await this.otpSessionService.verifySessionPhone(input.sessionId, input.phone);
-
-    const otpResult = await this.otpService.verifyOtp(input.sessionId, input.otp);
-    if (!otpResult.verified) {
-      throw new UnauthorizedError('Invalid OTP. Please try again.');
-    }
-
-    await this.otpSessionService.deleteSession(input.sessionId);
-
-    const existing = await this.vendorRepository.findByPhone(input.phone);
-    if (existing) {
-      if (existing.verificationStatus === 'APPROVED') {
-        throw new ConflictError('An account already exists for this number. Please login.');
-      }
-      if (existing.verificationStatus === 'PENDING') {
-        throw new ConflictError('Your application is already under review.');
-      }
-      if (existing.verificationStatus === 'REJECTED') {
-        throw new ForbiddenError('Your application was not approved. Please contact support.');
-      }
-    }
-
-    this.logger.info({
-      action: 'VENDOR_REGISTER_OTP_VERIFIED',
-      module: 'vendor',
-      phone: last4(input.phone),
-    });
-
-    return { verified: true, message: 'Phone verified. Please complete your registration.' };
-  }
-
-  async registerAssociation(input: RegisterAssociationInput): Promise<RegisterAssociationResponse> {
-    const existing = await this.vendorRepository.findByPhone(input.phone);
-
-    if (existing) {
-      if (existing.verificationStatus === 'APPROVED') {
-        throw new ConflictError('Account already exists. Please login.');
-      }
-
-      if (existing.verificationStatus === 'PENDING') {
-        throw new ConflictError('Application already under review.');
-      }
-
-      if (existing.verificationStatus === 'REJECTED') {
-        throw new ForbiddenError('Contact support to reapply.');
-      }
-    }
-
-    const newVendor = await this.vendorRepository.create({
-      phone: input.phone,
-      ownerName: input.ownerName,
-      email: input.email,
-      registrationType: 'ASSOCIATION',
-      associationMemberId: input.associationMemberId,
-      associationIdProofUrl: input.associationIdProofUrl,
-      shopDetails: input.shopDetails,
-      verificationStatus: 'PENDING',
-      status: 'PENDING',
-    });
-
-    this.logger.info({
-      action: 'VENDOR_REGISTRATION_SUBMITTED',
-      module: 'vendor',
-      vendorId: newVendor._id.toString(),
-      type: 'ASSOCIATION',
-      phone: last4(input.phone),
-    });
-
-    return { message: 'Application submitted. You will be notified once verified.' };
-  }
-
-  async registerIndependentInitiate(
-    input: RegisterIndependentInitiateInput,
-  ): Promise<RegisterIndependentInitiateResponse> {
-    const existing = await this.vendorRepository.findByPhone(input.phone);
-    if (existing) {
-      if (existing.verificationStatus === 'APPROVED') {
-        throw new ConflictError('Account already exists. Please login.');
-      }
-      if (existing.verificationStatus === 'PENDING') {
-        throw new ConflictError('Application already under review.');
-      }
-      if (existing.verificationStatus === 'REJECTED') {
-        throw new ForbiddenError('Contact support to reapply.');
-      }
-    }
-
-    const amount = this.registrationFee;
-
-    const { orderId } = await this.paymentService.createVendorRegistrationOrder({
-      phone: input.phone,
-      amountRupees: amount,
-    });
-
-    await this.vendorRepository.upsertByPhone(input.phone, {
-      ownerName: input.ownerName,
-      email: input.email,
-      registrationType: 'INDEPENDENT',
-      documents: input.documents,
-      shopDetails: input.shopDetails,
-      registrationPaymentOrderId: orderId,
-      verificationStatus: 'PAYMENT_PENDING',
-      status: 'PENDING',
-    });
-
-    this.logger.info({
-      action: 'VENDOR_REGISTRATION_PAYMENT_INITIATED',
-      module: 'vendor',
-      phone: last4(input.phone),
-      orderId,
-    });
-
-    return { orderId, amount };
-  }
-
-  async registerIndependentConfirm(
-    input: RegisterIndependentConfirmInput,
-  ): Promise<RegisterIndependentConfirmResponse> {
-    const vendor = await this.vendorRepository.findByPhone(input.phone);
-    if (!vendor) {
-      throw new NotFoundError('Registration not found. Please start again.');
-    }
-    if (vendor.registrationPaymentOrderId !== input.orderId) {
-      throw new ValidationError('Order ID mismatch.');
-    }
-    if (vendor.verificationStatus !== 'PAYMENT_PENDING') {
-      throw new ConflictError('Payment already confirmed or not initiated.');
-    }
-
-    await this.paymentService.verifyVendorRegistrationPayment({
-      orderId: input.orderId,
-      paymentId: input.paymentId,
-      signature: input.signature,
-    });
-
-    await withTransaction(async (session) => {
-      await this.vendorRepository.updateRegistrationPayment(
-        vendor._id.toString(),
-        {
-          amount: this.registrationFee,
-          paymentId: input.paymentId,
-          paidAt: new Date(),
-        },
-        session,
-      );
-      await this.vendorRepository.setVerificationStatus(
-        vendor._id.toString(),
-        'PENDING',
-        undefined,
-        session,
-      );
-    });
-
-    this.logger.info({
-      action: 'VENDOR_REGISTRATION_PAYMENT_CONFIRMED',
-      module: 'vendor',
-      vendorId: vendor._id.toString(),
-      paymentId: input.paymentId,
-      phone: last4(input.phone),
-    });
-
-    return { message: 'Payment confirmed. Application submitted for verification.' };
-  }
-
-  async getRegistrationStatus(vendorId: string): Promise<RegistrationStatusResponse> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    return {
-      verificationStatus: vendor.verificationStatus,
-      rejectionReason: vendor.verificationNote ?? undefined,
-      registrationType: vendor.registrationType ?? undefined,
-    };
-  }
-
-  async getOnboardingStatus(vendorId: string): Promise<OnboardingStatusResponse> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
-
-    return {
-      vendorName: vendor.ownerName,
-      onboardingStatus,
-      shopDetails,
-    };
-  }
-
-  async getProfile(vendorId: string): Promise<VendorProfileDto> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    const { onboardingStatus } = await this.getOnboardingInfo(vendorId);
-
-    return this.toProfileDto(vendor, onboardingStatus);
-  }
-
-  async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    if (vendor.verificationStatus !== 'PENDING') {
-      throw new ConflictError('Vendor is not awaiting verification.');
-    }
-
-    if (!vendor.shopDetails) {
-      throw new ValidationError('Cannot approve: vendor has no shop details.');
-    }
-
-    await withTransaction(async (session) => {
-      await this.vendorRepository.setVerificationStatus(vendorId, 'APPROVED', undefined, session);
-      await this.vendorRepository.setStatus(vendorId, 'ACTIVE', session);
-
-      await this.shopService.createShopForVendor(
-        {
-          vendorId: vendor._id.toString(),
-          name: vendor.shopDetails!.name,
-          shopType: vendor.shopDetails!.type,
-          phone: vendor.phone,
-          address: vendor.shopDetails!.address,
-          location: vendor.shopDetails!.location,
-        },
-        session,
-      );
-
-      await this.barberService.activateBarbersByVendorId(vendor._id.toString(), session);
-    });
-
-    this.logger.info({
-      action: 'VENDOR_APPROVED',
-      module: 'vendor',
-      vendorId,
-      approvedBy,
-    });
-
-    // TODO: Queue FCM push notification via Bull queue
-    // "Your Felbo vendor account has been approved. You can now log in."
-  }
-
-  async rejectVendor(vendorId: string, rejectedBy: string, reason: string): Promise<void> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-    if (vendor.verificationStatus !== 'PENDING') {
-      throw new ConflictError('Vendor is not awaiting verification.');
-    }
-
-    await withTransaction(async (session) => {
-      await this.vendorRepository.setVerificationStatus(vendorId, 'REJECTED', reason, session);
-    });
-
-    if (vendor.registrationType === 'INDEPENDENT' && vendor.registrationPayment?.paymentId) {
-      await this.paymentService.refundVendorRegistrationPayment(
-        vendor.registrationPayment.paymentId,
-      );
-      this.logger.info({
-        action: 'VENDOR_REGISTRATION_REFUND_INITIATED',
-        module: 'vendor',
-        vendorId,
-        paymentId: vendor.registrationPayment.paymentId,
-      });
-    }
-
-    this.logger.info({
-      action: 'VENDOR_REJECTED',
-      module: 'vendor',
-      vendorId,
-      rejectedBy,
-      reason,
-    });
-  }
-
-  async flagVendor(vendorId: string): Promise<void> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) throw new NotFoundError('Vendor not found.');
-    await this.vendorRepository.flagById(vendorId);
-  }
-
-  async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    const shopDtos = await this.shopService.getMyShops(vendorId);
-
-    const shopIds = shopDtos.map((shop) => shop.id);
-
-    let shops: VendorAdminDetail['shops'] = [];
-
-    if (shopIds.length > 0) {
-      const [allBarbers, allServices] = await Promise.all([
-        this.shopService.getBarbersByShopIds(shopIds),
-        this.shopService.getServicesByShopIds(shopIds),
-      ]);
-
-      const barbersByShop = new Map<string, typeof allBarbers>();
-      const servicesByShop = new Map<string, typeof allServices>();
-
-      for (const barber of allBarbers) {
-        const key = barber.shopId.toString();
-        if (!barbersByShop.has(key)) barbersByShop.set(key, []);
-        barbersByShop.get(key)!.push(barber);
-      }
-
-      for (const service of allServices) {
-        const key = service.shopId.toString();
-        if (!servicesByShop.has(key)) servicesByShop.set(key, []);
-        servicesByShop.get(key)!.push(service);
-      }
-
-      shops = shopDtos.map((shopDto) => {
-        const barberList = barbersByShop.get(shopDto.id) ?? [];
-        const serviceList = servicesByShop.get(shopDto.id) ?? [];
-
-        return {
-          id: shopDto.id,
-          name: shopDto.name,
-          shopType: shopDto.shopType,
-          phone: shopDto.phone,
-          address: shopDto.address,
-          rating: {
-            average: formatRating(shopDto.rating.average),
-            count: shopDto.rating.count,
-          },
-          onboardingStatus: shopDto.onboardingStatus,
-          status: shopDto.status,
-          isAvailable: shopDto.isAvailable,
-          photos: shopDto.photos,
-
-          barbers: barberList.map((b) => ({
-            id: b.id.toString(),
-            name: b.name,
-            phone: b.phone,
-            photo: b.photo,
-            isAvailable: b.isAvailable,
-          })),
-          barberCount: barberList.length,
-
-          services: serviceList.map((s) => ({
-            id: s.id.toString(),
-            name: s.name,
-            basePrice: s.basePrice,
-            baseDurationMinutes: s.baseDurationMinutes,
-            description: s.description,
-          })),
-          serviceCount: serviceList.length,
-        };
-      });
-    }
-
-    return {
-      id: vendor._id.toString(),
-      phone: vendor.phone,
-      email: vendor.email || null,
-      ownerName: vendor.ownerName,
-      registrationType: vendor.registrationType,
-      registrationDate: vendor.createdAt,
-      verificationStatus: vendor.verificationStatus,
-      verificationNote: vendor.verificationNote,
-      verifiedAt: vendor.verifiedAt,
-      status: vendor.status,
-      isBlocked: vendor.isBlocked,
-      isFlagged: vendor.isFlagged,
-      documents: vendor.documents,
-      associationMemberId: vendor.associationMemberId,
-      associationIdProofUrl: vendor.associationIdProofUrl,
-      cancellationCount: vendor.cancellationCount,
-      cancellationsThisWeek: vendor.cancellationsThisWeek,
-      shops,
-      recentBookings: [],
-    };
-  }
-
-  async getVendorRequestDetailForAdmin(vendorId: string): Promise<VendorRequestAdminDetail> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) throw new NotFoundError('Vendor not found.');
-
-    return {
-      id: vendor._id.toString(),
-      phone: vendor.phone,
-      email: vendor.email || null,
-      ownerName: vendor.ownerName,
-      registrationType: vendor.registrationType,
-      registrationDate: vendor.createdAt,
-      verificationStatus: vendor.verificationStatus,
-      verificationNote: vendor.verificationNote,
-      associationMemberId: vendor.associationMemberId,
-      associationIdProofUrl: vendor.associationIdProofUrl,
-      registrationPayment: vendor.registrationPayment
-        ? {
-            amount: vendor.registrationPayment.amount,
-            paymentId: vendor.registrationPayment.paymentId,
-            paidAt: vendor.registrationPayment.paidAt,
-          }
-        : undefined,
-      documents: vendor.documents,
-      shopDetails: vendor.shopDetails
-        ? {
-            name: vendor.shopDetails.name,
-            type: vendor.shopDetails.type,
-            address: vendor.shopDetails.address,
-            location: vendor.shopDetails.location,
-            photos: vendor.shopDetails.photos || [],
-          }
-        : undefined,
-    };
-  }
-
-  async listVendors(filter: ListVendorsFilter): Promise<ListVendorsResponse> {
-    const query: Record<string, unknown> = {};
-
-    if (filter.verificationStatus) {
-      query.verificationStatus = filter.verificationStatus;
-    }
-
-    if (filter.status) {
-      query.status = filter.status;
-    }
-
-    if (filter.registrationType) {
-      query.registrationType = filter.registrationType;
-    }
-
-    if (filter.search) {
-      const regex = new RegExp(filter.search, 'i');
-      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
-    }
-
-    const { vendors, total } = await this.vendorRepository.findAll(
-      query,
-      filter.page,
-      filter.limit,
-    );
-    const counts = await this.vendorRepository.getStatusCounts(filter.registrationType);
-
-    return {
-      vendors: vendors.map((v, i) => ({
-        slNo: total - (filter.page - 1) * filter.limit - i,
-        id: v._id.toString(),
-        ownerName: v.ownerName,
-        phone: v.phone,
-        type: v.registrationType,
-        verificationStatus: v.verificationStatus,
-        status: v.status,
-        registered: v.createdAt,
-      })),
-      total,
-      page: filter.page,
-      limit: filter.limit,
-      totalPages: Math.ceil(total / filter.limit),
-      counts,
-    };
-  }
-
-  async listVerificationRequests(
-    page: number,
-    limit: number,
-    search?: string,
-  ): Promise<ListVerificationRequestsResponse> {
-    const query: Record<string, unknown> = { verificationStatus: 'PENDING' };
-
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      query.$or = [{ phone: regex }, { ownerName: regex }, { 'shopDetails.name': regex }];
-    }
-
-    const { vendors, total } = await this.vendorRepository.findAll(query, page, limit);
-    const counts = await this.vendorRepository.getVerificationRequestCounts();
-
-    return {
-      vendors: vendors.map(
-        (v, i): VerificationRequestItemDto => ({
-          slNo: total - (page - 1) * limit - i,
-          id: v._id.toString(),
-          shopName: v.shopDetails?.name ?? null,
-          ownerName: v.ownerName,
-          phone: v.phone,
-          type: v.registrationType,
-          submitted: v.createdAt,
-        }),
-      ),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      counts,
-    };
-  }
-
-  async updateProfile(vendorId: string, input: UpdateProfileInput): Promise<UpdateProfileResponse> {
-    const vendor = await this.vendorRepository.findById(vendorId);
-    if (!vendor) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    const updateData: { ownerName?: string; email?: string } = {};
-    if (input.ownerName !== undefined) updateData.ownerName = input.ownerName;
-    if (input.email !== undefined) updateData.email = input.email;
-
-    const updated = await this.vendorRepository.updateProfile(vendorId, updateData);
-    if (!updated) {
-      throw new NotFoundError('Vendor not found.');
-    }
-
-    this.logger.info({
-      action: 'VENDOR_PROFILE_UPDATED',
-      module: 'vendor',
-      vendorId,
-    });
-
-    return {
-      id: updated._id.toString(),
-      phone: updated.phone,
-      ownerName: updated.ownerName,
-      email: updated.email || null,
-    };
-  }
-
-  async getAllPhotoKeys(): Promise<string[]> {
-    return this.vendorRepository.getAllPhotoKeys();
-  }
-
-  async registerFcmToken(vendorId: string, token: string): Promise<void> {
-    if (!token) {
-      throw new ValidationError('Token is required');
-    }
-    await this.vendorRepository.addFcmToken(vendorId, token);
-  }
-
-  async unregisterFcmToken(vendorId: string, token: string): Promise<void> {
-    await this.vendorRepository.removeFcmToken(vendorId, token);
-  }
-
-  async getVendorStatusCounts(): Promise<{
-    total: number;
-    active: number;
-    pendingVerification: number;
-    suspended: number;
-  }> {
-    return this.vendorRepository.getStatusCounts();
-  }
-
-  async getPendingVerificationCount(): Promise<number> {
-    const counts = await this.vendorRepository.getVerificationRequestCounts();
-    return counts.pending;
-  }
-
-  async getVendorDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
-    return this.vendorRepository.getDashboardStats();
-  }
-
-  async getAssociationVendorIds(): Promise<Types.ObjectId[]> {
-    return this.vendorRepository.findIdsByRegistrationType('ASSOCIATION');
-  }
-}
+import { Router } from 'express';
+import { issueController } from '../../modules/issue/issue.container';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.get('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), issueController.listIssues);
+router.get('/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), issueController.getIssue);
+router.patch(
+  '/:id/status',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  issueController.updateIssueStatus,
+);
+router.post('/:id/refund', authorize('SUPER_ADMIN', 'SUB_ADMIN'), issueController.processRefund);
+router.post(
+  '/:id/flag-vendor',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  issueController.flagVendorForIssue,
+);
+
+export default router;
 
 
 
 // ========================================
-// File: src/modules/vendor/vendor.types.ts
+// File: src/routes/admin/payout.routes.ts
 // ========================================
-export interface SendOtpInput {
-  phone: string;
-}
+import { Router } from 'express';
+import { payoutController } from '../../modules/payout/payout.container';
+import { authorize } from '../../shared/middleware/authorize';
 
-export interface SendOtpResponse {
-  sessionId: string;
-  message: string;
-}
+const router = Router();
 
-export interface LoginVerifyOtpInput {
-  phone: string;
-  otp: string;
-  sessionId: string;
-}
+router.get('/dashboard', authorize('SUPER_ADMIN'), payoutController.getDashboard);
+router.post('/', authorize('SUPER_ADMIN'), payoutController.createPayout);
+router.get('/', authorize('SUPER_ADMIN', 'ASSOCIATION_ADMIN'), payoutController.listPayouts);
+router.get('/summary', authorize('ASSOCIATION_ADMIN'), payoutController.getAssocSummary);
+router.put('/:id/accept', authorize('ASSOCIATION_ADMIN'), payoutController.acceptPayout);
+router.put('/:id/reject', authorize('ASSOCIATION_ADMIN'), payoutController.rejectPayout);
 
-export interface LoginVerifyOtpResponse {
-  token: string;
-  refreshToken: string;
-  vendor: {
-    id: string;
-    phone: string;
-    ownerName: string;
-    email: string | null;
-    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  };
-  onboardingStatus:
-    | 'PENDING_PROFILE'
-    | 'PENDING_SERVICES'
-    | 'PENDING_BARBERS'
-    | 'PENDING_BARBER_SERVICES'
-    | 'COMPLETED'
-    | null;
-  shopDetails?: {
-    shopId: string;
-    shopName: string;
-    address: AddressInput;
-    phoneNo: string;
-  } | null;
-}
-
-export interface RegisterVerifyOtpInput {
-  phone: string;
-  otp: string;
-  sessionId: string;
-}
-
-export interface RegisterVerifyOtpResponse {
-  verified: true;
-  message: string;
-}
-
-export interface AddressInput {
-  line1: string;
-  line2?: string;
-  area: string;
-  city: string;
-  district: string;
-  state: string;
-  pincode: string;
-}
-
-export interface RegisterAssociationInput {
-  phone: string;
-  ownerName: string;
-  email?: string;
-  associationMemberId: string;
-  associationIdProofUrl: string;
-  shopDetails: {
-    name: string;
-    type: 'MENS' | 'WOMENS' | 'UNISEX';
-    address: AddressInput;
-    location: {
-      type: 'Point';
-      coordinates: [number, number];
-    };
-  };
-}
-
-export interface RegisterAssociationResponse {
-  message: string;
-}
-
-export interface RegisterIndependentInitiateInput {
-  phone: string;
-  ownerName: string;
-  email?: string;
-  documents: {
-    shopLicense: string;
-    ownerIdProof: string;
-  };
-  shopDetails: {
-    name: string;
-    type: 'MENS' | 'WOMENS' | 'UNISEX';
-    address: AddressInput;
-    location: {
-      type: 'Point';
-      coordinates: [number, number];
-    };
-  };
-}
-
-export interface RegisterIndependentInitiateResponse {
-  orderId: string;
-  amount: number;
-}
-
-export interface RegisterIndependentConfirmInput {
-  phone: string;
-  orderId: string;
-  paymentId: string;
-  signature: string;
-}
-
-export interface RegisterIndependentConfirmResponse {
-  message: string;
-}
-
-export interface RegistrationStatusResponse {
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  rejectionReason?: string;
-  registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
-}
-
-export interface OnboardingStatusResponse {
-  vendorName: string;
-  onboardingStatus:
-    | 'PENDING_PROFILE'
-    | 'PENDING_SERVICES'
-    | 'PENDING_BARBERS'
-    | 'PENDING_BARBER_SERVICES'
-    | 'COMPLETED'
-    | null;
-  shopDetails?: {
-    shopId: string;
-    shopName: string;
-    address: AddressInput;
-    phoneNo: string;
-  } | null;
-}
-
-export interface VendorProfileDto {
-  id: string;
-  phone: string;
-  ownerName: string;
-  email: string | null;
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  onboardingStatus:
-    | 'PENDING_PROFILE'
-    | 'PENDING_SERVICES'
-    | 'PENDING_BARBERS'
-    | 'PENDING_BARBER_SERVICES'
-    | 'COMPLETED'
-    | null;
-}
-
-export interface CreateVendorData {
-  phone: string;
-  ownerName: string;
-  email?: string;
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  associationMemberId?: string;
-  associationIdProofUrl?: string;
-  documents?: {
-    shopLicense?: string;
-    ownerIdProof?: string;
-  };
-  shopDetails?: {
-    name: string;
-    type: 'MENS' | 'WOMENS' | 'UNISEX';
-    address: AddressInput;
-    location: {
-      type: 'Point';
-      coordinates: [number, number];
-    };
-  };
-  registrationPaymentOrderId?: string;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-}
-
-export interface UpsertVendorData {
-  ownerName: string;
-  email?: string;
-  registrationType: 'INDEPENDENT';
-  documents?: {
-    shopLicense?: string;
-    ownerIdProof?: string;
-  };
-  shopDetails?: {
-    name: string;
-    type: 'MENS' | 'WOMENS' | 'UNISEX';
-    address: AddressInput;
-    location: {
-      type: 'Point';
-      coordinates: [number, number];
-    };
-  };
-  registrationPaymentOrderId?: string;
-  verificationStatus: 'PAYMENT_PENDING';
-  status: 'PENDING';
-}
-
-export interface ListVendorsFilter {
-  page: number;
-  limit: number;
-  verificationStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
-  status?: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  search?: string;
-  registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
-}
-
-export interface VendorListItemDto {
-  id: string;
-  phone: string;
-  ownerName: string;
-  email: string | null;
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  createdAt: Date;
-
-  shopDetails?: {
-    name: string;
-    type: string;
-    address: AddressInput;
-  };
-
-  documents?: {
-    shopLicense?: string;
-    ownerIdProof?: string;
-  };
-
-  associationIdProofUrl?: string;
-  associationMemberId?: string;
-}
-
-export interface VendorStatusCounts {
-  total: number;
-  active: number;
-  pendingVerification: number;
-  suspended: number;
-}
-
-export interface VendorListSlimDto {
-  slNo: number;
-  id: string;
-  ownerName: string;
-  phone: string;
-  type: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  registered: Date;
-}
-
-export interface ListVendorsResponse {
-  vendors: VendorListSlimDto[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  counts: VendorStatusCounts;
-}
-
-export interface VerificationRequestCounts {
-  pending: number;
-  association: number;
-  independent: number;
-}
-
-export interface VerificationRequestItemDto {
-  slNo: number;
-  id: string;
-  shopName: string | null;
-  ownerName: string;
-  phone: string;
-  type: 'ASSOCIATION' | 'INDEPENDENT';
-  submitted: Date;
-}
-
-export interface ListVerificationRequestsResponse {
-  vendors: VerificationRequestItemDto[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  counts: VerificationRequestCounts;
-}
-
-export interface VendorAdminDetail {
-  id: string;
-  phone: string;
-  email: string | null;
-  ownerName: string;
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  verificationNote?: string;
-  verifiedAt?: Date;
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
-  isBlocked: boolean;
-  isFlagged: boolean;
-  documents?: {
-    shopLicense?: string;
-    ownerIdProof?: string;
-  };
-  associationMemberId?: string;
-  associationIdProofUrl?: string;
-  cancellationCount: number;
-  cancellationsThisWeek: number;
-
-  shops: {
-    id: string;
-    name: string;
-    shopType: string;
-    phone: string;
-    address: AddressInput;
-    rating: { average: number; count: number };
-    onboardingStatus: string;
-    status: string;
-    isAvailable: boolean;
-    photos: string[];
-
-    barbers: {
-      id: string;
-      name: string;
-      phone: string;
-      photo?: string;
-      isAvailable: boolean;
-    }[];
-    barberCount: number;
-
-    services: {
-      id: string;
-      name: string;
-      basePrice: number;
-      baseDurationMinutes: number;
-      description?: string;
-    }[];
-    serviceCount: number;
-  }[];
-
-  recentBookings: unknown[];
-}
-
-export interface VendorRequestAdminDetail {
-  id: string;
-  phone: string;
-  email: string | null;
-  ownerName: string;
-  registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
-  verificationNote?: string;
-  associationMemberId?: string;
-  associationIdProofUrl?: string;
-  registrationPayment?: {
-    amount: number;
-    paymentId: string;
-    paidAt: Date;
-  };
-  documents?: {
-    shopLicense?: string;
-    ownerIdProof?: string;
-  };
-  shopDetails?: {
-    name: string;
-    type: string;
-    address: AddressInput;
-    location?: {
-      type: 'Point';
-      coordinates: [number, number];
-    };
-    photos: string[];
-  };
-}
-
-export interface RefreshTokenResponse {
-  token: string;
-  refreshToken: string;
-}
-
-export interface UpdateProfileInput {
-  ownerName?: string;
-  email?: string;
-}
-
-export interface UpdateProfileResponse {
-  id: string;
-  phone: string;
-  ownerName: string;
-  email: string | null;
-}
+export default router;
 
 
 
 // ========================================
-// File: src/modules/vendor/vendor.validators.ts
+// File: src/routes/admin/shop.routes.ts
 // ========================================
-import { z } from 'zod';
+import { Router } from 'express';
+import { shopController } from '../../modules/shop/shop.container';
+import { authorize } from '../../shared/middleware/authorize';
 
-const phoneSchema = z
-  .string()
-  .length(10, 'Enter valid 10-digit mobile number')
-  .regex(/^[6-9]\d{9}$/, 'Enter valid 10-digit mobile number');
+const router = Router();
 
-const otpSchema = z
-  .string()
-  .length(6, 'Enter 6-digit OTP')
-  .regex(/^\d{6}$/, 'Enter 6-digit OTP');
+router.get('/search', authorize('SUPER_ADMIN', 'SUB_ADMIN'), shopController.adminSearchShops);
 
-const addressSchema = z.object({
-  line1: z.string().min(1, 'Address line 1 is required'),
-  line2: z.string().optional(),
-  area: z.string().min(1, 'Area is required'),
-  city: z.string().min(1, 'City is required'),
-  district: z.string().min(1, 'District is required'),
-  state: z.string().min(1, 'State is required'),
-  pincode: z
-    .string()
-    .length(6, 'Enter valid 6-digit pincode')
-    .regex(/^\d{6}$/, 'Enter valid 6-digit pincode'),
+export default router;
+
+
+
+// ========================================
+// File: src/routes/admin/user.routes.ts
+// ========================================
+import { Router } from 'express';
+import { userController } from '../../modules/user/user.container';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.get('/', authorize('SUPER_ADMIN', 'SUB_ADMIN'), userController.adminListUsers);
+router.get('/:id', authorize('SUPER_ADMIN', 'SUB_ADMIN'), userController.adminGetUserDetail);
+router.post('/:id/block', authorize('SUPER_ADMIN', 'SUB_ADMIN'), userController.adminBlockUser);
+router.post('/:id/unblock', authorize('SUPER_ADMIN', 'SUB_ADMIN'), userController.adminUnblockUser);
+router.get(
+  '/:id/bookings',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  userController.adminGetUserBookings,
+);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/admin/vendor.routes.ts
+// ========================================
+import { Router } from 'express';
+import { adminController } from '../../modules/admin/admin.container';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.get(
+  '/requests',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.listVerificationRequests,
+);
+router.get(
+  '/requests/:id',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.getVendorRequestDetail,
+);
+
+router.get(
+  '/',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN', 'ASSOCIATION_ADMIN'),
+  adminController.listVendors,
+);
+router.get(
+  '/:id',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN', 'ASSOCIATION_ADMIN'),
+  adminController.getVendorDetail,
+);
+router.post('/:id/verify', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.verifyVendor);
+router.post('/:id/reject', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.rejectVendor);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/barber/auth.routes.ts
+// ========================================
+import { Router } from 'express';
+import { barberController } from '../../modules/barber/barber.container';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.post('/send-otp', barberController.sendOtp);
+router.post('/forgot-password', barberController.sendOtp);
+router.post('/verify-otp', barberController.verifyOtp);
+router.post('/set-password', barberController.setPassword);
+router.post('/login', barberController.login);
+router.post('/refresh-token', barberController.refreshToken);
+
+router.post('/logout', authenticate, authorize('BARBER'), barberController.logout);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/barber/availability.routes.ts
+// ========================================
+import { Router } from 'express';
+import { availabilityController } from '../../modules/barberAvailability/barberAvailability.container';
+
+const router = Router();
+
+router.post('/availability/presets', availabilityController.createPreset);
+router.get('/availability/presets', availabilityController.listPresets);
+router.delete('/availability/presets/:presetId', availabilityController.deletePreset);
+router.post('/availability/presets/:presetId/apply', availabilityController.applyPreset);
+
+// need check booking conflict before update ( not implimented yet waiting for booking module completion)
+router.put('/availability/today', availabilityController.setAvailability);
+router.get('/availability/today/default', availabilityController.getDefault);
+router.get('/availability/today', availabilityController.getAvailability);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/barber/booking.routes.ts
+// ========================================
+import { Router } from 'express';
+import { bookingController } from '../../modules/booking/booking.container';
+
+const router = Router();
+
+router.get('/', bookingController.getBarberBookings);
+router.post('/:bookingId/cancel', bookingController.cancelBookingByBarber);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/barber/index.ts
+// ========================================
+import { Router } from 'express';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+import authRoutes from './auth.routes';
+import availabilityRoutes from './availability.routes';
+import slotBlockRoutes from './slotBlock.routes';
+import bookingRoutes from './booking.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+
+router.use(authenticate);
+router.use(authorize('BARBER'));
+
+router.use('/', availabilityRoutes);
+router.use('/', slotBlockRoutes);
+router.use('/bookings', bookingRoutes);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/barber/slotBlock.routes.ts
+// ========================================
+import { Router } from 'express';
+import { barberController } from '../../modules/barber/barber.container';
+
+const router = Router();
+
+router.post('/blocks', barberController.createSlotBlock);
+router.patch('/blocks/:blockId/release', barberController.releaseSlotBlock);
+router.get('/blocks', barberController.listSlotBlocks);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/index.ts
+// ========================================
+import { Router } from 'express';
+import vendorRoutes from './vendor';
+import userRoutes from './user';
+import adminRoutes from './admin';
+import publicRoutes from './public';
+import webhookRoutes from './webhook';
+import barberRoutes from './barber';
+
+const router = Router();
+
+router.use('/public', publicRoutes);
+
+router.use('/user', userRoutes);
+router.use('/vendor', vendorRoutes);
+router.use('/admin', adminRoutes);
+router.use('/barber', barberRoutes);
+
+router.use('/webhooks', webhookRoutes);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/public/index.ts
+// ========================================
+import { Router } from 'express';
+import slotsRoutes from './slots.routes';
+
+const router = Router();
+
+router.use('/shops', slotsRoutes);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/public/slots.routes.ts
+// ========================================
+import { Router } from 'express';
+import { bookingController } from '../../modules/booking/booking.container';
+
+const router = Router({ mergeParams: true });
+
+router.get('/:shopId/barbers', bookingController.getBarbersForServices);
+router.get('/:shopId/slots', bookingController.getSlots);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/auth.routes.ts
+// ========================================
+import { Router } from 'express';
+import { userController } from '../../modules/user/user.container';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.post('/send-otp', userController.sendOtp);
+router.post('/verify-otp', userController.verifyOtp);
+router.post('/refresh-token', userController.refreshToken);
+
+router.post('/logout', authenticate, authorize('USER'), userController.logout);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/booking.routes.ts
+// ========================================
+import { Router } from 'express';
+import { bookingController } from '../../modules/booking/booking.container';
+
+const router = Router();
+
+router.post('/', bookingController.initiateBooking);
+
+router.post('/:bookingId/confirm', bookingController.confirmBooking);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/favorites.routes.ts
+// ========================================
+import { Router } from 'express';
+import { favoriteController } from '../../modules/favorite/favorite.container';
+
+const router = Router();
+
+router.post('/', favoriteController.add);
+router.delete('/:shopId', favoriteController.remove);
+router.get('/', favoriteController.list);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/fcm.routes.ts
+// ========================================
+import { Router } from 'express';
+import { userController } from '../../modules/user/user.container';
+
+const router = Router();
+
+router.post('/', userController.registerFcmToken);
+router.delete('/', userController.unregisterFcmToken);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/home.routes.ts
+// ========================================
+import { Router } from 'express';
+import { advertisementController } from '../../modules/advertisement/advertisement.container';
+import { categoryController } from '../../modules/category/category.container';
+import { shopController } from '../../modules/shop/shop.container';
+
+const router = Router();
+
+router.get('/advertisements', advertisementController.listUserAds);
+router.get('/categories', categoryController.listUserCategories);
+router.get('/shops/nearby', shopController.getNearbyShops);
+router.get('/shops/recommended', shopController.getRecommendedShops);
+router.get('/shops/search', shopController.searchShops);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/index.ts
+// ========================================
+import { Router } from 'express';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+
+import authRoutes from './auth.routes';
+import profileRoutes from './profile.routes';
+import issueRoutes from './issue.routes';
+import fcmRoutes from './fcm.routes';
+import homeRoutes from './home.routes';
+import shopRoutes from './shop.routes';
+import bookingRoutes from './booking.routes';
+import favoritesRoutes from './favorites.routes';
+import reviewRoutes from './review.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+
+router.use(authenticate);
+router.use(authorize('USER'));
+
+router.use('/profile', profileRoutes);
+router.use('/issues', issueRoutes);
+router.use('/fcm-token', fcmRoutes);
+router.use('/home', homeRoutes);
+router.use('/shops', shopRoutes);
+router.use('/favorites', favoritesRoutes);
+router.use('/bookings', bookingRoutes);
+router.use('/reviews', reviewRoutes);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/issue.routes.ts
+// ========================================
+import { Router } from 'express';
+import { issueController } from '../../modules/issue/issue.container';
+
+const router = Router();
+
+router.post('/', issueController.createIssue);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/profile.routes.ts
+// ========================================
+import { Router } from 'express';
+import { userController } from '../../modules/user/user.container';
+import { uploadController } from '../../modules/upload/upload.container';
+
+const router = Router();
+
+router.get('/', userController.getProfile);
+router.patch('/', userController.updateProfile);
+
+router.post('/upload-url', uploadController.generateUploadUrl('users/', true, 'profile'));
+router.post('/verify-upload', uploadController.verifyUpload('users/', true, 'profile'));
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/review.routes.ts
+// ========================================
+import { Router } from 'express';
+import { reviewController } from '../../modules/review/review.container';
+
+const router = Router();
+
+router.post('/', reviewController.submitReview);
+router.get('/shop/:shopId', reviewController.getShopReviews);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/user/shop.routes.ts
+// ========================================
+import { Router } from 'express';
+import { shopController } from '../../modules/shop/shop.container';
+
+const router = Router();
+
+router.get('/:id/details', shopController.getShopDetails);
+router.get('/:id/services', shopController.getShopServices);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/auth.routes.ts
+// ========================================
+import { Router } from 'express';
+import { vendorController } from '../../modules/vendor/vendor.container';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+
+const router = Router();
+
+router.post('/send-otp', vendorController.sendOtp);
+router.post('/login/verify-otp', vendorController.loginVerifyOtp);
+router.post('/register/verify-otp', vendorController.registerVerifyOtp);
+router.post('/register/association', vendorController.registerAssociation);
+router.post('/register/independent/initiate', vendorController.registerIndependentInitiate);
+router.post('/register/independent/confirm', vendorController.registerIndependentConfirm);
+
+router.get('/profile', authenticate, authorize('VENDOR'), vendorController.getProfile);
+router.patch('/profile', authenticate, authorize('VENDOR'), vendorController.updateProfile);
+router.get(
+  '/registration-status',
+  authenticate,
+  authorize('VENDOR'),
+  vendorController.getRegistrationStatus,
+);
+
+router.get(
+  '/onboarding-status',
+  authenticate,
+  authorize('VENDOR'),
+  vendorController.getOnboardingStatus,
+);
+
+router.post('/refresh-token', vendorController.refreshToken);
+router.post('/logout', authenticate, authorize('VENDOR'), vendorController.logout);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/barber.routes.ts
+// ========================================
+import { Router } from 'express';
+import { barberController } from '../../modules/barber/barber.container';
+import { serviceController } from '../../modules/service/service.container';
+
+const router = Router();
+
+router.get('/shop/:shopId', barberController.listBarbers);
+router.post('/shop/:shopId', barberController.addBarber);
+router.post('/shop/:shopId/self', barberController.addSelfAsBarber);
+router.post('/shop/:shopId/barbers/:barberId/services', barberController.addBarberServices);
+
+router.post('/', barberController.createBarber);
+router.get('/:barberId', barberController.getBarber);
+router.put('/:barberId', barberController.updateBarber);
+router.delete('/:barberId', barberController.deleteBarber);
+router.patch('/:barberId/status', barberController.toggleBarberAvailability);
+router.patch('/:barberId/credentials', barberController.updateCredentials);
+
+router.get('/:barberId/services', serviceController.getBarberServices);
+router.put('/:barberId/services', serviceController.assignServices);
+router.delete('/:barberId/services/:serviceId', serviceController.removeBarberService);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/bookings.routes.ts
+// ========================================
+import { Router } from 'express';
+import { vendorController } from '../../modules/vendor/vendor.container';
+
+const router = Router();
+
+router.get('/', vendorController.getVendorBookings);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/category.routes.ts
+// ========================================
+import { Router } from 'express';
+import { categoryController } from '../../modules/category/category.container';
+
+const router = Router({ mergeParams: true });
+
+router.get('/', categoryController.getAll);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/dashboard.routes.ts
+// ========================================
+import { Router } from 'express';
+import { vendorController } from '../../modules/vendor/vendor.container';
+
+const router = Router();
+
+router.get('/stats', vendorController.getDashboardStats);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/fcm.routes.ts
+// ========================================
+import { Router } from 'express';
+import { vendorController } from '../../modules/vendor/vendor.container';
+
+const router = Router();
+
+router.post('/', vendorController.registerFcmToken);
+router.delete('/', vendorController.unregisterFcmToken);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/index.ts
+// ========================================
+import { Router } from 'express';
+import { authenticate } from '../../shared/middleware/authenticate';
+import { authorize } from '../../shared/middleware/authorize';
+
+import authRoutes from './auth.routes';
+import uploadRoutes from './upload.routes';
+import shopRoutes from './shop.routes';
+import categoryRoutes from './category.routes';
+import serviceRoutes from './service.routes';
+import barberRoutes from './barber.routes';
+import bookingsRoutes from './bookings.routes';
+import dashboardRoutes from './dashboard.routes';
+import fcmRoutes from './fcm.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/upload', uploadRoutes);
+
+router.use(authenticate);
+router.use(authorize('VENDOR'));
+
+router.use('/shops', shopRoutes);
+router.use('/categories', categoryRoutes);
+router.use('/shops/:shopId/services', serviceRoutes);
+router.use('/barbers', barberRoutes);
+router.use('/bookings', bookingsRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/fcm-token', fcmRoutes);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/service.routes.ts
+// ========================================
+import { Router } from 'express';
+import { serviceController } from '../../modules/service/service.container';
+
+const router = Router({ mergeParams: true });
+
+router.get('/', serviceController.listServices);
+router.post('/', serviceController.createService);
+router.post('/onboarding', serviceController.addService);
+router.put('/:serviceId', serviceController.updateService);
+router.delete('/:serviceId', serviceController.deleteService);
+router.patch('/:serviceId/toggle', serviceController.toggleService);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/shop.routes.ts
+// ========================================
+import { Router } from 'express';
+import { shopController } from '../../modules/shop/shop.container';
+import { uploadController } from '../../modules/upload/upload.container';
+
+const router = Router();
+
+// Shop photo uploads → vendors/{vendorId}/shops/{uuid}.ext
+router.post('/upload/url', uploadController.generateUploadUrl('vendors/', true, 'shops'));
+router.post('/upload/verify', uploadController.verifyUpload('vendors/', true, 'shops'));
+
+router.post('/', shopController.createShop);
+router.get('/my-shops', shopController.getMyShops);
+router.get('/:shopId', shopController.getShop);
+router.patch('/:shopId', shopController.updateShop);
+router.patch('/:shopId/working-hours', shopController.updateWorkingHours);
+router.patch('/:shopId/profile', shopController.completeProfile);
+router.delete('/:shopId', shopController.deleteShop);
+router.patch('/:shopId/available', shopController.toggleShopAvailable);
+
+export default router;
+
+
+
+// ========================================
+// File: src/routes/vendor/upload.routes.ts
+// ========================================
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { uploadController } from '../../modules/upload/upload.container';
+
+const router = Router();
+
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many requests. Please try again in a minute.',
+    },
+  },
 });
 
-const locationSchema = z.object({
-  type: z.literal('Point'),
-  coordinates: z.tuple([z.number(), z.number()]),
-});
+router.post('/url', uploadLimiter, uploadController.generateUploadUrl('vendors/', false));
+router.post('/verify', uploadLimiter, uploadController.verifyUpload('vendors/', false));
 
-const shopDetailsSchema = z.object({
-  name: z
-    .string()
-    .min(2, 'Shop name must be at least 2 characters')
-    .max(100, 'Shop name must be at most 100 characters'),
-  type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
-  address: addressSchema,
-  location: locationSchema,
-  photos: z.array(z.string().url('Enter valid image URL')).optional().default([]),
-});
+export default router;
 
-export const sendOtpSchema = z.object({
-  phone: phoneSchema,
-});
 
-export const loginVerifyOtpSchema = z.object({
-  phone: phoneSchema,
-  otp: otpSchema,
-  sessionId: z.string().min(1, 'Session ID is required'),
-});
 
-export const registerVerifyOtpSchema = z.object({
-  phone: phoneSchema,
-  otp: otpSchema,
-  sessionId: z.string().min(1, 'Session ID is required'),
-});
+// ========================================
+// File: src/routes/webhook/index.ts
+// ========================================
+import { Router } from 'express';
+import paymentRoutes from './payment.routes';
 
-export const registerAssociationSchema = z.object({
-  phone: phoneSchema,
-  ownerName: z
-    .string()
-    .min(2, 'Name must be at least 2 characters')
-    .max(100, 'Name must be at most 100 characters'),
-  email: z.string().email('Enter valid email').optional(),
-  associationMemberId: z.string().min(1, 'Member ID is required'),
-  associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
-  shopDetails: shopDetailsSchema,
-});
+const router = Router();
 
-export const registerIndependentInitiateSchema = z.object({
-  phone: phoneSchema,
-  ownerName: z
-    .string()
-    .min(2, 'Name must be at least 2 characters')
-    .max(100, 'Name must be at most 100 characters'),
-  email: z.string().email('Enter valid email').optional(),
-  documents: z.object({
-    shopLicense: z.string().url('Enter valid URL for shop license'),
-    ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
-  }),
-  shopDetails: shopDetailsSchema,
-});
+router.use('/payment', paymentRoutes);
 
-export const registerIndependentConfirmSchema = z.object({
-  phone: phoneSchema,
-  orderId: z.string().min(1, 'Order ID is required'),
-  paymentId: z.string().min(1, 'Payment ID is required'),
-  signature: z.string().min(1, 'Signature is required'),
-});
+export default router;
 
-export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, 'Refresh token is required'),
-});
 
-export const fcmTokenSchema = z.object({
-  token: z.string().min(1, 'Token is required'),
-});
 
-export const updateProfileSchema = z
-  .object({
-    ownerName: z
-      .string()
-      .min(2, 'Name must be at least 2 characters')
-      .max(100, 'Name must be at most 100 characters')
-      .optional(),
-    email: z.string().email('Enter valid email').optional(),
-  })
-  .refine((data) => data.ownerName !== undefined || data.email !== undefined, {
-    message: 'At least one field (ownerName or email) must be provided',
-  });
+// ========================================
+// File: src/routes/webhook/payment.routes.ts
+// ========================================
+import { Router } from 'express';
+import { paymentController } from '../../modules/payment/payment.container';
+
+const router = Router();
+
+router.post('/razorpay', paymentController.handleWebhook);
+
+export default router;
 
 

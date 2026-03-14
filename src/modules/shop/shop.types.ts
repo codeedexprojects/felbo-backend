@@ -66,6 +66,7 @@ export interface CreateShopInput {
   address: ShopAddress;
   location: ShopLocation;
   photos?: string[];
+  isPrimary?: boolean;
 }
 
 export interface UpdateShopInput {
@@ -199,7 +200,8 @@ export interface ShopDto {
     count: number;
   };
   isAvailable: boolean;
-  status: 'ACTIVE' | 'DELETED';
+  isPrimary: boolean;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
 }
 
@@ -339,6 +341,48 @@ export interface AdminShopSearchResultDto {
 
 export interface AdminShopSearchResponse {
   shops: AdminShopSearchResultDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AddAdditionalShopInput {
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation; // already typed as { type: 'Point'; coordinates: [number, number] }
+  description: string;
+  workingHours: WorkingHours; // already typed with all 7 days
+  photos: string[];
+}
+
+export interface CreateCompletedShopInput {
+  vendorId: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours: WorkingHours;
+  photos: string[];
+}
+
+export interface PendingApprovalShopDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
+  vendorId: string;
+  vendorName: string;
+  vendorPhone: string;
+  createdAt: Date;
+}
+
+export interface PendingApprovalShopsResponse {
+  shops: PendingApprovalShopDto[];
   total: number;
   page: number;
   limit: number;
