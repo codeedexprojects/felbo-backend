@@ -274,6 +274,61 @@ export class BookingRepository {
     return { bookings, total };
   }
 
+  async vendorGetBookingDetail(
+    bookingId: string,
+    shopIds: string[],
+  ): Promise<{
+    _id: mongoose.Types.ObjectId;
+    bookingNumber: string;
+    date: Date;
+    startTime: string;
+    endTime: string;
+    userName: string;
+    userProfileUrl: string | null;
+    services: Array<{ serviceName: string; durationMinutes: number; price: number }>;
+    totalServiceAmount: number;
+    advancePaid: number;
+    remainingAmount: number;
+    status: string;
+  } | null> {
+    const shopObjectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
+    const [result] = await BookingModel.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(bookingId),
+          shopId: { $in: shopObjectIds },
+          status: { $nin: ['PENDING_PAYMENT'] },
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user',
+          pipeline: [{ $project: { profileUrl: 1 } }],
+        },
+      },
+      {
+        $project: {
+          bookingNumber: 1,
+          date: 1,
+          startTime: 1,
+          endTime: 1,
+          userName: 1,
+          userProfileUrl: { $ifNull: [{ $arrayElemAt: ['$user.profileUrl', 0] }, null] },
+          services: 1,
+          totalServiceAmount: 1,
+          advancePaid: 1,
+          remainingAmount: 1,
+          status: 1,
+        },
+      },
+    ]).exec();
+
+    return result ?? null;
+  }
+
   async vendorGetBookings(params: VendorBookingListParams): Promise<{
     bookings: Array<{
       _id: mongoose.Types.ObjectId;

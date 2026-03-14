@@ -41,6 +41,7 @@ import { hashPassword, comparePassword } from '../../shared/utils/password';
 import { withTransaction } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopService from '../shop/shop.service';
+import VendorRepository from '../vendor/vendor.repository';
 import { BarberEmailOtpService } from '../../shared/services/brevo-email-otp.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { ClientSession } from '../../shared/database/transaction';
@@ -65,6 +66,7 @@ export class BarberService {
   constructor(
     private readonly barberRepository: BarberRepository,
     private readonly getShopService: () => ShopService,
+    private readonly vendorRepository: VendorRepository,
     private readonly logger: Logger,
     private readonly emailOtpService: BarberEmailOtpService,
     private readonly jwtService: JwtService,
@@ -79,6 +81,14 @@ export class BarberService {
 
   private get shopService(): ShopService {
     return this.getShopService();
+  }
+
+  private async getInitialBarberStatus(vendorId: string): Promise<'ACTIVE' | 'INACTIVE'> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (vendor?.verificationStatus === 'APPROVED' && vendor.status === 'ACTIVE') {
+      return 'ACTIVE';
+    }
+    return 'INACTIVE';
   }
 
   async listBarbers(
@@ -184,6 +194,13 @@ export class BarberService {
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     if (barber.vendorId.toString() !== vendorId) throw new ForbiddenError('Access denied.');
 
+    const attachedServices = await this.barberRepository.findBarberServicesByBarberId(barberId);
+    if (attachedServices.length > 0) {
+      throw new ConflictError(
+        'Cannot delete barber with assigned services. Please remove all services from this barber first.',
+      );
+    }
+
     await this.barberRepository.softDelete(barberId);
   }
 
@@ -237,6 +254,8 @@ export class BarberService {
       throw new ConflictError('Add at least one service before adding barbers.');
     }
 
+    const status = await this.getInitialBarberStatus(vendorId);
+
     const barber = await this.barberRepository.createBarber({
       shopId,
       vendorId,
@@ -244,6 +263,7 @@ export class BarberService {
       phone: input.phone,
       email: input.email,
       photo: input.photo,
+      status,
     });
 
     if (shop.onboardingStatus === 'PENDING_BARBERS') {
@@ -769,6 +789,8 @@ export class BarberService {
       throw new ConflictError('You already have a barber profile.');
     }
 
+    const status = await this.getInitialBarberStatus(vendorId);
+
     const barber = await this.barberRepository.createBarber({
       shopId,
       vendorId,
@@ -777,6 +799,7 @@ export class BarberService {
       phone: input.phone,
       photo: input.photo,
       isVendorBarber: true,
+      status,
     });
 
     this.logger.info({
