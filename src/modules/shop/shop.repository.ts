@@ -279,17 +279,24 @@ export default class ShopRepository {
       baseFilter.categoryIds = { $in: filter.categoryIds.map((id) => new Types.ObjectId(id)) };
     }
 
+    const trimmedQuery = query?.trim();
+
+    const buildRegexFilter = (q: string): Record<string, unknown> => {
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return {
+        $or: [
+          { name: { $regex: escaped, $options: 'i' } },
+          { 'address.area': { $regex: escaped, $options: 'i' } },
+        ],
+      };
+    };
+
     if (filter.latitude !== undefined && filter.longitude !== undefined) {
       const maxDistance = filter.maxDistanceMeters ?? 10_000;
 
-      // $text cannot be used inside $geoNear.query, so fall back to $regex for geo path
       const geoFilter = { ...baseFilter };
-      if (query) {
-        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        geoFilter.$or = [
-          { name: { $regex: escaped, $options: 'i' } },
-          { 'address.area': { $regex: escaped, $options: 'i' } },
-        ];
+      if (trimmedQuery) {
+        Object.assign(geoFilter, buildRegexFilter(trimmedQuery));
       }
 
       const geoNearStage: PipelineStage = {
@@ -315,10 +322,10 @@ export default class ShopRepository {
       return { shops, total };
     }
 
-    // Non-geo path: use $text index for full-text search
+    // Non-geo path: use $regex for consistent partial/prefix matching (same as geo path)
     const textFilter = { ...baseFilter };
-    if (query) {
-      textFilter.$text = { $search: query };
+    if (trimmedQuery) {
+      Object.assign(textFilter, buildRegexFilter(trimmedQuery));
     }
 
     const [shops, total] = await Promise.all([
