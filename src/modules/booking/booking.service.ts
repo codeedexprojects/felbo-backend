@@ -21,6 +21,7 @@ import {
   GetBarbersForServicesResponse,
   VendorBookingListParams,
   VendorBookingListResponse,
+  VendorBookingDetailDto,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -913,6 +914,39 @@ export class BookingService {
       completedAt: booking.completedAt,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,
+    };
+  }
+
+  async vendorGetBookingDetail(
+    bookingId: string,
+    shopIds: string[],
+  ): Promise<VendorBookingDetailDto> {
+    const booking = await this.bookingRepository.vendorGetBookingDetail(bookingId, shopIds);
+    if (!booking) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      user: {
+        name: booking.userName,
+        profileUrl: booking.userProfileUrl,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+        price: s.price,
+      })),
+      payment: {
+        total: booking.totalServiceAmount,
+        advancePaid: booking.advancePaid,
+        remainingAmount: booking.remainingAmount,
+      },
+      status: booking.status,
     };
   }
 

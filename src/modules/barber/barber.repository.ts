@@ -96,17 +96,13 @@ export class BarberRepository {
   async createBarber(
     data: {
       shopId: string;
-
       vendorId: string;
-
       name: string;
-
       phone: string;
       email: string;
-
       photo?: string;
-
       isVendorBarber?: boolean;
+      status?: 'INACTIVE' | 'ACTIVE';
     },
     session?: ClientSession,
   ): Promise<IBarber> {
@@ -121,7 +117,7 @@ export class BarberRepository {
           photo: data.photo,
           isVendorBarber: data.isVendorBarber ?? false,
           rating: { average: 0, count: 0 },
-          status: 'INACTIVE',
+          status: data.status ?? 'INACTIVE',
           isAvailable: true,
         },
       ],

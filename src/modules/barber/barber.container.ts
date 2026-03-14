@@ -2,6 +2,7 @@ import { BarberRepository } from './barber.repository';
 import { BarberService } from './barber.service';
 import { BarberController } from './barber.controller';
 import { shopService } from '../shop/shop.container';
+import VendorRepository from '../vendor/vendor.repository';
 import { logger } from '../../shared/logger/logger';
 import { config } from '../../shared/config/config.service';
 import {
@@ -12,6 +13,7 @@ import { JwtService } from '../../shared/services/jwt.service';
 import { configService } from '../config/config.container';
 
 const barberRepository = new BarberRepository();
+const vendorRepository = new VendorRepository();
 
 const emailOtpService = config.isProduction
   ? new BrevoEmailOtpService(
@@ -27,6 +29,7 @@ const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
 const barberService: BarberService = new BarberService(
   barberRepository,
   () => shopService,
+  vendorRepository,
   logger,
   emailOtpService,
   jwtService,

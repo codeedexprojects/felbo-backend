@@ -243,6 +243,29 @@ export interface VendorBookingListResponse {
   totalPages: number;
 }
 
+export interface VendorBookingDetailDto {
+  id: string;
+  bookingNumber: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  user: {
+    name: string;
+    profileUrl: string | null;
+  };
+  services: Array<{
+    name: string;
+    durationMinutes: number;
+    price: number;
+  }>;
+  payment: {
+    total: number;
+    advancePaid: number;
+    remainingAmount: number;
+  };
+  status: string;
+}
+
 export interface AdminBookingDetailDto {
   id: string;
   bookingNumber: string;

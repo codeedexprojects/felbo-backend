@@ -323,6 +323,15 @@ export interface VendorAdminDetail {
     status: string;
     isAvailable: boolean;
     photos: string[];
+    workingHours?: {
+      monday: { open: string; close: string; isOpen: boolean };
+      tuesday: { open: string; close: string; isOpen: boolean };
+      wednesday: { open: string; close: string; isOpen: boolean };
+      thursday: { open: string; close: string; isOpen: boolean };
+      friday: { open: string; close: string; isOpen: boolean };
+      saturday: { open: string; close: string; isOpen: boolean };
+      sunday: { open: string; close: string; isOpen: boolean };
+    };
 
     barbers: {
       id: string;

@@ -28,7 +28,11 @@ import {
   UpdateProfileResponse,
   VendorDashboardCountsDto,
 } from './vendor.types';
-import { VendorBookingListResponse, VendorBookingStatus } from '../booking/booking.types';
+import {
+  VendorBookingListResponse,
+  VendorBookingStatus,
+  VendorBookingDetailDto,
+} from '../booking/booking.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
@@ -511,8 +515,6 @@ export default class VendorService {
         },
         session,
       );
-
-      await this.barberService.activateBarbersByVendorId(vendor._id.toString(), session);
     });
 
     this.logger.info({
@@ -618,6 +620,7 @@ export default class VendorService {
           status: shopDto.status,
           isAvailable: shopDto.isAvailable,
           photos: shopDto.photos,
+          workingHours: shopDto.workingHours,
 
           barbers: barberList.map((b) => ({
             id: b.id.toString(),
@@ -905,5 +908,19 @@ export default class VendorService {
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  async getVendorBookingDetail(
+    vendorId: string,
+    bookingId: string,
+  ): Promise<VendorBookingDetailDto> {
+    const shops = await this.shopService.getMyShops(vendorId);
+    const shopIds = shops.map((s) => s.id);
+
+    if (shopIds.length === 0) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    return this.bookingService.vendorGetBookingDetail(bookingId, shopIds);
   }
 }

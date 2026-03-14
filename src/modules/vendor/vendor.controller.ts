@@ -12,6 +12,7 @@ import {
   updateProfileSchema,
   dashboardStatsQuerySchema,
   vendorBookingsQuerySchema,
+  vendorBookingIdParamSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -171,6 +172,16 @@ export default class VendorController {
       page,
       limit,
     });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getVendorBookingDetail = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = vendorBookingIdParamSchema.parse(req.params);
+    const result = await this.vendorService.getVendorBookingDetail(req.user!.sub, bookingId);
 
     res.status(200).json({
       success: true,

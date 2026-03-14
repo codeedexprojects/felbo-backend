@@ -118,6 +118,10 @@ export const dashboardStatsQuerySchema = z.object({
   shopId: z.string().min(1).optional(),
 });
 
+export const vendorBookingIdParamSchema = z.object({
+  bookingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid booking ID'),
+});
+
 export const vendorBookingsQuerySchema = z.object({
   shopId: z.string().min(1).optional(),
   status: z
