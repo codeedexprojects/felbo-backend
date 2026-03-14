@@ -139,6 +139,12 @@ export default class ShopService {
     return shop;
   }
 
+  private assertShopActive(shop: IShop): void {
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
+  }
+
   async createShopForVendor(input: CreateShopInput, session?: ClientSession): Promise<ShopDto> {
     const shop = await this.shopRepository.create(input, session);
 
@@ -239,6 +245,7 @@ export default class ShopService {
 
   async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
     if (!updated) throw new NotFoundError('Shop not found.');
@@ -259,6 +266,7 @@ export default class ShopService {
     input: ToggleShopAvailableInput,
   ): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateIsAvailable(
       shop._id.toString(),
@@ -279,6 +287,7 @@ export default class ShopService {
 
   async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -314,6 +323,7 @@ export default class ShopService {
     input: UpdateWorkingHoursInput,
   ): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),

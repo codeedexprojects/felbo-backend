@@ -118,6 +118,7 @@ export interface SelfBarberDto {
   phone: string;
   photo?: string;
   isAvailable: boolean;
+  isVendorBarber: boolean;
 }
 
 export interface AssignServiceItemInput {

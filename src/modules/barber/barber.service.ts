@@ -131,6 +131,8 @@ export class BarberService {
     const shop = await this.shopService.getShopById(input.shopId);
     if (shop.vendorId !== vendorId)
       throw new ForbiddenError('You do not have access to this shop.');
+    if (shop.status === 'PENDING_APPROVAL')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const barber = await this.barberRepository.create({
       shopId: input.shopId,
@@ -246,6 +248,9 @@ export class BarberService {
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
 
     if (
       shop.onboardingStatus === 'PENDING_PROFILE' ||
@@ -305,6 +310,9 @@ export class BarberService {
 
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
+    }
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
     }
 
     const barber = await this.barberRepository.findById(barberId);
@@ -771,6 +779,7 @@ export class BarberService {
       phone: barber.phone,
       photo: barber.photo,
       isAvailable: barber.isAvailable,
+      isVendorBarber: barber.isVendorBarber,
     };
   }
 
@@ -782,6 +791,9 @@ export class BarberService {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
+    }
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
     }
 
     const existing = await this.barberRepository.findVendorBarberProfile(vendorId);
@@ -817,6 +829,7 @@ export class BarberService {
       phone: barber.phone,
       photo: barber.photo,
       isAvailable: barber.isAvailable,
+      isVendorBarber: barber.isVendorBarber,
     };
   }
 

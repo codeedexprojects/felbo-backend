@@ -41,7 +41,7 @@ export const config = {
   jwt: {
     secret: getEnv('JWT_SECRET', 'development_secret_key_change_in_production'),
     refreshSecret: getEnv('JWT_REFRESH_SECRET', 'development_refresh_secret_change_in_production'),
-    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 15 * 60), // 15 minutes
+    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 30 * 24 * 60 * 60), // 15 minutes
     adminExpirySeconds: getEnvInt('JWT_ADMIN_EXPIRY_SECONDS', 8 * 60 * 60), // 8 hours
     refreshExpiry: getEnv('JWT_REFRESH_EXPIRY', '30d'),
     adminRefreshExpiry: getEnv('JWT_ADMIN_REFRESH_EXPIRY', '7d'),

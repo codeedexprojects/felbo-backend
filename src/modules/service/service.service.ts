@@ -190,6 +190,9 @@ export class ServiceService {
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
 
     if (shop.onboardingStatus === 'PENDING_PROFILE') {
       throw new ConflictError('Complete your shop profile before adding services.');
@@ -240,6 +243,9 @@ export class ServiceService {
 
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
+    }
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
     }
 
     if (shop.onboardingStatus === 'PENDING_PROFILE') {
@@ -296,6 +302,8 @@ export class ServiceService {
   ): Promise<ServiceDto> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
@@ -327,6 +335,8 @@ export class ServiceService {
   async deleteService(shopId: string, vendorId: string, serviceId: string): Promise<void> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
@@ -361,6 +371,8 @@ export class ServiceService {
   async toggleService(shopId: string, vendorId: string, serviceId: string): Promise<ServiceDto> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
