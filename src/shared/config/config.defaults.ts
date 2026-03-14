@@ -128,4 +128,30 @@ export const DEFAULT_CONFIGS: SeedConfigItem[] = [
     displayName: 'Shop Cancel Weekly Limit',
     description: 'Max weekly vendor-initiated cancellations per shop before vendor is flagged',
   },
+  // FelboCoin Settings
+  {
+    key: CONFIG_KEYS.COIN_EARN_PER_BOOKING,
+    value: '1',
+    valueType: 'number',
+    category: 'felbocoin_settings',
+    displayName: 'Coins Earned Per Booking',
+    description: 'Number of coins credited when a booking is completed',
+  },
+  {
+    key: CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
+    value: '10',
+    valueType: 'number',
+    category: 'felbocoin_settings',
+    displayName: 'Coin Redemption Threshold',
+    description: 'Minimum coins required to use FelboCoin payment (10 coins = ₹10 advance waived)',
+  },
+  {
+    key: CONFIG_KEYS.COIN_CANCELLATION_REFUND_COINS,
+    value: '5',
+    valueType: 'number',
+    category: 'felbocoin_settings',
+    displayName: 'Cancellation Refund (coins)',
+    description:
+      'Coins credited to user when they cancel early (before the free cancellation window)',
+  },
 ];

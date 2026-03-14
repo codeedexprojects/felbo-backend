@@ -17,6 +17,8 @@ import {
   AdminBookingDetailDto,
   CancellationReason,
   CancelBookingByBarberResponse,
+  CancelBookingByUserResponse,
+  CompleteBookingResponse,
   BarberBookingListResponse,
   GetBarbersForServicesResponse,
   VendorBookingListParams,
@@ -34,13 +36,13 @@ import VendorService from '../vendor/vendor.service';
 import { IWorkingHours } from '../shop/shop.model';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { FelboCoinService } from '../felbocoin/felbocoin.service';
+import { withTransaction } from '../../shared/database/transaction';
 
 // const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
 const APPOINTMENT_BUFFER_MINUTES = 5;
 const SLOT_LOCK_MINUTES = 5;
-const ADVANCE_AMOUNT_RUPEES = 10;
-const ADVANCE_AMOUNT_PAISE = ADVANCE_AMOUNT_RUPEES * 100;
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -56,6 +58,7 @@ export class BookingService {
     private readonly getPaymentService: () => PaymentService,
     private readonly getVendorService: () => VendorService,
     private readonly logger: Logger,
+    private readonly getFelboCoinService: () => FelboCoinService,
   ) {}
 
   private get barberService(): BarberService {
@@ -84,6 +87,10 @@ export class BookingService {
 
   private get vendorService(): VendorService {
     return this.getVendorService();
+  }
+
+  private get felboCoinService(): FelboCoinService {
+    return this.getFelboCoinService();
   }
 
   async getBarbersForServices(
@@ -436,12 +443,11 @@ export class BookingService {
       }
     }
 
-    // 10. Create Razorpay order for ₹10 via PaymentService
-    const { orderId } = await this.paymentService.createBookingAdvanceOrder({
-      userId,
-      shopId: input.shopId,
-      amountRupees: ADVANCE_AMOUNT_RUPEES,
-    });
+    // 10. Fetch advance amount and coin threshold from config
+    const [advanceAmountRupees, coinRedeemThreshold] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_REDEEM_THRESHOLD),
+    ]);
 
     // 11. Build service data for DB and response
     const dbServices = input.serviceIds.map((serviceId) => {
@@ -457,7 +463,7 @@ export class BookingService {
     });
 
     const totalServiceAmount = dbServices.reduce((sum, s) => sum + s.price, 0);
-    const remainingAmount = totalServiceAmount - ADVANCE_AMOUNT_RUPEES;
+    const remainingAmount = totalServiceAmount - advanceAmountRupees;
 
     // 12. Create SlotLock (5-min TTL handled by MongoDB)
     const lockExpiresAt = new Date(Date.now() + SLOT_LOCK_MINUTES * 60 * 1000);
@@ -471,10 +477,108 @@ export class BookingService {
       expiresAt: lockExpiresAt,
     });
 
-    // 13. Generate unique booking number
+    // 13. Generate unique booking number and 4-digit verification code
     const bookingNumber = `BK${Date.now()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+    const verificationCode = String(Math.floor(1000 + Math.random() * 9000));
 
-    // 14. Create PENDING_PAYMENT booking
+    const responseServices = input.serviceIds.map((serviceId) => {
+      const snap = serviceSnapshotMap.get(serviceId)!;
+      const duration = barberServiceMap.get(serviceId)!;
+      return {
+        serviceId,
+        serviceName: snap.name,
+        price: snap.basePrice,
+        durationMinutes: duration,
+      };
+    });
+
+    if (input.paymentMethod === 'FELBO_COINS') {
+      // 14a. FelboCoin payment: validate coins and confirm booking atomically
+      if (user.felboCoinBalance < coinRedeemThreshold) {
+        throw new ValidationError(
+          `Insufficient FelboCoin balance. You need at least ${coinRedeemThreshold} coins to use FelboCoin payment.`,
+        );
+      }
+
+      let booking: Awaited<ReturnType<BookingRepository['createBooking']>>;
+
+      await withTransaction(async (session) => {
+        booking = await this.bookingRepository.createBooking(
+          {
+            bookingNumber,
+            userId,
+            userName: user.name ?? '',
+            userPhone: user.phone,
+            shopId: input.shopId,
+            shopName: shop.name,
+            barberId: input.barberId,
+            barberName: barber.name,
+            barberSelectionType: 'SPECIFIC',
+            date: requestedDate,
+            startTime: input.startTime,
+            endTime,
+            totalDurationMinutes,
+            services: dbServices,
+            totalServiceAmount,
+            advancePaid: advanceAmountRupees,
+            remainingAmount,
+            paymentMethod: 'FELBO_COINS',
+            verificationCode,
+            status: 'CONFIRMED',
+          },
+          session,
+        );
+
+        await this.felboCoinService.debitCoins(
+          {
+            userId,
+            coins: coinRedeemThreshold,
+            type: 'COIN_REDEEMED',
+            bookingId: booking!._id.toString(),
+            bookingNumber,
+            description: `Advance payment waived for booking ${bookingNumber}`,
+          },
+          session,
+        );
+      });
+
+      this.logger.info({
+        action: 'BOOKING_CONFIRMED_VIA_FELBOCOIN',
+        module: 'booking',
+        bookingId: booking!._id.toString(),
+        bookingNumber,
+        userId,
+        coinsUsed: coinRedeemThreshold,
+      });
+
+      return {
+        booking: {
+          id: booking!._id.toString(),
+          bookingNumber,
+          status: booking!.status,
+          shop: { id: input.shopId, name: shop.name },
+          barber: { id: input.barberId, name: barber.name },
+          services: responseServices,
+          date: input.date,
+          startTime: input.startTime,
+          endTime,
+          totalServiceAmount,
+          advancePaid: advanceAmountRupees,
+          remainingAmount,
+          paymentMethod: 'FELBO_COINS',
+          verificationCode,
+          expiresAt: lockExpiresAt.toISOString(),
+        },
+      };
+    }
+
+    // 14b. Razorpay payment: create order and pending booking
+    const { orderId } = await this.paymentService.createBookingAdvanceOrder({
+      userId,
+      shopId: input.shopId,
+      amountRupees: advanceAmountRupees,
+    });
+
     const booking = await this.bookingRepository.createBooking({
       bookingNumber,
       userId,
@@ -491,10 +595,11 @@ export class BookingService {
       totalDurationMinutes,
       services: dbServices,
       totalServiceAmount,
-      advancePaid: ADVANCE_AMOUNT_RUPEES,
+      advancePaid: advanceAmountRupees,
       remainingAmount,
-      paymentMethod: input.paymentMethod,
+      paymentMethod: 'RAZORPAY',
       razorpayOrderId: orderId,
+      verificationCode,
       status: 'PENDING_PAYMENT',
     });
 
@@ -506,17 +611,6 @@ export class BookingService {
       userId,
       shopId: input.shopId,
       barberId: input.barberId,
-    });
-
-    const responseServices = input.serviceIds.map((serviceId) => {
-      const snap = serviceSnapshotMap.get(serviceId)!;
-      const duration = barberServiceMap.get(serviceId)!;
-      return {
-        serviceId,
-        serviceName: snap.name,
-        price: snap.basePrice,
-        durationMinutes: duration,
-      };
     });
 
     return {
@@ -531,15 +625,13 @@ export class BookingService {
         startTime: input.startTime,
         endTime,
         totalServiceAmount,
-        advancePaid: ADVANCE_AMOUNT_RUPEES,
+        advancePaid: advanceAmountRupees,
         remainingAmount,
-        paymentMethod: input.paymentMethod,
+        paymentMethod: 'RAZORPAY',
+        verificationCode,
         expiresAt: lockExpiresAt.toISOString(),
       },
-      payment:
-        input.paymentMethod === 'RAZORPAY'
-          ? { orderId: orderId, amount: ADVANCE_AMOUNT_PAISE, currency: 'INR' }
-          : undefined,
+      payment: { orderId, amount: advanceAmountRupees * 100, currency: 'INR' },
     };
   }
 
@@ -610,27 +702,78 @@ export class BookingService {
     }
 
     if (booking.status !== 'CONFIRMED') {
-      throw new ValidationError('Only confirmed bookings can be cancelled.');
-    }
-
-    if (!booking.paymentId) {
-      throw new ValidationError('No payment record found for this booking.');
+      throw new ConflictError(
+        booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR'
+          ? 'This booking has already been cancelled.'
+          : 'Only confirmed bookings can be cancelled.',
+      );
     }
 
     const weeklyLimit = await this.configService.getValueAsNumber(
       CONFIG_KEYS.SHOP_CANCEL_WEEKLY_LIMIT,
     );
 
-    await this.paymentService.refundBookingAdvance(booking.paymentId, booking.advancePaid * 100);
+    let cancelled: Awaited<ReturnType<BookingRepository['updateBookingCancelled']>> = null;
 
-    const cancelled = await this.bookingRepository.updateBookingCancelled(bookingId, {
-      cancelledBy: 'VENDOR',
-      reason,
-      refundAmount: booking.advancePaid,
-      refundType: 'ORIGINAL',
-      refundStatus: 'PENDING',
-    });
-    if (!cancelled || !cancelled.cancellation) throw new NotFoundError('Booking not found.');
+    if (booking.paymentMethod === 'FELBO_COINS') {
+      // FelboCoin-paid booking: return coins to user (COIN_REVERSAL) atomically
+      await withTransaction(async (session) => {
+        cancelled = await this.bookingRepository.updateBookingCancelled(
+          bookingId,
+          {
+            cancelledBy: 'VENDOR',
+            reason,
+            refundAmount: 0,
+            refundType: 'FELBO_COINS',
+            refundStatus: 'COMPLETED',
+          },
+          session,
+        );
+
+        if (!cancelled || !cancelled.cancellation) {
+          throw new ConflictError(
+            'Booking could not be cancelled — it may have already been updated.',
+          );
+        }
+
+        const coinRedeemThreshold = await this.configService.getValueAsNumber(
+          CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
+        );
+
+        await this.felboCoinService.creditCoins(
+          {
+            userId: booking.userId.toString(),
+            coins: coinRedeemThreshold,
+            type: 'COIN_REVERSAL',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Coins returned for barber-cancelled booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      });
+    } else {
+      // Razorpay-paid booking: issue Razorpay refund
+      if (!booking.paymentId) {
+        throw new ValidationError('No payment record found for this booking.');
+      }
+
+      await this.paymentService.refundBookingAdvance(booking.paymentId, booking.advancePaid * 100);
+
+      cancelled = await this.bookingRepository.updateBookingCancelled(bookingId, {
+        cancelledBy: 'VENDOR',
+        reason,
+        refundAmount: booking.advancePaid,
+        refundType: 'ORIGINAL',
+        refundStatus: 'PENDING',
+      });
+
+      if (!cancelled || !cancelled.cancellation) {
+        throw new ConflictError(
+          'Booking could not be cancelled — it may have already been updated.',
+        );
+      }
+    }
 
     const { cancellationsThisWeek, vendorId } =
       await this.shopService.incrementShopCancellationCount(booking.shopId.toString());
@@ -653,16 +796,182 @@ export class BookingService {
 
     return {
       booking: {
-        id: cancelled._id.toString(),
-        bookingNumber: cancelled.bookingNumber,
-        status: cancelled.status,
+        id: cancelled!._id.toString(),
+        bookingNumber: cancelled!.bookingNumber,
+        status: cancelled!.status,
         cancellation: {
-          cancelledAt: cancelled.cancellation.cancelledAt.toISOString(),
-          cancelledBy: cancelled.cancellation.cancelledBy,
-          reason: cancelled.cancellation.reason,
-          refundAmount: cancelled.cancellation.refundAmount,
-          refundStatus: cancelled.cancellation.refundStatus,
+          cancelledAt: cancelled!.cancellation!.cancelledAt.toISOString(),
+          cancelledBy: cancelled!.cancellation!.cancelledBy,
+          reason: cancelled!.cancellation!.reason,
+          refundAmount: cancelled!.cancellation!.refundAmount,
+          refundStatus: cancelled!.cancellation!.refundStatus,
         },
+      },
+    };
+  }
+
+  async cancelBookingByUser(
+    bookingId: string,
+    reason: string,
+    userId: string,
+  ): Promise<CancelBookingByUserResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.userId.toString() !== userId) {
+      throw new ForbiddenError('You are not authorised to cancel this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ConflictError(
+        booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR'
+          ? 'This booking has already been cancelled.'
+          : 'Only confirmed bookings can be cancelled.',
+      );
+    }
+
+    const [freeCancelWindowMinutes, refundCoinsConfig] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.FREE_CANCELLATION_WINDOW_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_CANCELLATION_REFUND_COINS),
+    ]);
+
+    const nowMinutes = getCurrentIstMinutes();
+    const bookingStartMinutes = this.toMinutes(booking.startTime);
+    const minutesUntilBooking = bookingStartMinutes - nowMinutes;
+
+    // Guard: disallow cancelling a booking whose slot has already started or passed
+    if (minutesUntilBooking <= 0) {
+      throw new ValidationError('Cannot cancel a booking that has already started or passed.');
+    }
+
+    const isEarlyCancel = minutesUntilBooking > freeCancelWindowMinutes;
+    const refundCoins = isEarlyCancel ? refundCoinsConfig : 0;
+
+    // Cancel and credit coins atomically so they never get out of sync
+    let cancelled: typeof booking | null = null;
+
+    await withTransaction(async (session) => {
+      cancelled = await this.bookingRepository.updateBookingCancelled(
+        bookingId,
+        {
+          cancelledBy: 'USER',
+          reason,
+          refundAmount: 0,
+          refundType: 'FELBO_COINS',
+          refundStatus: isEarlyCancel ? 'PENDING' : 'COMPLETED',
+        },
+        session,
+      );
+
+      if (!cancelled || !cancelled.cancellation) {
+        // Another concurrent request already changed the status out of CONFIRMED
+        throw new ConflictError(
+          'Booking could not be cancelled — it may have already been updated.',
+        );
+      }
+
+      if (isEarlyCancel && refundCoins > 0) {
+        await this.felboCoinService.creditCoins(
+          {
+            userId,
+            coins: refundCoins,
+            type: 'COIN_REFUND',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Refund for early cancellation of booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      }
+    });
+
+    this.logger.info({
+      action: 'BOOKING_CANCELLED_BY_USER',
+      module: 'booking',
+      bookingId,
+      userId,
+      isEarlyCancel,
+      refundCoins,
+    });
+
+    return {
+      booking: {
+        id: cancelled!._id.toString(),
+        bookingNumber: cancelled!.bookingNumber,
+        status: cancelled!.status,
+        cancellation: {
+          cancelledAt: cancelled!.cancellation!.cancelledAt.toISOString(),
+          cancelledBy: cancelled!.cancellation!.cancelledBy,
+          reason: cancelled!.cancellation!.reason,
+          refundCoins,
+        },
+      },
+    };
+  }
+
+  async completeBooking(
+    bookingId: string,
+    barberId: string,
+    verificationCode: string,
+  ): Promise<CompleteBookingResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ConflictError(
+        booking.status === 'COMPLETED'
+          ? 'Booking has already been completed.'
+          : 'Only confirmed bookings can be marked as completed.',
+      );
+    }
+
+    if (booking.verificationCode !== verificationCode) {
+      throw new ValidationError('Invalid verification code.');
+    }
+
+    const coinsEarned = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.COIN_EARN_PER_BOOKING,
+    );
+
+    let completed: Awaited<ReturnType<BookingRepository['updateBookingCompleted']>>;
+
+    await withTransaction(async (session) => {
+      completed = await this.bookingRepository.updateBookingCompleted(bookingId, session);
+      if (!completed) throw new ConflictError('Booking has already been completed.');
+
+      await this.felboCoinService.creditCoins(
+        {
+          userId: booking.userId.toString(),
+          coins: coinsEarned,
+          type: 'COIN_EARNED',
+          bookingId: booking._id.toString(),
+          bookingNumber: booking.bookingNumber,
+          description: `Coins earned for completing booking ${booking.bookingNumber}`,
+        },
+        session,
+      );
+    });
+
+    this.logger.info({
+      action: 'BOOKING_COMPLETED',
+      module: 'booking',
+      bookingId,
+      barberId,
+      userId: booking.userId.toString(),
+      coinsEarned,
+    });
+
+    return {
+      booking: {
+        id: completed!._id.toString(),
+        bookingNumber: completed!.bookingNumber,
+        status: completed!.status,
+        completedAt: completed!.completedAt!,
+        coinsEarned,
       },
     };
   }
