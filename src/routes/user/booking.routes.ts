@@ -4,7 +4,7 @@ import { bookingController } from '../../modules/booking/booking.container';
 const router = Router();
 
 router.post('/', bookingController.initiateBooking);
-
 router.post('/:bookingId/confirm', bookingController.confirmBooking);
+router.post('/:bookingId/cancel', bookingController.cancelBookingByUser);
 
 export default router;

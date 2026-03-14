@@ -13,7 +13,7 @@ export interface IBookingCancellation {
   cancelledBy: 'USER' | 'VENDOR';
   reason: string;
   refundAmount: number;
-  refundType: 'WALLET' | 'ORIGINAL';
+  refundType: 'FELBO_COINS' | 'ORIGINAL';
   refundStatus: 'PENDING' | 'COMPLETED';
 }
 
@@ -35,7 +35,7 @@ export interface IBooking extends Document {
   totalServiceAmount: number;
   advancePaid: number;
   remainingAmount: number;
-  paymentMethod: 'RAZORPAY' | 'WALLET';
+  paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
   paymentId?: string;
   razorpayOrderId?: string;
   status:
@@ -45,6 +45,7 @@ export interface IBooking extends Document {
     | 'CANCELLED_BY_USER'
     | 'CANCELLED_BY_VENDOR'
     | 'NO_SHOW';
+  verificationCode: string;
   cancellation?: IBookingCancellation;
   completedAt?: Date;
   createdAt: Date;
@@ -68,7 +69,7 @@ const cancellationSubSchema = new Schema(
     cancelledBy: { type: String, enum: ['USER', 'VENDOR'], required: true },
     reason: { type: String, required: true },
     refundAmount: { type: Number, required: true },
-    refundType: { type: String, enum: ['WALLET', 'ORIGINAL'], required: true },
+    refundType: { type: String, enum: ['FELBO_COINS', 'ORIGINAL'], required: true },
     refundStatus: { type: String, enum: ['PENDING', 'COMPLETED'], required: true },
   },
   { _id: false },
@@ -99,7 +100,7 @@ const bookingSchema = new Schema<IBooking>(
     remainingAmount: { type: Number, required: true },
     paymentMethod: {
       type: String,
-      enum: ['RAZORPAY', 'WALLET'],
+      enum: ['RAZORPAY', 'FELBO_COINS'],
       required: true,
     },
     paymentId: { type: String },
@@ -116,6 +117,7 @@ const bookingSchema = new Schema<IBooking>(
       ],
       required: true,
     },
+    verificationCode: { type: String, required: true },
     cancellation: { type: cancellationSubSchema },
     completedAt: { type: Date },
   },

@@ -9,6 +9,7 @@ import { userService } from '../user/user.container';
 import { serviceService } from '../service/service.container';
 import { paymentService } from '../payment/payment.container';
 import { vendorService } from '../vendor/vendor.container';
+import { felboCoinService } from '../felbocoin/felbocoin.container';
 
 import { logger } from '../../shared/logger/logger';
 
@@ -25,6 +26,7 @@ const bookingService = new BookingService(
   () => paymentService,
   () => vendorService,
   logger,
+  () => felboCoinService,
 );
 
 const bookingController = new BookingController(bookingService);

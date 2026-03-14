@@ -10,7 +10,9 @@ import {
   confirmBookingBodySchema,
   adminBookingListQuerySchema,
   cancelBookingByBarberBodySchema,
+  cancelBookingByUserBodySchema,
   barberBookingListQuerySchema,
+  completeBookingBodySchema,
 } from './booking.validators';
 
 export class BookingController {
@@ -125,6 +127,26 @@ export class BookingController {
       query.limit,
       query.status,
     );
+
+    res.json({ success: true, data: result });
+  };
+
+  cancelBookingByUser = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    const body = cancelBookingByUserBodySchema.parse(req.body);
+    const userId = req.user!.sub;
+
+    const result = await this.bookingService.cancelBookingByUser(bookingId, body.reason, userId);
+
+    res.json({ success: true, data: result });
+  };
+
+  completeBooking = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    const { verificationCode } = completeBookingBodySchema.parse(req.body);
+    const barberId = this.getBarberId(req);
+
+    const result = await this.bookingService.completeBooking(bookingId, barberId, verificationCode);
 
     res.json({ success: true, data: result });
   };
