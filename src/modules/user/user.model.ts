@@ -6,7 +6,7 @@ export interface IUser extends Document {
   email?: string;
   profileUrl?: string | null;
   gender?: 'MALE' | 'FEMALE' | 'OTHER' | null;
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason?: string | null;
@@ -42,7 +42,7 @@ const userSchema = new Schema<IUser>(
       enum: ['MALE', 'FEMALE', 'OTHER'],
       default: null,
     },
-    walletBalance: {
+    felboCoinBalance: {
       type: Number,
       default: 0,
     },

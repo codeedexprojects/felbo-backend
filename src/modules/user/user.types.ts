@@ -14,7 +14,7 @@ export interface UserDto {
   email: string | null;
   profileUrl: string | null;
   gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   lastLoginAt: Date | null;
@@ -28,7 +28,7 @@ export interface UserProfileDto {
   email: string | null;
   profileUrl: string | null;
   gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
-  walletBalance: number;
+  felboCoinBalance: number;
 }
 
 export interface UpdateProfileInput {
@@ -64,7 +64,7 @@ export interface VerifyOtpResponse {
     email: string | null;
     profileUrl: string | null;
     gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
-    walletBalance: number;
+    felboCoinBalance: number;
   };
 }
 
@@ -89,7 +89,7 @@ export interface UserListItemDto {
   phone: string;
   email: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   lastLoginAt: Date | null;
   registeredAt: Date;
@@ -126,7 +126,7 @@ export interface UserDetailDto {
   profileUrl: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason: string | null;
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   registeredAt: Date;
   lastLoginAt: Date | null;

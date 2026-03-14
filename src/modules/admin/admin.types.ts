@@ -40,7 +40,7 @@ export interface UserListItemDto {
   phone: string;
   email: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   lastLoginAt: Date | null;
   registeredAt: Date;
@@ -106,7 +106,7 @@ export interface UserDetailDto {
   email: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason: string | null;
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   registeredAt: Date;
   lastLoginAt: Date | null;

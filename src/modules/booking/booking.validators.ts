@@ -37,7 +37,7 @@ export const initiateBookingBodySchema = z.object({
     .max(10, 'Cannot book more than 10 services at once'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be in HH:mm format'),
-  paymentMethod: z.enum(['RAZORPAY', 'WALLET']),
+  paymentMethod: z.enum(['RAZORPAY', 'FELBO_COINS']),
 });
 
 export const bookingIdParamSchema = z.object({
@@ -60,6 +60,14 @@ export const barberBookingListQuerySchema = z.object({
   status: z
     .enum(['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'])
     .optional(),
+});
+
+export const cancelBookingByUserBodySchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(500),
+});
+
+export const completeBookingBodySchema = z.object({
+  verificationCode: z.string().regex(/^\d{4}$/, 'verificationCode must be a 4-digit number'),
 });
 
 export const adminBookingListQuerySchema = z.object({

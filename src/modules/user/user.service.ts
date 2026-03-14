@@ -55,7 +55,7 @@ export default class UserService {
       email: user.email || null,
       profileUrl: user.profileUrl || null,
       gender: user.gender || null,
-      walletBalance: user.walletBalance,
+      felboCoinBalance: user.felboCoinBalance,
       cancellationCount: user.cancellationCount,
       status: user.status,
       lastLoginAt: user.lastLoginAt || null,
@@ -71,7 +71,7 @@ export default class UserService {
       email: user.email || null,
       profileUrl: user.profileUrl || null,
       gender: user.gender || null,
-      walletBalance: user.walletBalance,
+      felboCoinBalance: user.felboCoinBalance,
     };
   }
 
@@ -83,7 +83,7 @@ export default class UserService {
       email: user.email || null,
       profileUrl: user.profileUrl || null,
       gender: user.gender || null,
-      walletBalance: user.walletBalance,
+      felboCoinBalance: user.felboCoinBalance,
     };
   }
 
@@ -297,7 +297,7 @@ export default class UserService {
       phone: u.phone,
       email: u.email ?? null,
       status: u.status,
-      walletBalance: u.walletBalance,
+      felboCoinBalance: u.felboCoinBalance,
       cancellationCount: u.cancellationCount,
       lastLoginAt: u.lastLoginAt ?? null,
       registeredAt: u.createdAt,
@@ -337,7 +337,7 @@ export default class UserService {
       profileUrl: user.profileUrl ?? null,
       status: user.status,
       blockReason: user.blockReason ?? null,
-      walletBalance: user.walletBalance,
+      felboCoinBalance: user.felboCoinBalance,
       cancellationCount: user.cancellationCount,
       registeredAt: user.createdAt,
       lastLoginAt: user.lastLoginAt ?? null,
