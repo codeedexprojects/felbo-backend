@@ -80,7 +80,7 @@ export const recommendedShopsSchema = z.object({
 });
 
 export const searchShopsSchema = z.object({
-  query: z.string().optional(),
+  query: z.string().min(1).optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
   categoryIds: z.union([z.array(mongoIdSchema), mongoIdSchema.transform((v) => [v])]).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
