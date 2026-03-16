@@ -45,6 +45,20 @@ export const createShopSchema = z.object({
   photos: z.array(z.string().url()).max(10).optional(),
 });
 
+export const addAdditionalShopSchema = z.object({
+  name: z.string().min(1).max(100),
+  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  phone: z
+    .string()
+    .length(10)
+    .regex(/^[6-9]\d{9}$/),
+  address: addressSchema,
+  location: locationSchema,
+  description: z.string().min(1).max(1000),
+  workingHours: workingHoursSchema,
+  photos: z.array(z.string().url()).min(1).max(10),
+});
+
 export const updateShopSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -151,6 +165,15 @@ export const adminSearchShopsSchema = z.object({
 export const serviceIdParamSchema = z.object({
   shopId: mongoIdSchema,
   serviceId: mongoIdSchema,
+});
+
+export const rejectShopSchema = z.object({
+  reason: z.string().min(1, 'Rejection reason is required').max(500),
+});
+
+export const pendingShopsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
 });
 
 export const addBarberSchema = z.object({

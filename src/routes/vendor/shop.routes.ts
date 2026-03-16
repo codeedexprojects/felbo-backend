@@ -8,7 +8,7 @@ const router = Router();
 router.post('/upload/url', uploadController.generateUploadUrl('vendors/', true, 'shops'));
 router.post('/upload/verify', uploadController.verifyUpload('vendors/', true, 'shops'));
 
-router.post('/', shopController.createShop);
+router.post('/add', shopController.addAdditionalShop);
 router.get('/my-shops', shopController.getMyShops);
 router.get('/:shopId', shopController.getShop);
 router.patch('/:shopId', shopController.updateShop);

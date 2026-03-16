@@ -66,6 +66,7 @@ export interface CreateShopInput {
   address: ShopAddress;
   location: ShopLocation;
   photos?: string[];
+  isPrimary?: boolean;
 }
 
 export interface UpdateShopInput {
@@ -199,7 +200,8 @@ export interface ShopDto {
     count: number;
   };
   isAvailable: boolean;
-  status: 'ACTIVE' | 'DELETED';
+  isPrimary: boolean;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
 }
 
@@ -343,4 +345,88 @@ export interface AdminShopSearchResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface AddAdditionalShopInput {
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation; // already typed as { type: 'Point'; coordinates: [number, number] }
+  description: string;
+  workingHours: WorkingHours; // already typed with all 7 days
+  photos: string[];
+}
+
+export interface CreateCompletedShopInput {
+  vendorId: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours: WorkingHours;
+  photos: string[];
+}
+
+export interface PendingApprovalShopDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
+  vendorId: string;
+  vendorName: string;
+  vendorPhone: string;
+  createdAt: Date;
+}
+
+export interface PendingApprovalShopsResponse {
+  shops: PendingApprovalShopDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PendingShopDetailsBarberDto {
+  id: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isAvailable: boolean;
+  serviceCount: number;
+}
+
+export interface PendingShopDetailsServiceDto {
+  id: string;
+  categoryId: string;
+  name: string;
+  basePrice: number;
+  baseDurationMinutes: number;
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+}
+
+export interface PendingShopDetailsDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours?: WorkingHours;
+  photos: string[];
+  rating: { average: number; count: number };
+  createdAt: Date;
+  vendor: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  services: PendingShopDetailsServiceDto[];
+  barbers: PendingShopDetailsBarberDto[];
 }
