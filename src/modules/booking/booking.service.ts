@@ -276,7 +276,17 @@ export class BookingService {
         totalServiceAmount: b.totalServiceAmount,
         advancePaid: b.advancePaid,
         remainingAmount: b.remainingAmount,
+        paymentMethod: b.paymentMethod,
         status: b.status,
+        cancellation: b.cancellation
+          ? {
+              cancelledAt: b.cancellation.cancelledAt,
+              cancelledBy: b.cancellation.cancelledBy,
+              reason: b.cancellation.reason,
+              refundCoins: b.cancellation.refundCoins ?? 0,
+              refundStatus: b.cancellation.refundStatus,
+            }
+          : undefined,
         createdAt: b.createdAt,
       })),
       total,
@@ -728,6 +738,10 @@ export class BookingService {
 
     if (booking.paymentMethod === 'FELBO_COINS') {
       // FelboCoin-paid booking: return coins to user (COIN_REVERSAL) atomically
+      const coinRedeemThreshold = await this.configService.getValueAsNumber(
+        CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
+      );
+
       await withTransaction(async (session) => {
         cancelled = await this.bookingRepository.updateBookingCancelled(
           bookingId,
@@ -735,6 +749,7 @@ export class BookingService {
             cancelledBy: 'VENDOR',
             reason,
             refundAmount: 0,
+            refundCoins: coinRedeemThreshold,
             refundType: 'FELBO_COINS',
             refundStatus: 'COMPLETED',
           },
@@ -746,10 +761,6 @@ export class BookingService {
             'Booking could not be cancelled — it may have already been updated.',
           );
         }
-
-        const coinRedeemThreshold = await this.configService.getValueAsNumber(
-          CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
-        );
 
         await this.felboCoinService.creditCoins(
           {
@@ -775,6 +786,7 @@ export class BookingService {
         cancelledBy: 'VENDOR',
         reason,
         refundAmount: booking.advancePaid,
+        refundCoins: 0,
         refundType: 'ORIGINAL',
         refundStatus: 'PENDING',
       });
@@ -815,6 +827,8 @@ export class BookingService {
           cancelledBy: cancelled!.cancellation!.cancelledBy,
           reason: cancelled!.cancellation!.reason,
           refundAmount: cancelled!.cancellation!.refundAmount,
+          refundCoins: cancelled!.cancellation!.refundCoins ?? 0,
+          refundType: cancelled!.cancellation!.refundType,
           refundStatus: cancelled!.cancellation!.refundStatus,
         },
       },
@@ -868,8 +882,9 @@ export class BookingService {
           cancelledBy: 'USER',
           reason,
           refundAmount: 0,
+          refundCoins: refundCoins,
           refundType: 'FELBO_COINS',
-          refundStatus: isEarlyCancel ? 'PENDING' : 'COMPLETED',
+          refundStatus: 'COMPLETED',
         },
         session,
       );
@@ -894,6 +909,8 @@ export class BookingService {
           session,
         );
       }
+
+      await this.userService.incrementCancellationCount(userId, session);
     });
 
     this.logger.info({
@@ -1281,6 +1298,7 @@ export class BookingService {
             cancelledBy: booking.cancellation.cancelledBy,
             reason: booking.cancellation.reason,
             refundAmount: booking.cancellation.refundAmount,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
             refundType: booking.cancellation.refundType,
             refundStatus: booking.cancellation.refundStatus,
           }
@@ -1411,6 +1429,7 @@ export class BookingService {
       startTime: booking.startTime,
       endTime: booking.endTime,
       status: booking.status,
+      paymentMethod: booking.paymentMethod,
       shop: {
         id: booking.shopId.toString(),
         name: booking.shopName,
@@ -1426,6 +1445,15 @@ export class BookingService {
         total: booking.totalServiceAmount,
         remainingAmount: booking.remainingAmount,
       },
+      cancellation: booking.cancellation
+        ? {
+            cancelledAt: booking.cancellation.cancelledAt,
+            cancelledBy: booking.cancellation.cancelledBy,
+            reason: booking.cancellation.reason,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
+            refundStatus: booking.cancellation.refundStatus,
+          }
+        : undefined,
     };
   }
 }

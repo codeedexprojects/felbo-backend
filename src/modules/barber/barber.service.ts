@@ -28,6 +28,7 @@ import {
   ListSlotBlocksQuery,
   SlotBlockRange,
   PublicBarberDto,
+  BarberProfileDto,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -173,6 +174,38 @@ export class BarberService {
     if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
     const count = await this.getServiceCountForBarber(barberId);
     return this.toDto(barber, count);
+  }
+
+  async getBarberProfile(barberId: string): Promise<BarberProfileDto> {
+    const barber = await this.barberRepository.findById(barberId);
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+
+    const shop = await this.shopService.getShopById(barber.shopId.toString());
+
+    const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
+
+    let services: Array<{ name: string; durationMinutes: number }> = [];
+    if (links.length > 0) {
+      const durationMap = new Map(links.map((l) => [l.serviceId.toString(), l.durationMinutes]));
+      const serviceDetails = await this.shopService.getActiveServicesByIds(
+        [...durationMap.keys()],
+        barber.shopId.toString(),
+      );
+      services = serviceDetails.map((s) => ({
+        name: s.name,
+        durationMinutes: durationMap.get(s.id) ?? 0,
+      }));
+    }
+
+    return {
+      id: barber._id.toString(),
+      name: barber.name,
+      photo: barber.photo ?? null,
+      phone: barber.phone,
+      email: barber.email ?? null,
+      shopName: shop.name,
+      services,
+    };
   }
 
   async updateBarber(

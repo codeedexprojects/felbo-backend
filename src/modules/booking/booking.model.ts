@@ -13,6 +13,7 @@ export interface IBookingCancellation {
   cancelledBy: 'USER' | 'VENDOR';
   reason: string;
   refundAmount: number;
+  refundCoins: number;
   refundType: 'FELBO_COINS' | 'ORIGINAL';
   refundStatus: 'PENDING' | 'COMPLETED';
 }
@@ -69,6 +70,7 @@ const cancellationSubSchema = new Schema(
     cancelledBy: { type: String, enum: ['USER', 'VENDOR'], required: true },
     reason: { type: String, required: true },
     refundAmount: { type: Number, required: true },
+    refundCoins: { type: Number, default: 0 },
     refundType: { type: String, enum: ['FELBO_COINS', 'ORIGINAL'], required: true },
     refundStatus: { type: String, enum: ['PENDING', 'COMPLETED'], required: true },
   },
