@@ -31,6 +31,12 @@ import {
   ShopServicesInput,
   VendorShopListDto,
   ShopAddress,
+  AddAdditionalShopInput,
+  PendingApprovalShopsResponse,
+  PendingApprovalShopDto,
+  PendingShopDetailsDto,
+  PendingShopDetailsBarberDto,
+  PendingShopDetailsServiceDto,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 import { ConfigService } from '../config/config.service';
@@ -88,6 +94,7 @@ export default class ShopService {
         count: shop.rating.count,
       },
       isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
+      isPrimary: shop.isPrimary,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
     };
@@ -135,6 +142,12 @@ export default class ShopService {
     return shop;
   }
 
+  private assertShopActive(shop: IShop): void {
+    if (shop.status === 'PENDING_APPROVAL') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
+  }
+
   async createShopForVendor(input: CreateShopInput, session?: ClientSession): Promise<ShopDto> {
     const shop = await this.shopRepository.create(input, session);
 
@@ -143,6 +156,43 @@ export default class ShopService {
       module: 'shop',
       shopId: shop._id.toString(),
       vendorId: input.vendorId,
+    });
+
+    return this.toShopDto(shop);
+  }
+
+  async addAdditionalShop(vendorId: string, input: AddAdditionalShopInput): Promise<ShopDto> {
+    const existingShops = await this.shopRepository.findAllByVendorId(vendorId);
+
+    const primaryShop = existingShops.find((s) => s.isPrimary && s.status !== 'DELETED');
+    if (!primaryShop || primaryShop.onboardingStatus !== 'COMPLETED') {
+      throw new ConflictError('Complete setup of your primary shop before adding another.');
+    }
+
+    const hasPendingApproval = existingShops.some((s) => s.status === 'PENDING_APPROVAL');
+    if (hasPendingApproval) {
+      throw new ConflictError(
+        'You have a shop pending admin approval. Please wait for it to be approved before adding another.',
+      );
+    }
+
+    const shop = await this.shopRepository.createCompleted({
+      vendorId,
+      name: input.name,
+      shopType: input.shopType,
+      phone: input.phone,
+      address: input.address,
+      location: input.location,
+      description: input.description,
+      workingHours: input.workingHours,
+      photos: input.photos,
+    });
+
+    this.logger.info({
+      action: 'SHOP_ADDED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
     });
 
     return this.toShopDto(shop);
@@ -196,9 +246,9 @@ export default class ShopService {
     return shops.map((s) => this.toShopDto(s));
   }
 
-  // --- Soft delete (status) ---
   async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
     if (!updated) throw new NotFoundError('Shop not found.');
@@ -213,13 +263,13 @@ export default class ShopService {
     return this.toShopDto(updated);
   }
 
-  // --- Availability toggle ---
   async toggleShopAvailable(
     shopId: string,
     vendorId: string,
     input: ToggleShopAvailableInput,
   ): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateIsAvailable(
       shop._id.toString(),
@@ -240,6 +290,7 @@ export default class ShopService {
 
   async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -275,6 +326,7 @@ export default class ShopService {
     input: UpdateWorkingHoursInput,
   ): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),
@@ -630,6 +682,120 @@ export default class ShopService {
 
   getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
+  }
+
+  async getPendingShopDetails(shopId: string): Promise<PendingShopDetailsDto> {
+    const shop = await this.shopRepository.findPendingById(shopId);
+    if (!shop) throw new NotFoundError('Shop not found or not pending approval.');
+
+    const [barbers, services] = await Promise.all([
+      this.barberService.getBarbersByShopId(shopId),
+      this.serviceService.getServicesByShopId(shopId),
+    ]);
+
+    const mappedBarbers: PendingShopDetailsBarberDto[] = barbers.map((b) => ({
+      id: b.id,
+      name: b.name,
+      phone: b.phone,
+      photo: b.photo,
+      isAvailable: b.isAvailable,
+      serviceCount: b.serviceCount,
+    }));
+
+    const mappedServices: PendingShopDetailsServiceDto[] = services.map((s) => ({
+      id: s.id,
+      categoryId: s.categoryId,
+      name: s.name,
+      basePrice: s.basePrice,
+      baseDurationMinutes: s.baseDurationMinutes,
+      applicableFor: s.applicableFor,
+      description: s.description,
+      status: s.status,
+    }));
+
+    return {
+      id: (shop._id as { toString(): string }).toString(),
+      name: shop.name,
+      shopType: shop.shopType,
+      phone: shop.phone,
+      address: shop.address,
+      location: shop.location,
+      description: shop.description,
+      workingHours: shop.workingHours,
+      photos: shop.photos ?? [],
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
+      createdAt: shop.createdAt,
+      vendor: {
+        id: shop.vendor._id.toString(),
+        name: shop.vendor.ownerName,
+        phone: shop.vendor.phone,
+        email: shop.vendor.email,
+      },
+      services: mappedServices,
+      barbers: mappedBarbers,
+    };
+  }
+
+  async getPendingApprovalShops(
+    page: number,
+    limit: number,
+  ): Promise<PendingApprovalShopsResponse> {
+    const { shops, total } = await this.shopRepository.findPendingApproval(page, limit);
+
+    const dtos: PendingApprovalShopDto[] = shops.map((s) => ({
+      id: (s._id as { toString(): string }).toString(),
+      name: s.name,
+      shopType: s.shopType,
+      address: s.address,
+      vendorId: s.vendorId.toString(),
+      vendorName: s.vendorName,
+      vendorPhone: s.vendorPhone,
+      createdAt: s.createdAt,
+    }));
+
+    return { shops: dtos, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async approveShop(shopId: string): Promise<void> {
+    const shop = await this.shopRepository.findById(shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+    if (shop.status !== 'PENDING_APPROVAL') {
+      throw new ConflictError('Shop is not pending approval.');
+    }
+
+    await this.shopRepository.updateStatus(shopId, 'ACTIVE');
+
+    this.logger.info({
+      action: 'SHOP_APPROVED',
+      module: 'shop',
+      shopId,
+      vendorId: shop.vendorId.toString(),
+    });
+  }
+
+  async rejectShop(shopId: string, reason: string): Promise<void> {
+    const shop = await this.shopRepository.findById(shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+    if (shop.status !== 'PENDING_APPROVAL') {
+      throw new ConflictError('Shop is not pending approval.');
+    }
+
+    await this.shopRepository.updateStatus(shopId, 'DELETED');
+
+    this.logger.info({
+      action: 'SHOP_REJECTED',
+      module: 'shop',
+      shopId,
+      vendorId: shop.vendorId.toString(),
+      reason,
+    });
   }
 
   async adminSearchShops(input: AdminShopSearchInput): Promise<AdminShopSearchResponse> {

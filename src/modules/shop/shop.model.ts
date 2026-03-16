@@ -47,7 +47,8 @@ export interface IShop extends Document {
     count: number;
   };
   isAvailable: boolean;
-  status: 'ACTIVE' | 'DELETED';
+  isPrimary: boolean;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
   cancellationCount: number;
   cancellationsThisWeek: number;
   lastCancellationAt?: Date;
@@ -132,13 +133,14 @@ const shopSchema = new Schema<IShop>(
       count: { type: Number, default: 0 },
     },
     isAvailable: { type: Boolean, default: true },
+    isPrimary: { type: Boolean, default: false },
     cancellationCount: { type: Number, default: 0 },
     cancellationsThisWeek: { type: Number, default: 0 },
     lastCancellationAt: { type: Date },
     status: {
       type: String,
-      enum: ['ACTIVE', 'DELETED'],
-      default: 'ACTIVE',
+      enum: ['PENDING_APPROVAL', 'ACTIVE', 'DELETED'],
+      default: 'PENDING_APPROVAL',
     },
     onboardingStatus: {
       type: String,
@@ -158,6 +160,7 @@ const shopSchema = new Schema<IShop>(
 );
 
 shopSchema.index({ vendorId: 1 });
+shopSchema.index({ vendorId: 1, isPrimary: 1 });
 shopSchema.index({ location: '2dsphere' });
 shopSchema.index({ shopType: 1 });
 shopSchema.index({ status: 1, isAvailable: 1 });

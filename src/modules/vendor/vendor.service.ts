@@ -123,25 +123,13 @@ export default class VendorService {
     shopDetails: OnboardingStatusResponse['shopDetails'];
   }> {
     const shops = await this.shopService.getMyShops(vendorId);
-    if (shops.length === 0) {
+    const primaryShop = shops.find((s) => s.isPrimary && s.status !== 'DELETED');
+
+    if (!primaryShop) {
       return { onboardingStatus: null, shopDetails: null };
     }
 
-    const statusPriority: Record<string, number> = {
-      PENDING_PROFILE: 0,
-      PENDING_SERVICES: 1,
-      PENDING_BARBERS: 2,
-      PENDING_BARBER_SERVICES: 3,
-      COMPLETED: 4,
-    };
-
-    const leastProgressed = shops.reduce((min, shop) =>
-      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-        ? shop
-        : min,
-    );
-
-    const onboardingStatus = leastProgressed.onboardingStatus;
+    const onboardingStatus = primaryShop.onboardingStatus;
 
     return {
       onboardingStatus,
@@ -149,10 +137,10 @@ export default class VendorService {
         onboardingStatus === 'COMPLETED'
           ? null
           : {
-              shopId: leastProgressed.id,
-              shopName: leastProgressed.name,
-              address: leastProgressed.address,
-              phoneNo: leastProgressed.phone,
+              shopId: primaryShop.id,
+              shopName: primaryShop.name,
+              address: primaryShop.address,
+              phoneNo: primaryShop.phone,
             },
     };
   }
@@ -512,6 +500,7 @@ export default class VendorService {
           phone: vendor.phone,
           address: vendor.shopDetails!.address,
           location: vendor.shopDetails!.location,
+          isPrimary: true,
         },
         session,
       );

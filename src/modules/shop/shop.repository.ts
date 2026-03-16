@@ -1,7 +1,7 @@
 import mongoose, { PipelineStage, Types } from 'mongoose';
 import { ClientSession } from '../../shared/database/transaction';
 import { ShopModel, IShop } from './shop.model';
-import { CreateShopInput, WorkingHours } from './shop.types';
+import { CreateCompletedShopInput, CreateShopInput, WorkingHours } from './shop.types';
 
 export interface NearbyShopResult {
   shop: IShop;
@@ -26,6 +26,7 @@ export default class ShopRepository {
           location: data.location,
           photos: data.photos ?? [],
           isAvailable: true,
+          isPrimary: data.isPrimary ?? false,
           status: 'ACTIVE',
           onboardingStatus: 'PENDING_PROFILE',
         },
@@ -56,6 +57,100 @@ export default class ShopRepository {
       .lean<{ _id: mongoose.Types.ObjectId }[]>()
       .exec();
     return shops.map((s) => s._id.toString());
+  }
+
+  async createCompleted(data: CreateCompletedShopInput): Promise<IShop> {
+    const [shop] = await ShopModel.create([
+      {
+        ...data,
+        isAvailable: true,
+        isPrimary: false,
+        status: 'PENDING_APPROVAL',
+        onboardingStatus: 'COMPLETED',
+      },
+    ]);
+    return shop;
+  }
+
+  async findPendingApproval(
+    page: number,
+    limit: number,
+  ): Promise<{
+    shops: Array<IShop & { vendorName: string; vendorPhone: string }>;
+    total: number;
+  }> {
+    const skip = (page - 1) * limit;
+
+    const pipeline: PipelineStage[] = [
+      { $match: { status: 'PENDING_APPROVAL' } },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: 'vendorId',
+          foreignField: '_id',
+          as: 'vendor',
+        },
+      },
+      { $unwind: '$vendor' },
+      {
+        $facet: {
+          shops: [{ $sort: { createdAt: 1 } }, { $skip: skip }, { $limit: limit }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    const shops = (result?.shops ?? []) as unknown as Array<
+      IShop & { vendor: { ownerName: string; phone: string } }
+    >;
+    const total: number = result?.total?.[0]?.count ?? 0;
+
+    return {
+      shops: shops.map((s) => ({
+        ...s,
+        vendorName: s.vendor.ownerName,
+        vendorPhone: s.vendor.phone,
+      })) as unknown as Array<IShop & { vendorName: string; vendorPhone: string }>,
+      total,
+    };
+  }
+
+  findPendingApprovalCount(): Promise<number> {
+    return ShopModel.countDocuments({ status: 'PENDING_APPROVAL' }).exec();
+  }
+
+  async findPendingById(shopId: string): Promise<
+    | (IShop & {
+        vendor: { _id: mongoose.Types.ObjectId; ownerName: string; phone: string; email?: string };
+      })
+    | null
+  > {
+    const pipeline: PipelineStage[] = [
+      { $match: { _id: new Types.ObjectId(shopId), status: 'PENDING_APPROVAL' } },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: 'vendorId',
+          foreignField: '_id',
+          as: 'vendor',
+        },
+      },
+      { $unwind: '$vendor' },
+      { $limit: 1 },
+    ];
+
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    return (result ?? null) as unknown as
+      | (IShop & {
+          vendor: {
+            _id: mongoose.Types.ObjectId;
+            ownerName: string;
+            phone: string;
+            email?: string;
+          };
+        })
+      | null;
   }
 
   updateById(
