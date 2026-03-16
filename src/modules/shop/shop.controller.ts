@@ -188,6 +188,13 @@ export default class ShopController {
     res.status(200).json({ success: true, data: result });
   };
 
+  getPendingShopDetails = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.getPendingShopDetails(shopId);
+
+    res.status(200).json({ success: true, data: result });
+  };
+
   approveShop = async (req: Request, res: Response): Promise<void> => {
     const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
     await this.shopService.approveShop(shopId);

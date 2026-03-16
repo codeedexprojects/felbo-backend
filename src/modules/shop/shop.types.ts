@@ -388,3 +388,45 @@ export interface PendingApprovalShopsResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface PendingShopDetailsBarberDto {
+  id: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isAvailable: boolean;
+  serviceCount: number;
+}
+
+export interface PendingShopDetailsServiceDto {
+  id: string;
+  categoryId: string;
+  name: string;
+  basePrice: number;
+  baseDurationMinutes: number;
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+}
+
+export interface PendingShopDetailsDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours?: WorkingHours;
+  photos: string[];
+  rating: { average: number; count: number };
+  createdAt: Date;
+  vendor: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  services: PendingShopDetailsServiceDto[];
+  barbers: PendingShopDetailsBarberDto[];
+}

@@ -120,6 +120,41 @@ export default class ShopRepository {
     return ShopModel.countDocuments({ status: 'PENDING_APPROVAL' }).exec();
   }
 
+  async findPendingById(
+    shopId: string,
+  ): Promise<
+    | (IShop & {
+        vendor: { _id: mongoose.Types.ObjectId; ownerName: string; phone: string; email?: string };
+      })
+    | null
+  > {
+    const pipeline: PipelineStage[] = [
+      { $match: { _id: new Types.ObjectId(shopId), status: 'PENDING_APPROVAL' } },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: 'vendorId',
+          foreignField: '_id',
+          as: 'vendor',
+        },
+      },
+      { $unwind: '$vendor' },
+      { $limit: 1 },
+    ];
+
+    const [result] = await ShopModel.aggregate(pipeline).exec();
+    return (result ?? null) as unknown as
+      | (IShop & {
+          vendor: {
+            _id: mongoose.Types.ObjectId;
+            ownerName: string;
+            phone: string;
+            email?: string;
+          };
+        })
+      | null;
+  }
+
   updateById(
     id: string,
     data: Partial<

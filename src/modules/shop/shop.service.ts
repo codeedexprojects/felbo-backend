@@ -34,6 +34,9 @@ import {
   AddAdditionalShopInput,
   PendingApprovalShopsResponse,
   PendingApprovalShopDto,
+  PendingShopDetailsDto,
+  PendingShopDetailsBarberDto,
+  PendingShopDetailsServiceDto,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 import { ConfigService } from '../config/config.service';
@@ -679,6 +682,61 @@ export default class ShopService {
 
   getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
+  }
+
+  async getPendingShopDetails(shopId: string): Promise<PendingShopDetailsDto> {
+    const shop = await this.shopRepository.findPendingById(shopId);
+    if (!shop) throw new NotFoundError('Shop not found or not pending approval.');
+
+    const [barbers, services] = await Promise.all([
+      this.barberService.getBarbersByShopId(shopId),
+      this.serviceService.getServicesByShopId(shopId),
+    ]);
+
+    const mappedBarbers: PendingShopDetailsBarberDto[] = barbers.map((b) => ({
+      id: b.id,
+      name: b.name,
+      phone: b.phone,
+      photo: b.photo,
+      isAvailable: b.isAvailable,
+      serviceCount: b.serviceCount,
+    }));
+
+    const mappedServices: PendingShopDetailsServiceDto[] = services.map((s) => ({
+      id: s.id,
+      categoryId: s.categoryId,
+      name: s.name,
+      basePrice: s.basePrice,
+      baseDurationMinutes: s.baseDurationMinutes,
+      applicableFor: s.applicableFor,
+      description: s.description,
+      status: s.status,
+    }));
+
+    return {
+      id: (shop._id as { toString(): string }).toString(),
+      name: shop.name,
+      shopType: shop.shopType,
+      phone: shop.phone,
+      address: shop.address,
+      location: shop.location,
+      description: shop.description,
+      workingHours: shop.workingHours,
+      photos: shop.photos ?? [],
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
+      createdAt: shop.createdAt,
+      vendor: {
+        id: shop.vendor._id.toString(),
+        name: shop.vendor.ownerName,
+        phone: shop.vendor.phone,
+        email: shop.vendor.email,
+      },
+      services: mappedServices,
+      barbers: mappedBarbers,
+    };
   }
 
   async getPendingApprovalShops(
