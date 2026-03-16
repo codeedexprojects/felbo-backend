@@ -6,6 +6,9 @@ export const PAID_STATUSES = [
   'NO_SHOW',
 ] as const;
 
+// Statuses that count toward association commission (cancelled bookings excluded)
+export const COMMISSION_STATUSES = ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] as const;
+
 export interface FinanceSummaryPeriodDto {
   revenue: number;
   bookingCount: number;

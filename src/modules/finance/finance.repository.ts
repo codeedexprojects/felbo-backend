@@ -4,6 +4,7 @@ import { BookingModel } from '../booking/booking.model';
 import { BookingIssueModel } from '../issue/issue.model';
 import {
   PAID_STATUSES,
+  COMMISSION_STATUSES,
   FinanceSummaryPeriodDto,
   RevenueChartPointDto,
   VendorRevenueTableParams,
@@ -39,7 +40,40 @@ function getMonthStart(): Date {
   return new Date(Date.UTC(ist.getFullYear(), ist.getMonth(), 1));
 }
 
-function facetBranch(dateGte?: Date): PipelineStage.FacetPipelineStage[] {
+/**
+ * Net profit per booking:
+ *   CANCELLED_BY_VENDOR → 0 (full refund issued, platform neutral)
+ *   otherwise → advancePaid
+ *               - cancellation.refundCoins (1 coin = ₹1)
+ *               - razorpay fee (if paymentMethod = RAZORPAY)
+ */
+function netProfitExpr(razorpayFeeRate: number) {
+  return {
+    $cond: {
+      if: { $eq: ['$status', 'CANCELLED_BY_VENDOR'] },
+      then: 0,
+      else: {
+        $subtract: [
+          '$advancePaid',
+          {
+            $add: [
+              { $ifNull: ['$cancellation.refundCoins', 0] },
+              {
+                $cond: {
+                  if: { $eq: ['$paymentMethod', 'RAZORPAY'] },
+                  then: { $multiply: ['$advancePaid', razorpayFeeRate] },
+                  else: 0,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+
+function facetBranch(razorpayFeeRate: number, dateGte?: Date): PipelineStage.FacetPipelineStage[] {
   const pipeline: PipelineStage.FacetPipelineStage[] = [];
   if (dateGte) {
     pipeline.push({ $match: { createdAt: { $gte: dateGte } } });
@@ -47,7 +81,7 @@ function facetBranch(dateGte?: Date): PipelineStage.FacetPipelineStage[] {
   pipeline.push({
     $group: {
       _id: null,
-      revenue: { $sum: '$advancePaid' },
+      revenue: { $sum: netProfitExpr(razorpayFeeRate) },
       bookingCount: { $sum: 1 },
     },
   });
@@ -61,7 +95,7 @@ function extractPeriod(
 }
 
 export class FinanceRepository {
-  async getSummaryStats(): Promise<{
+  async getSummaryStats(razorpayFeeRate: number): Promise<{
     today: FinanceSummaryPeriodDto;
     thisWeek: FinanceSummaryPeriodDto;
     thisMonth: FinanceSummaryPeriodDto;
@@ -75,10 +109,10 @@ export class FinanceRepository {
       { $match: { status: { $in: [...PAID_STATUSES] } } },
       {
         $facet: {
-          today: facetBranch(todayStart),
-          thisWeek: facetBranch(weekStart),
-          thisMonth: facetBranch(monthStart),
-          total: facetBranch(),
+          today: facetBranch(razorpayFeeRate, todayStart),
+          thisWeek: facetBranch(razorpayFeeRate, weekStart),
+          thisMonth: facetBranch(razorpayFeeRate, monthStart),
+          total: facetBranch(razorpayFeeRate),
         },
       },
     ]).exec();
@@ -94,11 +128,15 @@ export class FinanceRepository {
   async getAssocBookingCount(shopIds: string[]): Promise<number> {
     return BookingModel.countDocuments({
       shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
-      status: { $in: [...PAID_STATUSES] },
+      status: { $in: [...COMMISSION_STATUSES] },
     }).exec();
   }
 
-  async getRevenueChartData(from: Date, to: Date): Promise<RevenueChartPointDto[]> {
+  async getRevenueChartData(
+    from: Date,
+    to: Date,
+    razorpayFeeRate: number,
+  ): Promise<RevenueChartPointDto[]> {
     const results = await BookingModel.aggregate([
       {
         $match: {
@@ -115,7 +153,7 @@ export class FinanceRepository {
               timezone: '+05:30',
             },
           },
-          revenue: { $sum: '$advancePaid' },
+          revenue: { $sum: netProfitExpr(razorpayFeeRate) },
           bookingCount: { $sum: 1 },
         },
       },
@@ -128,6 +166,7 @@ export class FinanceRepository {
 
   async getVendorRevenueTable(
     params: VendorRevenueTableParams,
+    razorpayFeeRate: number,
   ): Promise<{ vendors: VendorRevenueRowDto[]; total: number }> {
     const { from, to, search, sortOrder, minRevenue, maxRevenue, page, limit } = params;
     const skip = (page - 1) * limit;
@@ -143,7 +182,7 @@ export class FinanceRepository {
       {
         $group: {
           _id: '$shopId',
-          revenue: { $sum: '$advancePaid' },
+          revenue: { $sum: netProfitExpr(razorpayFeeRate) },
           bookingCount: { $sum: 1 },
         },
       },
@@ -338,6 +377,7 @@ export class FinanceRepository {
 
   async getAssocSummaryStats(
     shopIds: string[],
+    razorpayFeeRate: number,
   ): Promise<Omit<AssocFinanceSummaryDto, 'vendorCount'>> {
     const todayStart = getTodayStart();
     const weekStart = getWeekStart();
@@ -346,13 +386,13 @@ export class FinanceRepository {
     const objectIds = shopIds.map((id) => new Types.ObjectId(id));
 
     const [result] = await BookingModel.aggregate([
-      { $match: { status: { $in: [...PAID_STATUSES] }, shopId: { $in: objectIds } } },
+      { $match: { status: { $in: [...COMMISSION_STATUSES] }, shopId: { $in: objectIds } } },
       {
         $facet: {
-          today: facetBranch(todayStart),
-          thisWeek: facetBranch(weekStart),
-          thisMonth: facetBranch(monthStart),
-          total: facetBranch(),
+          today: facetBranch(razorpayFeeRate, todayStart),
+          thisWeek: facetBranch(razorpayFeeRate, weekStart),
+          thisMonth: facetBranch(razorpayFeeRate, monthStart),
+          total: facetBranch(razorpayFeeRate),
         },
       },
     ]).exec();
@@ -368,6 +408,7 @@ export class FinanceRepository {
   async getAssocVendorRevenueTable(
     shopIds: string[],
     params: VendorRevenueTableParams,
+    razorpayFeeRate: number,
   ): Promise<{ vendors: VendorRevenueRowDto[]; total: number }> {
     const { from, to, search, sortOrder, minRevenue, maxRevenue, page, limit } = params;
     const skip = (page - 1) * limit;
@@ -378,7 +419,7 @@ export class FinanceRepository {
     const pipeline: PipelineStage[] = [
       {
         $match: {
-          status: { $in: [...PAID_STATUSES] },
+          status: { $in: [...COMMISSION_STATUSES] },
           createdAt: { $gte: from, $lte: to },
           shopId: { $in: objectIds },
         },
@@ -386,7 +427,7 @@ export class FinanceRepository {
       {
         $group: {
           _id: '$shopId',
-          revenue: { $sum: '$advancePaid' },
+          revenue: { $sum: netProfitExpr(razorpayFeeRate) },
           bookingCount: { $sum: 1 },
         },
       },
