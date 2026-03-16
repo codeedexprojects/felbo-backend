@@ -462,6 +462,7 @@ export class BookingRepository {
       status: string;
       date: Date;
       startTime: string;
+      verificationCode: string | null;
     }>;
     total: number;
   }> {
@@ -506,6 +507,9 @@ export class BookingRepository {
                 status: 1,
                 date: 1,
                 startTime: 1,
+                verificationCode: {
+                  $cond: [{ $eq: ['$status', 'CONFIRMED'] }, '$verificationCode', null],
+                },
               },
             },
           ],
@@ -531,6 +535,7 @@ export class BookingRepository {
     endTime: string;
     status: string;
     paymentMethod: string;
+    verificationCode: string;
     shopId: mongoose.Types.ObjectId;
     shopName: string;
     shopImage: string | null;
@@ -543,6 +548,7 @@ export class BookingRepository {
       state: string;
       pincode: string;
     } | null;
+    shopCoordinates: [number, number] | null;
     services: Array<{ serviceName: string; price: number }>;
     totalServiceAmount: number;
     advancePaid: number;
@@ -569,7 +575,7 @@ export class BookingRepository {
           localField: 'shopId',
           foreignField: '_id',
           as: 'shop',
-          pipeline: [{ $project: { photos: 1, address: 1 } }],
+          pipeline: [{ $project: { photos: 1, address: 1, location: 1 } }],
         },
       },
       {
@@ -581,10 +587,14 @@ export class BookingRepository {
           status: 1,
           shopId: 1,
           shopName: 1,
+          verificationCode: 1,
           shopImage: {
             $ifNull: [{ $arrayElemAt: [{ $arrayElemAt: ['$shop.photos', 0] }, 0] }, null],
           },
           shopAddress: { $ifNull: [{ $arrayElemAt: ['$shop.address', 0] }, null] },
+          shopCoordinates: {
+            $ifNull: [{ $arrayElemAt: ['$shop.location.coordinates', 0] }, null],
+          },
           services: 1,
           totalServiceAmount: 1,
           advancePaid: 1,

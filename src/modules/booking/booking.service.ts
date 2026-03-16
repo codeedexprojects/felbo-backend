@@ -1403,6 +1403,7 @@ export class BookingService {
         status: b.status,
         date: b.date,
         startTime: b.startTime,
+        otp: b.verificationCode,
       })),
       total,
       page,
@@ -1430,11 +1431,13 @@ export class BookingService {
       endTime: booking.endTime,
       status: booking.status,
       paymentMethod: booking.paymentMethod,
+      otp: booking.verificationCode,
       shop: {
         id: booking.shopId.toString(),
         name: booking.shopName,
         image: booking.shopImage,
         address: addressStr,
+        coordinates: booking.shopCoordinates,
       },
       services: booking.services.map((s) => ({
         name: s.serviceName,

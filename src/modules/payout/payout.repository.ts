@@ -1,14 +1,14 @@
 import { Types } from 'mongoose';
 import { BookingModel } from '../booking/booking.model';
 import { PayoutModel, IPayout } from './payout.model';
-import { PAID_STATUSES } from '../finance/finance.types';
+import { COMMISSION_STATUSES } from '../finance/finance.types';
 import { PayoutListParams } from './payout.types';
 
 export class PayoutRepository {
   async getAssocBookingCount(shopIds: string[]): Promise<number> {
     return BookingModel.countDocuments({
       shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
-      status: { $in: [...PAID_STATUSES] },
+      status: { $in: [...COMMISSION_STATUSES] },
     }).exec();
   }
 
