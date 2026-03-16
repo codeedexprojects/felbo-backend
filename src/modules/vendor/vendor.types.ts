@@ -155,6 +155,12 @@ export interface VendorProfileDto {
     | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
+  shopDetails: {
+    shopId: string;
+    shopName: string;
+    address: AddressInput;
+    phoneNo: string;
+  } | null;
 }
 
 export interface CreateVendorData {

@@ -104,6 +104,7 @@ export default class VendorService {
   private toProfileDto(
     vendor: IVendor,
     onboardingStatus: VendorProfileDto['onboardingStatus'],
+    shopDetails: VendorProfileDto['shopDetails'],
   ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
@@ -115,6 +116,7 @@ export default class VendorService {
       verificationStatus: vendor.verificationStatus,
       status: vendor.status,
       onboardingStatus,
+      shopDetails,
     };
   }
 
@@ -469,9 +471,9 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const { onboardingStatus } = await this.getOnboardingInfo(vendorId);
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
 
-    return this.toProfileDto(vendor, onboardingStatus);
+    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
