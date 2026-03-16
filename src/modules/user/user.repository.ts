@@ -140,6 +140,14 @@ export default class UserRepository {
     ).exec();
   }
 
+  incrementCancellationCount(userId: string, session?: ClientSession): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { cancellationCount: 1 } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
   decrementCoinBalance(
     userId: string,
     coins: number,

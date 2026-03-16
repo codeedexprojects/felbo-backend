@@ -416,6 +416,15 @@ export class BarberRepository {
     }).exec();
   }
 
+  findActiveByShopIds(shopIds: string[]): Promise<Pick<IBarber, '_id' | 'name' | 'photo'>[]> {
+    return BarberModel.find(
+      { shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) }, status: 'ACTIVE' },
+      { name: 1, photo: 1 },
+    )
+      .lean<Pick<IBarber, '_id' | 'name' | 'photo'>[]>()
+      .exec();
+  }
+
   async countBarbersByShopIds(shopIds: string[]): Promise<Map<string, number>> {
     const results = await BarberModel.aggregate([
       {

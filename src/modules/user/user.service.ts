@@ -1,4 +1,5 @@
 import { Logger } from 'winston';
+import { ClientSession } from '../../shared/database/transaction';
 import UserRepository from './user.repository';
 import {
   UserDto,
@@ -249,6 +250,10 @@ export default class UserService {
 
   async unregisterFcmToken(userId: string, token: string): Promise<void> {
     await this.userRepository.removeFcmToken(userId, token);
+  }
+
+  async incrementCancellationCount(userId: string, session?: ClientSession): Promise<void> {
+    await this.userRepository.incrementCancellationCount(userId, session);
   }
 
   async getUserStatusCounts(): Promise<{ total: number; active: number; blocked: number }> {

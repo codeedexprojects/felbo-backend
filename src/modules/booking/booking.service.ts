@@ -20,13 +20,24 @@ import {
   CancelBookingByUserResponse,
   CompleteBookingResponse,
   BarberBookingListResponse,
+  BarberBookingDetailDto,
   GetBarbersForServicesResponse,
   VendorBookingListParams,
   VendorBookingListResponse,
   VendorBookingDetailDto,
+  UserBookingTab,
+  UserBookingListResponseV2,
+  UserBookingDetailDto,
+  BarberDashboardStatsDto,
+  BarberTodayBookingsResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
-import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
+import {
+  getTodayInIst,
+  getCurrentIstMinutes,
+  parseDateAsIst,
+  getIstDayRangeUtc,
+} from '../../shared/utils/time';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -265,7 +276,17 @@ export class BookingService {
         totalServiceAmount: b.totalServiceAmount,
         advancePaid: b.advancePaid,
         remainingAmount: b.remainingAmount,
+        paymentMethod: b.paymentMethod,
         status: b.status,
+        cancellation: b.cancellation
+          ? {
+              cancelledAt: b.cancellation.cancelledAt,
+              cancelledBy: b.cancellation.cancelledBy,
+              reason: b.cancellation.reason,
+              refundCoins: b.cancellation.refundCoins ?? 0,
+              refundStatus: b.cancellation.refundStatus,
+            }
+          : undefined,
         createdAt: b.createdAt,
       })),
       total,
@@ -717,6 +738,10 @@ export class BookingService {
 
     if (booking.paymentMethod === 'FELBO_COINS') {
       // FelboCoin-paid booking: return coins to user (COIN_REVERSAL) atomically
+      const coinRedeemThreshold = await this.configService.getValueAsNumber(
+        CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
+      );
+
       await withTransaction(async (session) => {
         cancelled = await this.bookingRepository.updateBookingCancelled(
           bookingId,
@@ -724,6 +749,7 @@ export class BookingService {
             cancelledBy: 'VENDOR',
             reason,
             refundAmount: 0,
+            refundCoins: coinRedeemThreshold,
             refundType: 'FELBO_COINS',
             refundStatus: 'COMPLETED',
           },
@@ -735,10 +761,6 @@ export class BookingService {
             'Booking could not be cancelled — it may have already been updated.',
           );
         }
-
-        const coinRedeemThreshold = await this.configService.getValueAsNumber(
-          CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
-        );
 
         await this.felboCoinService.creditCoins(
           {
@@ -764,6 +786,7 @@ export class BookingService {
         cancelledBy: 'VENDOR',
         reason,
         refundAmount: booking.advancePaid,
+        refundCoins: 0,
         refundType: 'ORIGINAL',
         refundStatus: 'PENDING',
       });
@@ -804,6 +827,8 @@ export class BookingService {
           cancelledBy: cancelled!.cancellation!.cancelledBy,
           reason: cancelled!.cancellation!.reason,
           refundAmount: cancelled!.cancellation!.refundAmount,
+          refundCoins: cancelled!.cancellation!.refundCoins ?? 0,
+          refundType: cancelled!.cancellation!.refundType,
           refundStatus: cancelled!.cancellation!.refundStatus,
         },
       },
@@ -857,8 +882,9 @@ export class BookingService {
           cancelledBy: 'USER',
           reason,
           refundAmount: 0,
+          refundCoins: refundCoins,
           refundType: 'FELBO_COINS',
-          refundStatus: isEarlyCancel ? 'PENDING' : 'COMPLETED',
+          refundStatus: 'COMPLETED',
         },
         session,
       );
@@ -883,6 +909,8 @@ export class BookingService {
           session,
         );
       }
+
+      await this.userService.incrementCancellationCount(userId, session);
     });
 
     this.logger.info({
@@ -981,34 +1009,88 @@ export class BookingService {
     page: number,
     limit: number,
     status?: string,
+    startDate?: Date,
+    endDate?: Date,
   ): Promise<BarberBookingListResponse> {
     const { bookings, total } = await this.bookingRepository.findByBarberId(
       barberId,
       page,
       limit,
       status,
+      startDate,
+      endDate,
     );
     return {
       bookings: bookings.map((b) => ({
         id: b._id.toString(),
         bookingNumber: b.bookingNumber,
         userName: b.userName,
+        userImage: b.userImage,
         date: b.date,
         startTime: b.startTime,
-        endTime: b.endTime,
-        services: b.services.map((s) => ({
-          serviceId: s.serviceId.toString(),
-          serviceName: s.serviceName,
-          price: s.price,
-          durationMinutes: s.durationMinutes,
-        })),
-        totalServiceAmount: b.totalServiceAmount,
+        services: b.services.map((s) => s.serviceName),
         status: b.status,
       })),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getBarberBookingDetail(
+    bookingId: string,
+    barberId: string,
+  ): Promise<BarberBookingDetailDto> {
+    const booking = await this.bookingRepository.barberGetBookingDetail(bookingId, barberId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      customer: {
+        name: booking.userName,
+        image: booking.userImage,
+        gender: booking.userGender,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+        price: s.price,
+      })),
+      payment: {
+        total: booking.totalServiceAmount,
+        advancePaid: booking.advancePaid,
+        remainingToCollect: booking.remainingAmount,
+      },
+    };
+  }
+
+  async getBarberDashboardStats(barberId: string): Promise<BarberDashboardStatsDto> {
+    const { start, end } = getIstDayRangeUtc();
+    return this.bookingRepository.getBarberDashboardStats(barberId, start, end);
+  }
+
+  async getBarberTodayConfirmed(barberId: string): Promise<BarberTodayBookingsResponse> {
+    const { start, end } = getIstDayRangeUtc();
+    const bookings = await this.bookingRepository.findTodayConfirmedByBarberId(
+      barberId,
+      start,
+      end,
+    );
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userImage: b.userImage,
+        userName: b.userName,
+        services: b.services.map((s) => s.serviceName),
+        startTime: b.startTime,
+      })),
     };
   }
 
@@ -1216,6 +1298,7 @@ export class BookingService {
             cancelledBy: booking.cancellation.cancelledBy,
             reason: booking.cancellation.reason,
             refundAmount: booking.cancellation.refundAmount,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
             refundType: booking.cancellation.refundType,
             refundStatus: booking.cancellation.refundStatus,
           }
@@ -1285,5 +1368,92 @@ export class BookingService {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  async getUserBookingsList(
+    userId: string,
+    tab: UserBookingTab,
+    page: number,
+    limit: number,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<UserBookingListResponseV2> {
+    const statusMap: Record<UserBookingTab, string[]> = {
+      upcoming: ['CONFIRMED'],
+      completed: ['COMPLETED'],
+      cancelled: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+    };
+
+    const { bookings, total } = await this.bookingRepository.findUserBookingsList(
+      userId,
+      statusMap[tab],
+      page,
+      limit,
+      startDate,
+      endDate,
+    );
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        shopImage: b.shopImage,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+        date: b.date,
+        startTime: b.startTime,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getUserBookingDetail(userId: string, bookingId: string): Promise<UserBookingDetailDto> {
+    const booking = await this.bookingRepository.findUserBookingDetail(bookingId, userId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    const addr = booking.shopAddress;
+    const addressStr = addr
+      ? [addr.line1, addr.line2, addr.area, addr.city, addr.district, addr.state, addr.pincode]
+          .filter(Boolean)
+          .join(', ')
+      : '';
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      paymentMethod: booking.paymentMethod,
+      shop: {
+        id: booking.shopId.toString(),
+        name: booking.shopName,
+        image: booking.shopImage,
+        address: addressStr,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        amount: s.price,
+      })),
+      payment: {
+        advancePaid: booking.advancePaid,
+        total: booking.totalServiceAmount,
+        remainingAmount: booking.remainingAmount,
+      },
+      cancellation: booking.cancellation
+        ? {
+            cancelledAt: booking.cancellation.cancelledAt,
+            cancelledBy: booking.cancellation.cancelledBy,
+            reason: booking.cancellation.reason,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
+            refundStatus: booking.cancellation.refundStatus,
+          }
+        : undefined,
+    };
   }
 }

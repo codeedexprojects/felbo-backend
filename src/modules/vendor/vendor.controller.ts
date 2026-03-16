@@ -165,12 +165,16 @@ export default class VendorController {
   };
 
   getVendorBookings = async (req: Request, res: Response): Promise<void> => {
-    const { shopId, status, page, limit } = vendorBookingsQuerySchema.parse(req.query);
+    const { shopId, status, page, limit, startDate, endDate } = vendorBookingsQuerySchema.parse(
+      req.query,
+    );
     const result = await this.vendorService.getVendorBookings(req.user!.sub, {
       shopId,
       status,
       page,
       limit,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(`${endDate}T23:59:59.999Z`) : undefined,
     });
 
     res.status(200).json({
