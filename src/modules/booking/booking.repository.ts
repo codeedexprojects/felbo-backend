@@ -244,7 +244,7 @@ export class BookingRepository {
     if (startDate || endDate) {
       const dateFilter: Record<string, Date> = {};
       if (startDate) dateFilter.$gte = startDate;
-      if (endDate) dateFilter.$lte = endDate;
+      if (endDate) dateFilter.$lt = endDate;
       match.date = dateFilter;
     }
 

@@ -32,7 +32,12 @@ import {
   BarberTodayBookingsResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
-import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
+import {
+  getTodayInIst,
+  getCurrentIstMinutes,
+  parseDateAsIst,
+  getIstDayRangeUtc,
+} from '../../shared/utils/time';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -1049,18 +1054,16 @@ export class BookingService {
   }
 
   async getBarberDashboardStats(barberId: string): Promise<BarberDashboardStatsDto> {
-    const today = getTodayInIst();
-    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    return this.bookingRepository.getBarberDashboardStats(barberId, today, todayEnd);
+    const { start, end } = getIstDayRangeUtc();
+    return this.bookingRepository.getBarberDashboardStats(barberId, start, end);
   }
 
   async getBarberTodayConfirmed(barberId: string): Promise<BarberTodayBookingsResponse> {
-    const today = getTodayInIst();
-    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const { start, end } = getIstDayRangeUtc();
     const bookings = await this.bookingRepository.findTodayConfirmedByBarberId(
       barberId,
-      today,
-      todayEnd,
+      start,
+      end,
     );
     return {
       bookings: bookings.map((b) => ({

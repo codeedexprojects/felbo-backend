@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { BookingService } from './booking.service';
 import { ForbiddenError } from '../../shared/errors/index';
+import { parseDateAsIst } from '../../shared/utils/time';
 import {
   shopIdParamSchema,
   getSlotsQuerySchema,
@@ -122,8 +123,10 @@ export class BookingController {
     const query = barberBookingListQuerySchema.parse(req.query);
     const barberId = this.getBarberId(req);
 
-    const startDate = query.startDate ? new Date(query.startDate) : undefined;
-    const endDate = query.endDate ? new Date(`${query.endDate}T23:59:59.999Z`) : undefined;
+    const startDate = query.startDate ? parseDateAsIst(query.startDate) : undefined;
+    const endDate = query.endDate
+      ? new Date(parseDateAsIst(query.endDate).getTime() + 24 * 60 * 60 * 1000)
+      : undefined;
 
     const result = await this.bookingService.getBarberBookings(
       barberId,
