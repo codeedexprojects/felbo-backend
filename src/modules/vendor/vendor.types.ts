@@ -417,9 +417,3 @@ export interface VendorDashboardCountsDto {
   staffWorking: { count: number; staff: StaffMemberDto[] };
   staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }
-
-export interface VendorDashboardCountsDto {
-  totalBookings: number;
-  staffWorking: number;
-  staffOnLeave: number;
-}
