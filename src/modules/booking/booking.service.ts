@@ -20,10 +20,16 @@ import {
   CancelBookingByUserResponse,
   CompleteBookingResponse,
   BarberBookingListResponse,
+  BarberBookingDetailDto,
   GetBarbersForServicesResponse,
   VendorBookingListParams,
   VendorBookingListResponse,
   VendorBookingDetailDto,
+  UserBookingTab,
+  UserBookingListResponseV2,
+  UserBookingDetailDto,
+  BarberDashboardStatsDto,
+  BarberTodayBookingsResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import { getTodayInIst, getCurrentIstMinutes, parseDateAsIst } from '../../shared/utils/time';
@@ -981,34 +987,90 @@ export class BookingService {
     page: number,
     limit: number,
     status?: string,
+    startDate?: Date,
+    endDate?: Date,
   ): Promise<BarberBookingListResponse> {
     const { bookings, total } = await this.bookingRepository.findByBarberId(
       barberId,
       page,
       limit,
       status,
+      startDate,
+      endDate,
     );
     return {
       bookings: bookings.map((b) => ({
         id: b._id.toString(),
         bookingNumber: b.bookingNumber,
         userName: b.userName,
+        userImage: b.userImage,
         date: b.date,
         startTime: b.startTime,
-        endTime: b.endTime,
-        services: b.services.map((s) => ({
-          serviceId: s.serviceId.toString(),
-          serviceName: s.serviceName,
-          price: s.price,
-          durationMinutes: s.durationMinutes,
-        })),
-        totalServiceAmount: b.totalServiceAmount,
+        services: b.services.map((s) => s.serviceName),
         status: b.status,
       })),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getBarberBookingDetail(
+    bookingId: string,
+    barberId: string,
+  ): Promise<BarberBookingDetailDto> {
+    const booking = await this.bookingRepository.barberGetBookingDetail(bookingId, barberId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      customer: {
+        name: booking.userName,
+        image: booking.userImage,
+        gender: booking.userGender,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+        price: s.price,
+      })),
+      payment: {
+        total: booking.totalServiceAmount,
+        advancePaid: booking.advancePaid,
+        remainingToCollect: booking.remainingAmount,
+      },
+    };
+  }
+
+  async getBarberDashboardStats(barberId: string): Promise<BarberDashboardStatsDto> {
+    const today = getTodayInIst();
+    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    return this.bookingRepository.getBarberDashboardStats(barberId, today, todayEnd);
+  }
+
+  async getBarberTodayConfirmed(barberId: string): Promise<BarberTodayBookingsResponse> {
+    const today = getTodayInIst();
+    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const bookings = await this.bookingRepository.findTodayConfirmedByBarberId(
+      barberId,
+      today,
+      todayEnd,
+    );
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userImage: b.userImage,
+        userName: b.userName,
+        services: b.services.map((s) => s.serviceName),
+        startTime: b.startTime,
+      })),
     };
   }
 
@@ -1285,5 +1347,82 @@ export class BookingService {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  async getUserBookingsList(
+    userId: string,
+    tab: UserBookingTab,
+    page: number,
+    limit: number,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<UserBookingListResponseV2> {
+    const statusMap: Record<UserBookingTab, string[]> = {
+      upcoming: ['CONFIRMED'],
+      completed: ['COMPLETED'],
+      cancelled: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+    };
+
+    const { bookings, total } = await this.bookingRepository.findUserBookingsList(
+      userId,
+      statusMap[tab],
+      page,
+      limit,
+      startDate,
+      endDate,
+    );
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        shopImage: b.shopImage,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+        date: b.date,
+        startTime: b.startTime,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getUserBookingDetail(userId: string, bookingId: string): Promise<UserBookingDetailDto> {
+    const booking = await this.bookingRepository.findUserBookingDetail(bookingId, userId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    const addr = booking.shopAddress;
+    const addressStr = addr
+      ? [addr.line1, addr.line2, addr.area, addr.city, addr.district, addr.state, addr.pincode]
+          .filter(Boolean)
+          .join(', ')
+      : '';
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      shop: {
+        id: booking.shopId.toString(),
+        name: booking.shopName,
+        image: booking.shopImage,
+        address: addressStr,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        amount: s.price,
+      })),
+      payment: {
+        advancePaid: booking.advancePaid,
+        total: booking.totalServiceAmount,
+        remainingAmount: booking.remainingAmount,
+      },
+    };
   }
 }

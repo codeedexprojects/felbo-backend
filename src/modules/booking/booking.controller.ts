@@ -13,6 +13,7 @@ import {
   cancelBookingByUserBodySchema,
   barberBookingListQuerySchema,
   completeBookingBodySchema,
+  userBookingListQuerySchema,
 } from './booking.validators';
 
 export class BookingController {
@@ -121,12 +122,26 @@ export class BookingController {
     const query = barberBookingListQuerySchema.parse(req.query);
     const barberId = this.getBarberId(req);
 
+    const startDate = query.startDate ? new Date(query.startDate) : undefined;
+    const endDate = query.endDate ? new Date(`${query.endDate}T23:59:59.999Z`) : undefined;
+
     const result = await this.bookingService.getBarberBookings(
       barberId,
       query.page,
       query.limit,
       query.status,
+      startDate,
+      endDate,
     );
+
+    res.json({ success: true, data: result });
+  };
+
+  getBarberBookingDetail = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    const barberId = this.getBarberId(req);
+
+    const result = await this.bookingService.getBarberBookingDetail(bookingId, barberId);
 
     res.json({ success: true, data: result });
   };
@@ -147,6 +162,46 @@ export class BookingController {
     const barberId = this.getBarberId(req);
 
     const result = await this.bookingService.completeBooking(bookingId, barberId, verificationCode);
+
+    res.json({ success: true, data: result });
+  };
+
+  getBarberDashboard = async (req: Request, res: Response): Promise<void> => {
+    const barberId = this.getBarberId(req);
+    const result = await this.bookingService.getBarberDashboardStats(barberId);
+    res.json({ success: true, data: result });
+  };
+
+  getBarberTodayConfirmed = async (req: Request, res: Response): Promise<void> => {
+    const barberId = this.getBarberId(req);
+    const result = await this.bookingService.getBarberTodayConfirmed(barberId);
+    res.json({ success: true, data: result });
+  };
+
+  getUserBookingsList = async (req: Request, res: Response): Promise<void> => {
+    const { tab, page, limit, startDate, endDate } = userBookingListQuerySchema.parse(req.query);
+    const userId = req.user!.sub;
+
+    const start = startDate ? new Date(startDate) : undefined;
+    const end = endDate ? new Date(`${endDate}T23:59:59.999Z`) : undefined;
+
+    const result = await this.bookingService.getUserBookingsList(
+      userId,
+      tab,
+      page,
+      limit,
+      start,
+      end,
+    );
+
+    res.json({ success: true, data: result });
+  };
+
+  getUserBookingDetail = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    const userId = req.user!.sub;
+
+    const result = await this.bookingService.getUserBookingDetail(userId, bookingId);
 
     res.json({ success: true, data: result });
   };
