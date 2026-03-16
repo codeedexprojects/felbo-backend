@@ -127,4 +127,30 @@ export default class UserRepository {
   removeFcmToken(userId: string, token: string): Promise<unknown> {
     return UserModel.updateOne({ _id: userId }, { $pull: { fcmTokens: token } }).exec();
   }
+
+  incrementCoinBalance(
+    userId: string,
+    coins: number,
+    session?: ClientSession,
+  ): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { felboCoinBalance: coins } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  decrementCoinBalance(
+    userId: string,
+    coins: number,
+    session?: ClientSession,
+  ): Promise<IUser | null> {
+    // Conditional update: only decrements if current balance >= coins.
+    // Returns null if user not found OR balance insufficient — prevents going negative atomically.
+    return UserModel.findOneAndUpdate(
+      { _id: userId, felboCoinBalance: { $gte: coins } },
+      { $inc: { felboCoinBalance: -coins } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
 }

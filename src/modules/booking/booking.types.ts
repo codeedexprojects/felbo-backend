@@ -51,7 +51,7 @@ export interface InitiateBookingInput {
   serviceIds: string[];
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm
-  paymentMethod: 'RAZORPAY' | 'WALLET';
+  paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
 }
 
 export interface BookingServiceSnapshot {
@@ -76,6 +76,7 @@ export interface InitiateBookingResponse {
     advancePaid: number;
     remainingAmount: number;
     paymentMethod: string;
+    verificationCode: string;
     expiresAt: string;
   };
   payment?: {
@@ -172,6 +173,30 @@ export type CancellationReason =
   | 'SHOP_CLOSING'
   | 'EQUIPMENT_ISSUE'
   | 'OTHER';
+
+export interface CancelBookingByUserResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    cancellation: {
+      cancelledAt: string;
+      cancelledBy: string;
+      reason: string;
+      refundCoins: number;
+    };
+  };
+}
+
+export interface CompleteBookingResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    completedAt: Date;
+    coinsEarned: number;
+  };
+}
 
 export interface CancelBookingByBarberResponse {
   booking: {

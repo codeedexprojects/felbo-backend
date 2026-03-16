@@ -137,8 +137,9 @@ export class BookingRepository {
       totalServiceAmount: number;
       advancePaid: number;
       remainingAmount: number;
-      paymentMethod: 'RAZORPAY' | 'WALLET';
+      paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
       razorpayOrderId?: string;
+      verificationCode: string;
       status: 'PENDING_PAYMENT' | 'CONFIRMED';
     },
     session?: ClientSession,
@@ -184,20 +185,33 @@ export class BookingRepository {
       cancelledBy: 'USER' | 'VENDOR';
       reason: string;
       refundAmount: number;
-      refundType: 'WALLET' | 'ORIGINAL';
+      refundType: 'FELBO_COINS' | 'ORIGINAL';
       refundStatus: 'PENDING' | 'COMPLETED';
     },
+    session?: ClientSession,
   ): Promise<IBooking | null> {
-    return BookingModel.findByIdAndUpdate(
-      id,
+    const status =
+      cancellation.cancelledBy === 'USER' ? 'CANCELLED_BY_USER' : 'CANCELLED_BY_VENDOR';
+    // Conditional: only cancels if the booking is still CONFIRMED — prevents double-cancellation
+    return BookingModel.findOneAndUpdate(
+      { _id: id, status: 'CONFIRMED' },
       {
-        status: 'CANCELLED_BY_VENDOR',
+        status,
         cancellation: {
           ...cancellation,
           cancelledAt: new Date(),
         },
       },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  updateBookingCompleted(id: string, session?: ClientSession): Promise<IBooking | null> {
+    // Conditional: only completes if the booking is still CONFIRMED — prevents double-completion
+    return BookingModel.findOneAndUpdate(
+      { _id: id, status: 'CONFIRMED' },
+      { status: 'COMPLETED', completedAt: new Date() },
+      { returnDocument: 'after', session },
     ).exec();
   }
 

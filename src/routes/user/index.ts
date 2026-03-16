@@ -11,6 +11,7 @@ import shopRoutes from './shop.routes';
 import bookingRoutes from './booking.routes';
 import favoritesRoutes from './favorites.routes';
 import reviewRoutes from './review.routes';
+import felboCoinRoutes from './felbocoin.routes';
 
 const router = Router();
 
@@ -27,5 +28,6 @@ router.use('/shops', shopRoutes);
 router.use('/favorites', favoritesRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/reviews', reviewRoutes);
+router.use('/felbocoin', felboCoinRoutes);
 
 export default router;

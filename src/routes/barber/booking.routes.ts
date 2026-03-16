@@ -5,5 +5,6 @@ const router = Router();
 
 router.get('/', bookingController.getBarberBookings);
 router.post('/:bookingId/cancel', bookingController.cancelBookingByBarber);
+router.post('/:bookingId/complete', bookingController.completeBooking);
 
 export default router;
