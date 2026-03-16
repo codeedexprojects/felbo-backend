@@ -185,6 +185,7 @@ export class BookingRepository {
       cancelledBy: 'USER' | 'VENDOR';
       reason: string;
       refundAmount: number;
+      refundCoins: number;
       refundType: 'FELBO_COINS' | 'ORIGINAL';
       refundStatus: 'PENDING' | 'COMPLETED';
     },
@@ -529,6 +530,7 @@ export class BookingRepository {
     startTime: string;
     endTime: string;
     status: string;
+    paymentMethod: string;
     shopId: mongoose.Types.ObjectId;
     shopName: string;
     shopImage: string | null;
@@ -545,6 +547,13 @@ export class BookingRepository {
     totalServiceAmount: number;
     advancePaid: number;
     remainingAmount: number;
+    cancellation?: {
+      cancelledAt: Date;
+      cancelledBy: string;
+      reason: string;
+      refundCoins: number;
+      refundStatus: string;
+    } | null;
   } | null> {
     const [result] = await BookingModel.aggregate([
       {
@@ -580,6 +589,8 @@ export class BookingRepository {
           totalServiceAmount: 1,
           advancePaid: 1,
           remainingAmount: 1,
+          paymentMethod: 1,
+          cancellation: 1,
         },
       },
     ]).exec();

@@ -120,7 +120,15 @@ export interface BookingListItemDto {
   totalServiceAmount: number;
   advancePaid: number;
   remainingAmount: number;
+  paymentMethod: string;
   status: string;
+  cancellation?: {
+    cancelledAt: Date;
+    cancelledBy: string;
+    reason: string;
+    refundCoins: number;
+    refundStatus: string;
+  };
   createdAt: Date;
 }
 
@@ -208,6 +216,8 @@ export interface CancelBookingByBarberResponse {
       cancelledBy: string;
       reason: string;
       refundAmount: number;
+      refundCoins: number;
+      refundType: string;
       refundStatus: string;
     };
   };
@@ -362,6 +372,7 @@ export interface UserBookingDetailDto {
   startTime: string;
   endTime: string;
   status: string;
+  paymentMethod: string;
   shop: {
     id: string;
     name: string;
@@ -376,6 +387,13 @@ export interface UserBookingDetailDto {
     advancePaid: number;
     total: number;
     remainingAmount: number;
+  };
+  cancellation?: {
+    cancelledAt: Date;
+    cancelledBy: string;
+    reason: string;
+    refundCoins: number;
+    refundStatus: string;
   };
 }
 
@@ -407,6 +425,7 @@ export interface AdminBookingDetailDto {
     cancelledBy: string;
     reason: string;
     refundAmount: number;
+    refundCoins: number;
     refundType: string;
     refundStatus: string;
   };

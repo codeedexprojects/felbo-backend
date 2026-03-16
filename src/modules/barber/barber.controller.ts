@@ -188,4 +188,10 @@ export class BarberController {
       data: result,
     });
   };
+
+  getProfile = async (req: Request, res: Response): Promise<void> => {
+    const barberId = this.getBarberId(req);
+    const result = await this.barberService.getBarberProfile(barberId);
+    res.status(200).json({ success: true, data: result });
+  };
 }
