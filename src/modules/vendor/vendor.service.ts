@@ -865,25 +865,40 @@ export default class VendorService {
     }
 
     if (shopIds.length === 0) {
-      return { totalBookings: 0, staffWorking: 0, staffOnLeave: 0 };
+      return {
+        totalBookings: 0,
+        staffWorking: { count: 0, staff: [] },
+        staffOnLeave: { count: 0, staff: [] },
+      };
     }
 
-    const [bookingStats, staffWorking, totalActive] = await Promise.all([
+    const [bookingStats, workingBarberIds, allActiveStaff] = await Promise.all([
       this.bookingService.getStatsByShopIds(shopIds),
-      this.availabilityService.countWorkingByShopIds(shopIds),
-      this.barberService.countActiveByShopIds(shopIds),
+      this.availabilityService.getWorkingBarberIdsByShopIds(shopIds),
+      this.barberService.getActiveStaffByShopIds(shopIds),
     ]);
+
+    const workingSet = new Set(workingBarberIds);
+    const workingStaff = allActiveStaff.filter((b) => workingSet.has(b.id));
+    const onLeaveStaff = allActiveStaff.filter((b) => !workingSet.has(b.id));
 
     return {
       totalBookings: bookingStats.totalBookings,
-      staffWorking,
-      staffOnLeave: totalActive - staffWorking,
+      staffWorking: { count: workingStaff.length, staff: workingStaff },
+      staffOnLeave: { count: onLeaveStaff.length, staff: onLeaveStaff },
     };
   }
 
   async getVendorBookings(
     vendorId: string,
-    query: { shopId?: string; status?: VendorBookingStatus; page: number; limit: number },
+    query: {
+      shopId?: string;
+      status?: VendorBookingStatus;
+      page: number;
+      limit: number;
+      startDate?: Date;
+      endDate?: Date;
+    },
   ): Promise<VendorBookingListResponse> {
     let shopIds: string[];
 
@@ -907,6 +922,8 @@ export default class VendorService {
       status: query.status,
       page: query.page,
       limit: query.limit,
+      startDate: query.startDate,
+      endDate: query.endDate,
     });
   }
 

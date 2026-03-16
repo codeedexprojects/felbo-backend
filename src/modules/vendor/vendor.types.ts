@@ -406,8 +406,14 @@ export interface UpdateProfileResponse {
   profilePhoto: string | null;
 }
 
+export interface StaffMemberDto {
+  id: string;
+  name: string;
+  photo: string | null;
+}
+
 export interface VendorDashboardCountsDto {
   totalBookings: number;
-  staffWorking: number;
-  staffOnLeave: number;
+  staffWorking: { count: number; staff: StaffMemberDto[] };
+  staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }

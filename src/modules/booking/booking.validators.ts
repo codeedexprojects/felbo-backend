@@ -60,6 +60,14 @@ export const barberBookingListQuerySchema = z.object({
   status: z
     .enum(['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'])
     .optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
 });
 
 export const cancelBookingByUserBodySchema = z.object({
@@ -68,6 +76,20 @@ export const cancelBookingByUserBodySchema = z.object({
 
 export const completeBookingBodySchema = z.object({
   verificationCode: z.string().regex(/^\d{4}$/, 'verificationCode must be a 4-digit number'),
+});
+
+export const userBookingListQuerySchema = z.object({
+  tab: z.enum(['upcoming', 'completed', 'cancelled']).default('upcoming'),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
 });
 
 export const adminBookingListQuerySchema = z.object({

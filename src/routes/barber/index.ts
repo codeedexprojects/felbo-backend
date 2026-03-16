@@ -5,6 +5,7 @@ import authRoutes from './auth.routes';
 import availabilityRoutes from './availability.routes';
 import slotBlockRoutes from './slotBlock.routes';
 import bookingRoutes from './booking.routes';
+import dashboardRoutes from './dashboard.routes';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use(authorize('BARBER'));
 router.use('/', availabilityRoutes);
 router.use('/', slotBlockRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/', dashboardRoutes);
 
 export default router;

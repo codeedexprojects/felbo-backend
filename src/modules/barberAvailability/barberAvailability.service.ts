@@ -247,13 +247,29 @@ export class BarberAvailabilityService {
       this.validateBreakOverlaps(breaks);
     }
 
-    const updated = await this.availabilityRepository.upsertTodayAvailability({
-      barberId,
-      shopId: barber.shopId,
-      date: todayDate,
-      isWorking: input.isWorking,
-      workingHours: input.workingHours,
-      breaks,
+    const updated = await withTransaction(async (session) => {
+      const result = await this.availabilityRepository.upsertTodayAvailability(
+        {
+          barberId,
+          shopId: barber.shopId,
+          date: todayDate,
+          isWorking: input.isWorking,
+          workingHours: input.workingHours,
+          breaks,
+        },
+        session,
+      );
+
+      if (result && result.presets.length === 0 && input.isWorking && input.workingHours) {
+        await this.availabilityRepository.atomicAddPreset(
+          barberId,
+          barber.shopId,
+          { name: 'Default', workingHours: input.workingHours, breaks },
+          session,
+        );
+      }
+
+      return result;
     });
 
     this.logger.info({
@@ -282,6 +298,12 @@ export class BarberAvailabilityService {
     const todayDate = this.getTodayDate();
     const nextDay = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
     return this.availabilityRepository.countWorkingByShopIds(shopIds, todayDate, nextDay);
+  }
+
+  async getWorkingBarberIdsByShopIds(shopIds: string[]): Promise<string[]> {
+    const todayDate = this.getTodayDate();
+    const nextDay = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
+    return this.availabilityRepository.findWorkingBarberIdsByShopIds(shopIds, todayDate, nextDay);
   }
 
   async getTodayDefault(barberId: string): Promise<Partial<AvailabilityDto>> {

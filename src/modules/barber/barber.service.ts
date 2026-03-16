@@ -847,6 +847,17 @@ export class BarberService {
     return this.barberRepository.countActiveByShopIds(shopIds);
   }
 
+  async getActiveStaffByShopIds(
+    shopIds: string[],
+  ): Promise<{ id: string; name: string; photo: string | null }[]> {
+    const barbers = await this.barberRepository.findActiveByShopIds(shopIds);
+    return barbers.map((b) => ({
+      id: b._id.toString(),
+      name: b.name,
+      photo: b.photo ?? null,
+    }));
+  }
+
   async getBarberServicesByShopId(shopId: string): Promise<BarberServiceLinkDto[]> {
     const links = await this.barberRepository.findBarberServicesByShopId(shopId);
     return links.map((l) => ({

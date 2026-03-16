@@ -101,4 +101,22 @@ export class BarberAvailabilityRepository {
       date: { $gte: todayStart, $lt: todayEnd },
     }).exec();
   }
+
+  async findWorkingBarberIdsByShopIds(
+    shopIds: string[],
+    todayStart: Date,
+    todayEnd: Date,
+  ): Promise<string[]> {
+    const docs = await BarberAvailabilityModel.find(
+      {
+        shopId: { $in: shopIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        isWorking: true,
+        date: { $gte: todayStart, $lt: todayEnd },
+      },
+      { barberId: 1 },
+    )
+      .lean<Pick<IBarberAvailability, 'barberId'>[]>()
+      .exec();
+    return docs.map((d) => d.barberId.toString());
+  }
 }

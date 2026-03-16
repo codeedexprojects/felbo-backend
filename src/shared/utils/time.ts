@@ -1,6 +1,17 @@
 import { toZonedTime } from 'date-fns-tz';
 
 export const SHOP_TIMEZONE = 'Asia/Kolkata';
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+export function getIstDayRangeUtc(): { start: Date; end: Date } {
+  const nowInIst = toZonedTime(new Date(), SHOP_TIMEZONE);
+  const startMs =
+    Date.UTC(nowInIst.getFullYear(), nowInIst.getMonth(), nowInIst.getDate()) - IST_OFFSET_MS;
+  return {
+    start: new Date(startMs),
+    end: new Date(startMs + 24 * 60 * 60 * 1000),
+  };
+}
 
 export function getTodayInIst(): Date {
   const nowInIst = toZonedTime(new Date(), SHOP_TIMEZONE);

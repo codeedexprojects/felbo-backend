@@ -217,11 +217,10 @@ export interface BarberBookingListItem {
   id: string;
   bookingNumber: string;
   userName: string;
+  userImage: string | null;
   date: Date;
   startTime: string;
-  endTime: string;
-  services: BookingServiceSnapshot[];
-  totalServiceAmount: number;
+  services: string[];
   status: string;
 }
 
@@ -231,6 +230,30 @@ export interface BarberBookingListResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface BarberBookingDetailDto {
+  id: string;
+  bookingNumber: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  status: string;
+  customer: {
+    name: string;
+    image: string | null;
+    gender: string | null;
+  };
+  services: Array<{
+    name: string;
+    durationMinutes: number;
+    price: number;
+  }>;
+  payment: {
+    total: number;
+    advancePaid: number;
+    remainingToCollect: number;
+  };
 }
 
 export type VendorBookingStatus =
@@ -246,6 +269,8 @@ export interface VendorBookingListParams {
   status?: VendorBookingStatus;
   page: number;
   limit: number;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface VendorBookingListItem {
@@ -289,6 +314,69 @@ export interface VendorBookingDetailDto {
     remainingAmount: number;
   };
   status: string;
+}
+
+export interface BarberDashboardStatsDto {
+  todayBookings: number;
+  completedBookings: number;
+}
+
+export interface BarberTodayBookingItem {
+  id: string;
+  bookingNumber: string;
+  userImage: string | null;
+  userName: string;
+  services: string[];
+  startTime: string;
+}
+
+export interface BarberTodayBookingsResponse {
+  bookings: BarberTodayBookingItem[];
+}
+
+export type UserBookingTab = 'upcoming' | 'completed' | 'cancelled';
+
+export interface UserBookingListItemV2 {
+  id: string;
+  bookingNumber: string;
+  shopName: string;
+  shopImage: string | null;
+  services: string[];
+  status: string;
+  date: Date;
+  startTime: string;
+}
+
+export interface UserBookingListResponseV2 {
+  bookings: UserBookingListItemV2[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface UserBookingDetailDto {
+  id: string;
+  bookingNumber: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  status: string;
+  shop: {
+    id: string;
+    name: string;
+    image: string | null;
+    address: string;
+  };
+  services: Array<{
+    name: string;
+    amount: number;
+  }>;
+  payment: {
+    advancePaid: number;
+    total: number;
+    remainingAmount: number;
+  };
 }
 
 export interface AdminBookingDetailDto {
