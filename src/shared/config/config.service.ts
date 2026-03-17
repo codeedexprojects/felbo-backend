@@ -21,6 +21,16 @@ function getEnvInt(key: string, fallback: number): number {
   return parsed;
 }
 
+function getEnvFloat(key: string, fallback: number): number {
+  const value = process.env[key];
+  if (value === undefined) return fallback;
+  const parsed = parseFloat(value);
+  if (isNaN(parsed)) {
+    throw new Error(`Environment variable ${key} must be a number, got: ${value}`);
+  }
+  return parsed;
+}
+
 const isProduction = getEnv('NODE_ENV', 'development') === 'production';
 
 export const config = {
@@ -59,6 +69,8 @@ export const config = {
     keyId: getEnv('RAZORPAY_KEY_ID', '') || 'rzp_test_087135',
     keySecret: getEnv('RAZORPAY_KEY_SECRET', '') || 'rzp_test_087135',
     webhookSecret: getEnv('RAZORPAY_WEBHOOK_SECRET', '') || 'rzp_test_087135',
+    chargePercentage: getEnvFloat('RAZORPAY_CHARGE_PERCENTAGE', 2),
+    taxPercentage: getEnvFloat('RAZORPAY_TAX_PERCENTAGE', 18),
   },
 
   vendor: {
