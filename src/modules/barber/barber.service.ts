@@ -132,7 +132,7 @@ export class BarberService {
     const shop = await this.shopService.getShopById(input.shopId);
     if (shop.vendorId !== vendorId)
       throw new ForbiddenError('You do not have access to this shop.');
-    if (shop.status === 'PENDING_APPROVAL')
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED')
       throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const barber = await this.barberRepository.create({
