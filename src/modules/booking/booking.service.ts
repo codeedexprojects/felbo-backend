@@ -486,7 +486,6 @@ export class BookingService {
     const totalServiceAmount = dbServices.reduce((sum, s) => sum + s.price, 0);
     const remainingAmount = totalServiceAmount - advanceAmountRupees;
 
-    // 12. Create SlotLock (5-min TTL handled by MongoDB)
     const lockExpiresAt = new Date(Date.now() + SLOT_LOCK_MINUTES * 60 * 1000);
     await this.bookingRepository.createSlotLock({
       shopId: input.shopId,
@@ -498,8 +497,9 @@ export class BookingService {
       expiresAt: lockExpiresAt,
     });
 
-    // 13. Generate unique booking number and 4-digit verification code
-    const bookingNumber = `BK${Date.now()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+    const timePart = (Date.now() % 46656).toString(36).padStart(3, '0').toUpperCase();
+    const randomPart = Math.random().toString(36).slice(2, 5).toUpperCase().padEnd(3, '0');
+    const bookingNumber = `${timePart}${randomPart}`;
     const verificationCode = String(Math.floor(1000 + Math.random() * 9000));
 
     const responseServices = input.serviceIds.map((serviceId) => {
@@ -514,7 +514,6 @@ export class BookingService {
     });
 
     if (input.paymentMethod === 'FELBO_COINS') {
-      // 14a. FelboCoin payment: validate coins and confirm booking atomically
       if (user.felboCoinBalance < coinRedeemThreshold) {
         throw new ValidationError(
           `Insufficient FelboCoin balance. You need at least ${coinRedeemThreshold} coins to use FelboCoin payment.`,
@@ -864,12 +863,14 @@ export class BookingService {
     const bookingStartMinutes = this.toMinutes(booking.startTime);
     const minutesUntilBooking = bookingStartMinutes - nowMinutes;
 
-    // Guard: disallow cancelling a booking whose slot has already started or passed
     if (minutesUntilBooking <= 0) {
       throw new ValidationError('Cannot cancel a booking that has already started or passed.');
     }
 
-    const isEarlyCancel = minutesUntilBooking > freeCancelWindowMinutes;
+    const createdAtTime = booking.createdAt ? booking.createdAt.getTime() : Date.now();
+    const elapsedMinutesSinceBooking = (Date.now() - createdAtTime) / (1000 * 60);
+
+    const isEarlyCancel = elapsedMinutesSinceBooking <= freeCancelWindowMinutes;
     const refundCoins = isEarlyCancel ? refundCoinsConfig : 0;
 
     // Cancel and credit coins atomically so they never get out of sync
@@ -890,7 +891,6 @@ export class BookingService {
       );
 
       if (!cancelled || !cancelled.cancellation) {
-        // Another concurrent request already changed the status out of CONFIRMED
         throw new ConflictError(
           'Booking could not be cancelled — it may have already been updated.',
         );
@@ -1404,6 +1404,7 @@ export class BookingService {
         date: b.date,
         startTime: b.startTime,
         otp: b.verificationCode,
+        isReviewed: b.isReviewed,
       })),
       total,
       page,
