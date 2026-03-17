@@ -567,7 +567,9 @@ export class BookingRepository {
       cancelledAt: Date;
       cancelledBy: string;
       reason: string;
+      refundAmount: number;
       refundCoins: number;
+      refundType: string;
       refundStatus: string;
     } | null;
   } | null> {

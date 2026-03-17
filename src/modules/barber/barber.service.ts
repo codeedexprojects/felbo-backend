@@ -186,7 +186,7 @@ export class BarberService {
 
     const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
 
-    let services: Array<{ name: string; durationMinutes: number }> = [];
+    let services: Array<{ id: string; name: string; durationMinutes: number }> = [];
     if (links.length > 0) {
       const durationMap = new Map(links.map((l) => [l.serviceId.toString(), l.durationMinutes]));
       const serviceDetails = await this.shopService.getActiveServicesByIds(
@@ -194,6 +194,7 @@ export class BarberService {
         barber.shopId.toString(),
       );
       services = serviceDetails.map((s) => ({
+        id: s.id,
         name: s.name,
         durationMinutes: durationMap.get(s.id) ?? 0,
       }));

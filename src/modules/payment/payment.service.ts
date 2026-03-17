@@ -9,12 +9,14 @@ import {
   CreateBookingPaymentInput,
 } from './payment.types';
 import { ValidationError, NotFoundError } from '../../shared/errors/index';
+import { IssueService } from '../issue/issue.service';
 
 export default class PaymentService {
   private readonly razorpay: InstanceType<typeof Razorpay>;
 
   constructor(
     private readonly paymentRepository: PaymentRepository,
+    private readonly getIssueService: () => IssueService,
     private readonly razorpayKeyId: string,
     private readonly razorpayKeySecret: string,
     private readonly webhookSecret: string,
@@ -24,6 +26,10 @@ export default class PaymentService {
       key_id: this.razorpayKeyId,
       key_secret: this.razorpayKeySecret,
     });
+  }
+
+  private get issueService(): IssueService {
+    return this.getIssueService();
   }
 
   async createBookingAdvanceOrder(input: CreateBookingPaymentInput): Promise<CreateOrderResult> {
@@ -288,6 +294,9 @@ export default class PaymentService {
             await payment.save();
           }
         }
+
+        await this.issueService.markIssueRefundCompleted(refundEntity.id);
+
         this.logger.info({
           action: 'REFUND_PROCESSED',
           module: 'payment',

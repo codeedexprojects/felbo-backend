@@ -85,6 +85,13 @@ function facetBranch(razorpayFeeRate: number, dateGte?: Date): PipelineStage.Fac
       bookingCount: { $sum: 1 },
     },
   });
+  pipeline.push({
+    $project: {
+      _id: 0,
+      revenue: { $round: ['$revenue', 2] },
+      bookingCount: 1,
+    },
+  });
   return pipeline;
 }
 
@@ -158,7 +165,7 @@ export class FinanceRepository {
         },
       },
       { $sort: { _id: 1 } },
-      { $project: { _id: 0, date: '$_id', revenue: 1, bookingCount: 1 } },
+      { $project: { _id: 0, date: '$_id', revenue: { $round: ['$revenue', 2] }, bookingCount: 1 } },
     ]).exec();
 
     return results as RevenueChartPointDto[];
@@ -247,7 +254,7 @@ export class FinanceRepository {
               registrationType: '$vendor.registrationType',
               shopCount: 1,
               bookingCount: 1,
-              revenue: 1,
+              revenue: { $round: ['$revenue', 2] },
             },
           },
         ],
@@ -492,7 +499,7 @@ export class FinanceRepository {
               registrationType: '$vendor.registrationType',
               shopCount: 1,
               bookingCount: 1,
-              revenue: 1,
+              revenue: { $round: ['$revenue', 2] },
             },
           },
         ],
