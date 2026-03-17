@@ -355,6 +355,7 @@ export interface UserBookingListItemV2 {
   status: string;
   date: Date;
   startTime: string;
+  otp: string | null;
 }
 
 export interface UserBookingListResponseV2 {
@@ -373,11 +374,13 @@ export interface UserBookingDetailDto {
   endTime: string;
   status: string;
   paymentMethod: string;
+  otp: string;
   shop: {
     id: string;
     name: string;
     image: string | null;
     address: string;
+    coordinates: [number, number] | null;
   };
   services: Array<{
     name: string;
