@@ -175,12 +175,7 @@ export interface AdminBookingListResponse {
   totalPages: number;
 }
 
-export type CancellationReason =
-  | 'BARBER_SICK'
-  | 'EMERGENCY'
-  | 'SHOP_CLOSING'
-  | 'EQUIPMENT_ISSUE'
-  | 'OTHER';
+export type CancellationReason = string;
 
 export interface CancelBookingByUserResponse {
   booking: {
