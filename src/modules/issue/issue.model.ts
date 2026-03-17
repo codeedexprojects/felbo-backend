@@ -55,7 +55,7 @@ const bookingIssueSchema = new Schema<IBookingIssue>(
     },
     refundStatus: {
       type: String,
-      enum: ['NONE', 'PENDING', 'ISSUED', 'FAILED'],
+      enum: ['NONE', 'PENDING', 'ISSUED', 'COMPLETED', 'FAILED'],
       default: 'NONE',
     },
   },

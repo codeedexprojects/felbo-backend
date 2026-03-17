@@ -12,6 +12,14 @@ export class IssueRepository {
     return BookingIssueModel.findByIdAndUpdate(id, update, { returnDocument: 'after' }).exec();
   }
 
+  markRefundCompleted(refundId: string): Promise<IBookingIssue | null> {
+    return BookingIssueModel.findOneAndUpdate(
+      { refundId },
+      { refundStatus: 'COMPLETED' },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
   async create(data: {
     bookingId: string;
     userId: string;
@@ -94,6 +102,10 @@ export class IssueRepository {
 
   async findById(id: string): Promise<PopulatedBookingIssue | null> {
     return BookingIssueModel.findById(id)
+      .populate<{ bookingId: PopulatedBookingIssue['bookingId'] }>(
+        'bookingId',
+        'bookingNumber paymentMethod advancePaid',
+      )
       .populate<{ userId: PopulatedBookingIssue['userId'] }>('userId', 'name phone')
       .populate<{ vendorId: PopulatedBookingIssue['vendorId'] }>(
         'vendorId',
