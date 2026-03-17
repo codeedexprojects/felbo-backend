@@ -66,7 +66,7 @@ export default class ShopRepository {
         isAvailable: true,
         isPrimary: false,
         status: 'PENDING_APPROVAL',
-        onboardingStatus: 'COMPLETED',
+        onboardingStatus: 'PENDING_SERVICES',
       },
     ]);
     return shop;
@@ -120,9 +120,7 @@ export default class ShopRepository {
     return ShopModel.countDocuments({ status: 'PENDING_APPROVAL' }).exec();
   }
 
-  async findPendingById(
-    shopId: string,
-  ): Promise<
+  async findPendingById(shopId: string): Promise<
     | (IShop & {
         vendor: { _id: mongoose.Types.ObjectId; ownerName: string; phone: string; email?: string };
       })

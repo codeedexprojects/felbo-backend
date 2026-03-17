@@ -143,7 +143,7 @@ export default class ShopService {
   }
 
   private assertShopActive(shop: IShop): void {
-    if (shop.status === 'PENDING_APPROVAL') {
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED') {
       throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
     }
   }
