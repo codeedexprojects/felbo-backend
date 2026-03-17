@@ -154,13 +154,4 @@ export const DEFAULT_CONFIGS: SeedConfigItem[] = [
     description:
       'Coins credited to user when they cancel early (before the free cancellation window)',
   },
-  // Payment Settings
-  {
-    key: CONFIG_KEYS.RAZORPAY_FEE_PERCENT,
-    value: '2.36',
-    valueType: 'number',
-    category: 'payment_settings',
-    displayName: 'Razorpay Fee (%)',
-    description: 'Razorpay transaction fee percentage (2% + 18% GST = 2.36%) deducted from profit',
-  },
 ];
