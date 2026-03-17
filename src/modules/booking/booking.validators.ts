@@ -51,7 +51,7 @@ export const confirmBookingBodySchema = z.object({
 });
 
 export const cancelBookingByBarberBodySchema = z.object({
-  reason: z.enum(['BARBER_SICK', 'EMERGENCY', 'SHOP_CLOSING', 'EQUIPMENT_ISSUE', 'OTHER']),
+  reason: z.string().min(5, 'Reason is required').max(150),
 });
 
 export const barberBookingListQuerySchema = z.object({
@@ -71,7 +71,7 @@ export const barberBookingListQuerySchema = z.object({
 });
 
 export const cancelBookingByUserBodySchema = z.object({
-  reason: z.string().min(1, 'Reason is required').max(500),
+  reason: z.string().min(5, 'Reason is required').max(150),
 });
 
 export const completeBookingBodySchema = z.object({
