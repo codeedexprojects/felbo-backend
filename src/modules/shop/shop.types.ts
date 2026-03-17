@@ -216,6 +216,7 @@ export interface VendorShopListDto {
   serviceCount: number;
   barberCount: number;
   onboardingStatus: OnboardingStatus;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
 }
 
 export interface NearbyShopDto extends ShopDto {
