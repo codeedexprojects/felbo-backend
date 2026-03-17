@@ -66,7 +66,7 @@ export default class ShopRepository {
         isAvailable: true,
         isPrimary: false,
         status: 'PENDING_APPROVAL',
-        onboardingStatus: 'COMPLETED',
+        onboardingStatus: 'PENDING_SERVICES',
       },
     ]);
     return shop;
