@@ -9,3 +9,4 @@ coverage/
 .idea/
 felbo-app-firebase-adminsdk.json
 test.html
+output.txt
