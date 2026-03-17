@@ -221,6 +221,7 @@ export default class ShopService {
         address: this.formatAddress(shop.address),
         serviceCount: serviceCounts.get(shopId) || 0,
         barberCount: barberCounts.get(shopId) || 0,
+        onboardingStatus: shop.onboardingStatus,
       };
     });
   }

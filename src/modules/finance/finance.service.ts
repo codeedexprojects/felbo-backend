@@ -10,12 +10,15 @@ import {
 } from './finance.types';
 import VendorService from '../vendor/vendor.service';
 import ShopService from '../shop/shop.service';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 export class FinanceService {
   constructor(
     private readonly financeRepository: FinanceRepository,
     private readonly getVendorService: () => VendorService,
     private readonly getShopService: () => ShopService,
+    private readonly configService: ConfigService,
   ) {}
 
   private get vendorService(): VendorService {
@@ -26,9 +29,16 @@ export class FinanceService {
     return this.getShopService();
   }
 
+  private async getRazorpayFeeRate(): Promise<number> {
+    const feePercent = await this.configService.getValueAsNumber(CONFIG_KEYS.RAZORPAY_FEE_PERCENT);
+    return feePercent / 100;
+  }
+
   async getSummary(): Promise<FinanceSummaryDto> {
+    const razorpayFeeRate = await this.getRazorpayFeeRate();
+
     const [stats, vendorIds, refundStats] = await Promise.all([
-      this.financeRepository.getSummaryStats(),
+      this.financeRepository.getSummaryStats(razorpayFeeRate),
       this.vendorService.getAssociationVendorIds(),
       this.financeRepository.getRefundStats(),
     ]);
@@ -47,13 +57,18 @@ export class FinanceService {
   }
 
   async getRevenueChart(from: Date, to: Date): Promise<RevenueChartPointDto[]> {
-    return this.financeRepository.getRevenueChartData(from, to);
+    const razorpayFeeRate = await this.getRazorpayFeeRate();
+    return this.financeRepository.getRevenueChartData(from, to, razorpayFeeRate);
   }
 
   async getVendorRevenueTable(
     params: VendorRevenueTableParams,
   ): Promise<VendorRevenueTableResponse> {
-    const { vendors, total } = await this.financeRepository.getVendorRevenueTable(params);
+    const razorpayFeeRate = await this.getRazorpayFeeRate();
+    const { vendors, total } = await this.financeRepository.getVendorRevenueTable(
+      params,
+      razorpayFeeRate,
+    );
     return {
       vendors,
       total,
@@ -64,11 +79,12 @@ export class FinanceService {
   }
 
   async getAssocSummary(): Promise<AssocFinanceSummaryDto> {
+    const razorpayFeeRate = await this.getRazorpayFeeRate();
     const vendorIds = await this.vendorService.getAssociationVendorIds();
     const shopIds = await this.shopService.getShopIdsByVendorIds(
       vendorIds.map((id) => id.toString()),
     );
-    const stats = await this.financeRepository.getAssocSummaryStats(shopIds);
+    const stats = await this.financeRepository.getAssocSummaryStats(shopIds, razorpayFeeRate);
     return {
       vendorCount: vendorIds.length,
       today: { bookingCount: stats.today.bookingCount, revenue: stats.today.bookingCount * 2 },
@@ -87,6 +103,7 @@ export class FinanceService {
   async getAssocVendorRevenueTable(
     params: VendorRevenueTableParams,
   ): Promise<VendorRevenueTableResponse> {
+    const razorpayFeeRate = await this.getRazorpayFeeRate();
     const vendorIds = await this.vendorService.getAssociationVendorIds();
     const shopIds = await this.shopService.getShopIdsByVendorIds(
       vendorIds.map((id) => id.toString()),
@@ -94,6 +111,7 @@ export class FinanceService {
     const { vendors, total } = await this.financeRepository.getAssocVendorRevenueTable(
       shopIds,
       params,
+      razorpayFeeRate,
     );
     return {
       vendors,

@@ -215,6 +215,7 @@ export interface VendorShopListDto {
   address: string;
   serviceCount: number;
   barberCount: number;
+  onboardingStatus: OnboardingStatus;
 }
 
 export interface NearbyShopDto extends ShopDto {
