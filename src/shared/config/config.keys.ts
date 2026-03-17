@@ -25,8 +25,6 @@ export const CONFIG_KEYS = {
   COIN_EARN_PER_BOOKING: 'coin_earn_per_booking',
   COIN_REDEEM_THRESHOLD: 'coin_redeem_threshold',
   COIN_CANCELLATION_REFUND_COINS: 'coin_cancellation_refund_coins',
-  // Payment
-  RAZORPAY_FEE_PERCENT: 'razorpay_fee_percent',
 } as const;
 
 export type ConfigKey = (typeof CONFIG_KEYS)[keyof typeof CONFIG_KEYS];

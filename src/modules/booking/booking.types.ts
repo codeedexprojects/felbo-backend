@@ -356,6 +356,7 @@ export interface UserBookingListItemV2 {
   date: Date;
   startTime: string;
   otp: string | null;
+  isReviewed: boolean;
 }
 
 export interface UserBookingListResponseV2 {

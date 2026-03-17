@@ -463,6 +463,7 @@ export class BookingRepository {
       date: Date;
       startTime: string;
       verificationCode: string | null;
+      isReviewed: boolean;
     }>;
     total: number;
   }> {
@@ -497,6 +498,14 @@ export class BookingRepository {
               },
             },
             {
+              $lookup: {
+                from: 'reviews',
+                localField: '_id',
+                foreignField: 'bookingId',
+                as: 'reviewsData',
+              },
+            },
+            {
               $project: {
                 bookingNumber: 1,
                 shopName: 1,
@@ -510,6 +519,7 @@ export class BookingRepository {
                 verificationCode: {
                   $cond: [{ $eq: ['$status', 'CONFIRMED'] }, '$verificationCode', null],
                 },
+                isReviewed: { $gt: [{ $size: '$reviewsData' }, 0] },
               },
             },
           ],
@@ -618,7 +628,12 @@ export class BookingRepository {
       {
         $facet: {
           todayBookings: [
-            { $match: { date: { $gte: todayStart, $lt: todayEnd }, status: 'CONFIRMED' } },
+            {
+              $match: {
+                date: { $gte: todayStart, $lt: todayEnd },
+                status: { $in: ['CONFIRMED', 'COMPLETED'] },
+              },
+            },
             { $count: 'count' },
           ],
           completedBookings: [
