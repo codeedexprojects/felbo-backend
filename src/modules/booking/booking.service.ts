@@ -1368,6 +1368,7 @@ export class BookingService {
       date: booking.date,
       startTime: booking.startTime,
       endTime: booking.endTime,
+      barberName: booking.barberName,
       user: {
         name: booking.userName,
         profileUrl: booking.userProfileUrl,
@@ -1479,6 +1480,7 @@ export class BookingService {
       status: booking.status,
       paymentMethod: booking.paymentMethod,
       otp: booking.verificationCode,
+      barberName: booking.barberName,
       shop: {
         id: booking.shopId.toString(),
         name: booking.shopName,
