@@ -39,7 +39,11 @@ export class BookingController {
     const { serviceIds: rawServiceIds } = getBarbersForServicesQuerySchema.parse(req.query);
 
     const serviceIds = rawServiceIds.split(',').map((id) => id.trim());
-    const result = await this.bookingService.getBarbersForServices(shopId, serviceIds);
+    const result = await this.bookingService.getBarbersForServices(
+      shopId,
+      serviceIds,
+      req.user!.sub,
+    );
 
     res.json({ success: true, data: result });
   };

@@ -154,4 +154,21 @@ export const DEFAULT_CONFIGS: SeedConfigItem[] = [
     description:
       'Coins credited to user when they cancel early (before the free cancellation window)',
   },
+  // Vendor Registration
+  {
+    key: CONFIG_KEYS.VENDOR_REGISTRATION_FEE,
+    value: '50',
+    valueType: 'number',
+    category: 'vendor_settings',
+    displayName: 'Vendor Registration Fee (₹)',
+    description: 'One-time registration fee charged to independent vendors (excluding GST)',
+  },
+  {
+    key: CONFIG_KEYS.VENDOR_REGISTRATION_GST_PERCENTAGE,
+    value: '18',
+    valueType: 'number',
+    category: 'vendor_settings',
+    displayName: 'Vendor Registration GST (%)',
+    description: 'GST percentage applied on top of the vendor registration fee',
+  },
 ];

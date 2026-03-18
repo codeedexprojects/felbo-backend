@@ -107,9 +107,15 @@ export class BookingService {
   async getBarbersForServices(
     shopId: string,
     serviceIds: string[],
+    userId: string,
   ): Promise<GetBarbersForServicesResponse> {
-    const barbers = await this.barberService.getBarbersForServices(shopId, serviceIds);
-    return { barbers };
+    const [barbers, bookingAmount, user] = await Promise.all([
+      this.barberService.getBarbersForServices(shopId, serviceIds),
+      this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
+      this.userService.getUserById(userId),
+    ]);
+
+    return { barbers, bookingAmount, userCoinBalance: user.felboCoinBalance };
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {

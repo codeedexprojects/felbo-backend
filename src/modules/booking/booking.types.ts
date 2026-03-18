@@ -6,6 +6,8 @@ export interface GetBarbersForServicesResponse {
     rating: { average: number; count: number };
     isAvailable: boolean;
   }[];
+  bookingAmount: number;
+  userCoinBalance: number;
 }
 
 export interface GetSlotsInput {

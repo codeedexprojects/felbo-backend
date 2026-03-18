@@ -33,6 +33,7 @@ import {
   VendorBookingStatus,
   VendorBookingDetailDto,
 } from '../booking/booking.types';
+import { RegistrationPaymentSummaryResponse } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
@@ -50,6 +51,8 @@ import {
   ValidationError,
 } from '../../shared/errors/index';
 import { withTransaction } from '../../shared/database/transaction';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -66,7 +69,7 @@ export default class VendorService {
     private readonly getBarberService: () => BarberService,
     private readonly getBookingService: () => BookingService,
     private readonly getAvailabilityService: () => BarberAvailabilityService,
-    private readonly registrationFee: number,
+    private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {}
 
@@ -360,7 +363,7 @@ export default class VendorService {
       }
     }
 
-    const amount = this.registrationFee;
+    const amount = await this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE);
 
     const { orderId } = await this.paymentService.createVendorRegistrationOrder({
       phone: input.phone,
@@ -409,10 +412,11 @@ export default class VendorService {
     });
 
     await withTransaction(async (session) => {
+      const fee = await this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE);
       await this.vendorRepository.updateRegistrationPayment(
         vendor._id.toString(),
         {
-          amount: this.registrationFee,
+          amount: fee,
           paymentId: input.paymentId,
           paidAt: new Date(),
         },
@@ -435,6 +439,18 @@ export default class VendorService {
     });
 
     return { message: 'Payment confirmed. Application submitted for verification.' };
+  }
+
+  async getRegistrationPaymentSummary(): Promise<RegistrationPaymentSummaryResponse> {
+    const [registrationFee, gstPercentage] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE),
+      this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_GST_PERCENTAGE),
+    ]);
+
+    const gstAmount = Math.round(registrationFee * gstPercentage) / 100;
+    const total = Number((registrationFee + gstAmount).toFixed(2));
+
+    return { registrationFee, gstPercentage, gstAmount, total };
   }
 
   async getRegistrationStatus(vendorId: string): Promise<RegistrationStatusResponse> {
