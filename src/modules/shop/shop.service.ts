@@ -686,6 +686,10 @@ export default class ShopService {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
   }
 
+  getAllPhotoUrls(): Promise<string[]> {
+    return this.shopRepository.getAllPhotoUrls();
+  }
+
   async getPendingShopDetails(shopId: string): Promise<PendingShopDetailsDto> {
     const shop = await this.shopRepository.findPendingById(shopId);
     if (!shop) throw new NotFoundError('Shop not found or not pending approval.');

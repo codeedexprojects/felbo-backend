@@ -7,10 +7,12 @@ import slotBlockRoutes from './slotBlock.routes';
 import bookingRoutes from './booking.routes';
 import dashboardRoutes from './dashboard.routes';
 import profileRoutes from './profile.routes';
+import avatarRoutes from './avatar.routes';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/avatars', avatarRoutes);
 
 router.use(authenticate);
 router.use(authorize('BARBER'));

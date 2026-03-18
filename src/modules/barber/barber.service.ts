@@ -1010,4 +1010,8 @@ export class BarberService {
     const links = await this.barberRepository.findBarberServicesByBarberIds(barberIds);
     return new Set(links.map((l) => l.serviceId.toString()));
   }
+
+  getAllPhotoUrls(): Promise<string[]> {
+    return this.barberRepository.getAllPhotoUrls();
+  }
 }
