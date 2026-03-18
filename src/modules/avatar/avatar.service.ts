@@ -1,7 +1,7 @@
 import { AvatarRepository } from './avatar.repository';
 import { AvatarDto, DeleteAvatarResponse, ListAvatarsResponse } from './avatar.types';
 import { IAvatar } from './avatar.model';
-import { NotFoundError, ValidationError } from '@shared/errors';
+import { NotFoundError, ValidationError } from '../../shared/errors';
 import UploadService from '../upload/upload.service';
 
 export class AvatarService {
