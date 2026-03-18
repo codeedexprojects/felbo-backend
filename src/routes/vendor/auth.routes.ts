@@ -9,6 +9,7 @@ router.post('/send-otp', vendorController.sendOtp);
 router.post('/login/verify-otp', vendorController.loginVerifyOtp);
 router.post('/register/verify-otp', vendorController.registerVerifyOtp);
 router.post('/register/association', vendorController.registerAssociation);
+router.get('/register/independent/payment-summary', vendorController.getRegistrationPaymentSummary);
 router.post('/register/independent/initiate', vendorController.registerIndependentInitiate);
 router.post('/register/independent/confirm', vendorController.registerIndependentConfirm);
 
