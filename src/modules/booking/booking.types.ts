@@ -285,6 +285,7 @@ export interface VendorBookingListItem {
   bookingNumber: string;
   userName: string;
   userImage: string | null;
+  barberName: string;
   date: Date;
   startTime: string;
   endTime: string;
@@ -348,6 +349,7 @@ export interface UserBookingListItemV2 {
   bookingNumber: string;
   shopName: string;
   shopImage: string | null;
+  barberName: string;
   services: string[];
   status: string;
   date: Date;
