@@ -524,4 +524,15 @@ export default class ShopRepository {
       .exec()
       .then(() => undefined);
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const shops = await ShopModel.find({}, { photos: 1 }).lean().exec();
+    const urls: string[] = [];
+    for (const s of shops) {
+      for (const url of s.photos ?? []) {
+        if (url) urls.push(url);
+      }
+    }
+    return urls;
+  }
 }

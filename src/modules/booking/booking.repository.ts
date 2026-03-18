@@ -641,8 +641,8 @@ export class BookingRepository {
           completedBookings: [
             {
               $match: {
+                date: { $gte: todayStart, $lt: todayEnd },
                 status: 'COMPLETED',
-                completedAt: { $gte: todayStart, $lt: todayEnd },
               },
             },
             { $count: 'count' },

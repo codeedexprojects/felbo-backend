@@ -94,6 +94,17 @@ export default class UploadService {
     return { verified: true, viewUrl, permanentUrl };
   }
 
+  async deleteObjectByKey(key: string): Promise<void> {
+    await withRetry(() =>
+      this.s3.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: { Objects: [{ Key: key }], Quiet: true },
+        }),
+      ),
+    );
+  }
+
   async runCleanupJob(): Promise<void> {
     this.logger.info({ action: 'CLEANUP_JOB_STARTED', module: 'upload' });
 
