@@ -412,6 +412,13 @@ export interface UpdateProfileResponse {
   profilePhoto: string | null;
 }
 
+export interface RegistrationPaymentSummaryResponse {
+  registrationFee: number;
+  gstPercentage: number;
+  gstAmount: number;
+  total: number;
+}
+
 export interface StaffMemberDto {
   id: string;
   name: string;
