@@ -307,6 +307,7 @@ export interface VendorBookingDetailDto {
   date: Date;
   startTime: string;
   endTime: string;
+  barberName: string;
   user: {
     name: string;
     profileUrl: string | null;
@@ -375,6 +376,7 @@ export interface UserBookingDetailDto {
   status: string;
   paymentMethod: string;
   otp: string;
+  barberName: string;
   shop: {
     id: string;
     name: string;
