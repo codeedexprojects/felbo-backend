@@ -125,3 +125,14 @@ export const listSlotBlocksQuerySchema = z.object({
   date: z.string().date('Invalid date format. Use YYYY-MM-DD').optional(),
   status: z.enum(['ACTIVE', 'RELEASED']).optional(),
 });
+
+export const fcmTokenSchema = z.object({
+  token: z.string({ error: 'Token is required' }).min(1, 'Token is required'),
+});
+
+export const testNotificationSchema = z.object({
+  voiceEnabled: z.boolean().optional().default(false),
+  customerName: z.string().optional().default('Test Customer'),
+  serviceName: z.string().optional().default('Haircut'),
+  appointmentTime: z.string().optional().default('10:30 AM'),
+});

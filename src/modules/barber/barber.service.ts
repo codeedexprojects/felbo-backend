@@ -29,6 +29,8 @@ import {
   SlotBlockRange,
   PublicBarberDto,
   BarberProfileDto,
+  TestNotificationInput,
+  TestNotificationResult,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -52,6 +54,11 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { formatRating } from '../../shared/utils/rating';
 import { getCurrentIstDate, getTodayInIst } from '../../shared/utils/time';
+import { sendFcmNotification, FCM_CHANNELS } from '../../shared/notification/fcm.service';
+import {
+  synthesiseMalayalamSpeech,
+  buildBookingTtsText,
+} from '../../shared/notification/tts.service';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -1011,5 +1018,71 @@ export class BarberService {
     );
 
     return serviceIds;
+  }
+
+  async registerFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.addFcmToken(barberId, token);
+  }
+
+  async unregisterFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.removeFcmToken(barberId, token);
+  }
+
+  async sendTestNotification(
+    barberId: string,
+    input: TestNotificationInput,
+  ): Promise<TestNotificationResult> {
+    const tokens = await this.barberRepository.getFcmTokens(barberId);
+    if (!tokens.length) {
+      throw new NotFoundError('No FCM tokens registered. Please register a token first.');
+    }
+
+    const ttsText = buildBookingTtsText();
+
+    const fcmData: Record<string, string> = {
+      type: 'NEW_BOOKING',
+      customerName: input.customerName,
+      serviceName: input.serviceName,
+      appointmentTime: input.appointmentTime,
+      ttsText,
+    };
+
+    let audioUrl: string | undefined;
+    if (input.voiceEnabled) {
+      try {
+        const ttsResult = await synthesiseMalayalamSpeech(ttsText);
+        audioUrl = ttsResult.audioUrl;
+        fcmData.audioUrl = audioUrl;
+      } catch (err) {
+        this.logger.warn('TTS generation failed in test notification', {
+          barberId,
+          error: (err as Error).message,
+          stack: (err as Error).stack,
+        });
+      }
+    }
+
+    const result = await sendFcmNotification({
+      tokens,
+      channel: FCM_CHANNELS.BOOKING,
+      title: `New Booking from ${input.customerName}`,
+      body: `${input.serviceName} at ${input.appointmentTime}`,
+      data: fcmData,
+    });
+
+    if (result.invalidTokens.length) {
+      await this.barberRepository.pruneInvalidFcmTokens(result.invalidTokens);
+    }
+
+    this.logger.info({
+      action: 'BARBER_TEST_NOTIFICATION_SENT',
+      module: 'barber',
+      barberId,
+      successCount: result.successCount,
+      failureCount: result.failureCount,
+      voiceEnabled: input.voiceEnabled,
+    });
+
+    return { successCount: result.successCount, failureCount: result.failureCount, audioUrl };
   }
 }

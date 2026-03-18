@@ -19,6 +19,7 @@ export interface IBarber extends Document {
   isAvailable: boolean;
   createdAt: Date;
   updatedAt: Date;
+  fcmTokens: string[];
 }
 
 const barberSchema = new Schema<IBarber>(
@@ -43,6 +44,11 @@ const barberSchema = new Schema<IBarber>(
       default: 'ACTIVE',
     },
     isAvailable: { type: Boolean, default: true },
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
   },
   { timestamps: true },
 );

@@ -230,3 +230,16 @@ export interface PublicBarberDto {
   rating: { average: number; count: number };
   isAvailable: boolean;
 }
+
+export interface TestNotificationInput {
+  voiceEnabled: boolean;
+  customerName: string;
+  serviceName: string;
+  appointmentTime: string;
+}
+
+export interface TestNotificationResult {
+  successCount: number;
+  failureCount: number;
+  audioUrl?: string;
+}

@@ -442,4 +442,27 @@ export class BarberRepository {
     }
     return countsMap;
   }
+
+  addFcmToken(barberId: string, token: string): Promise<unknown> {
+    return BarberModel.updateOne({ _id: barberId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(barberId: string, token: string): Promise<unknown> {
+    return BarberModel.updateOne({ _id: barberId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  async getFcmTokens(barberId: string): Promise<string[]> {
+    const doc = await BarberModel.findById(barberId, { fcmTokens: 1 })
+      .lean<{ fcmTokens?: string[] }>()
+      .exec();
+    return doc?.fcmTokens ?? [];
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    if (!tokens.length) return;
+    await BarberModel.updateMany(
+      { fcmTokens: { $in: tokens } },
+      { $pull: { fcmTokens: { $in: tokens } } },
+    ).exec();
+  }
 }
