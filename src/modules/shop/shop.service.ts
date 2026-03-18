@@ -218,6 +218,7 @@ export default class ShopService {
       return {
         id: shopId,
         name: shop.name,
+        imageUrl: shop.photos?.[0] || null,
         address: this.formatAddress(shop.address),
         serviceCount: serviceCounts.get(shopId) || 0,
         barberCount: barberCounts.get(shopId) || 0,

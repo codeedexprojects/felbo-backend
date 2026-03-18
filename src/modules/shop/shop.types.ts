@@ -212,6 +212,7 @@ export interface VendorShopDto extends ShopDto {
 export interface VendorShopListDto {
   id: string;
   name: string;
+  imageUrl: string | null;
   address: string;
   serviceCount: number;
   barberCount: number;
