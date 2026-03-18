@@ -161,6 +161,12 @@ export class BarberRepository {
     return BarberServiceModel.find({ barberId, isActive: true }).lean<IBarberService[]>().exec();
   }
 
+  findBarberServicesByBarberIds(barberIds: string[]): Promise<IBarberService[]> {
+    return BarberServiceModel.find({ barberId: { $in: barberIds }, isActive: true })
+      .lean<IBarberService[]>()
+      .exec();
+  }
+
   findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ shopId, isActive: true }).lean<IBarberService[]>().exec();
   }

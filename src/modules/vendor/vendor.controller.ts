@@ -58,6 +58,15 @@ export default class VendorController {
     });
   };
 
+  getRegistrationPaymentSummary = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.vendorService.getRegistrationPaymentSummary();
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   registerIndependentInitiate = async (req: Request, res: Response): Promise<void> => {
     const validated = registerIndependentInitiateSchema.parse(req.body);
     const result = await this.vendorService.registerIndependentInitiate(validated);

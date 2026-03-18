@@ -12,7 +12,6 @@ import {
 import { NotFoundError, ConflictError, ValidationError } from '../../shared/errors';
 import VendorService from '../vendor/vendor.service';
 import ShopService from '../shop/shop.service';
-import PaymentService from '../payment/payment.service';
 import { BookingService } from '../booking/booking.service';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
@@ -33,7 +32,6 @@ export class IssueService {
     private readonly issueRepository: IssueRepository,
     private readonly getVendorService: () => VendorService,
     private readonly getShopService: () => ShopService,
-    private readonly getPaymentService: () => PaymentService,
     private readonly getBookingService: () => BookingService,
     private readonly configService: ConfigService,
   ) {}
@@ -44,10 +42,6 @@ export class IssueService {
 
   private get shopService(): ShopService {
     return this.getShopService();
-  }
-
-  private get paymentService(): PaymentService {
-    return this.getPaymentService();
   }
 
   private get bookingService(): BookingService {
@@ -119,20 +113,40 @@ export class IssueService {
     if (!issue) throw new NotFoundError('Issue not found.');
     if (issue.status !== 'RESOLVED')
       throw new ConflictError('Refund is only allowed for resolved issues.');
-    if (issue.refundStatus === 'ISSUED')
+    if (issue.refundStatus === 'ISSUED' || issue.refundStatus === 'COMPLETED')
       throw new ConflictError('Refund has already been processed.');
-    if (!issue.razorpayPaymentId) throw new ValidationError('No payment linked to this issue.');
 
-    const advancePaidRupees = await this.bookingService.getAdvancePaidForBooking(
-      issue.bookingId.toString(),
+    if (!issue.bookingId) throw new NotFoundError('Booking not found for this issue.');
+
+    const paymentDetails = await this.bookingService.getBookingPaymentDetails(
+      issue.bookingId._id.toString(),
     );
-    if (!advancePaidRupees)
+
+    if (paymentDetails.paymentMethod === 'FELBO_COINS') {
+      if (!issue.userId) throw new ValidationError('User not linked to this issue.');
+      await this.bookingService.processIssueCoinsRefund(
+        issue.bookingId._id.toString(),
+        issue.userId._id.toString(),
+      );
+      await this.issueRepository.updateRefundStatus(issueId, 'ISSUED');
+      return;
+    }
+
+    const razorpayPaymentId = issue.razorpayPaymentId ?? paymentDetails.paymentId;
+    if (!razorpayPaymentId) throw new ValidationError('No payment linked to this issue.');
+
+    if (!paymentDetails.advancePaid)
       throw new ConflictError('No advance payment to refund for this booking.');
-    const refundId = await this.paymentService.refundIssuePayment(
-      issue.razorpayPaymentId,
-      advancePaidRupees * 100,
+
+    const refundId = await this.bookingService.refundIssuePayment(
+      razorpayPaymentId,
+      paymentDetails.advancePaid * 100,
     );
     await this.issueRepository.updateRefundStatus(issueId, 'ISSUED', refundId);
+  }
+
+  async markIssueRefundCompleted(refundId: string): Promise<void> {
+    await this.issueRepository.markRefundCompleted(refundId);
   }
 
   async flagVendorForIssue(issueId: string): Promise<{ alreadyFlagged: boolean }> {
@@ -166,9 +180,12 @@ export class IssueService {
   }
 
   private toDetailDTO(issue: PopulatedBookingIssue): IssueDetailDTO {
+    const booking = issue.bookingId;
+    const paymentMethod = booking?.paymentMethod ?? null;
+
     return {
       id: issue._id.toString(),
-      bookingId: issue.bookingId.toString(),
+      bookingNumber: booking?.bookingNumber ?? null,
       user: issue.userId
         ? { id: issue.userId._id.toString(), name: issue.userId.name, phone: issue.userId.phone }
         : null,
@@ -192,9 +209,13 @@ export class IssueService {
       type: issue.type,
       description: issue.description,
       status: issue.status,
-      refundStatus: issue.refundStatus,
-      refundId: issue.refundId ?? null,
-      razorpayPaymentId: issue.razorpayPaymentId ?? null,
+      refund: {
+        status: issue.refundStatus,
+        method: paymentMethod,
+        amount: paymentMethod === 'RAZORPAY' ? (booking?.advancePaid ?? null) : null,
+        coins: paymentMethod === 'FELBO_COINS' ? (booking?.advancePaid ?? null) : null,
+        refundId: issue.refundId ?? null,
+      },
       userLocation: issue.userLocation ?? null,
       reviewedBy: issue.reviewedBy?.toString() ?? null,
       adminNote: issue.adminNote ?? null,

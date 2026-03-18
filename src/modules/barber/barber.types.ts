@@ -217,6 +217,7 @@ export interface BarberProfileDto {
   email: string | null;
   shopName: string;
   services: Array<{
+    id: string;
     name: string;
     durationMinutes: number;
   }>;
