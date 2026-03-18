@@ -821,7 +821,18 @@ export default class VendorService {
   }
 
   async getAllPhotoKeys(): Promise<string[]> {
-    return this.vendorRepository.getAllPhotoKeys();
+    const [vendorKeys, shopPhotoUrls, barberPhotoUrls] = await Promise.all([
+      this.vendorRepository.getAllPhotoKeys(),
+      this.shopService.getAllPhotoUrls(),
+      this.barberService.getAllPhotoUrls(),
+    ]);
+
+    const extractKey = (url: string): string => new URL(url).pathname.slice(1);
+
+    const shopKeys = shopPhotoUrls.map(extractKey);
+    const barberKeys = barberPhotoUrls.map(extractKey);
+
+    return [...new Set([...vendorKeys, ...shopKeys, ...barberKeys])];
   }
 
   async registerFcmToken(vendorId: string, token: string): Promise<void> {

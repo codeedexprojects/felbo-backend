@@ -448,4 +448,9 @@ export class BarberRepository {
     }
     return countsMap;
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const barbers = await BarberModel.find({}, { photo: 1 }).lean().exec();
+    return barbers.map((b) => b.photo).filter((p): p is string => !!p);
+  }
 }
