@@ -306,6 +306,16 @@ export class BarberAvailabilityService {
     return this.availabilityRepository.findWorkingBarberIdsByShopIds(shopIds, todayDate, nextDay);
   }
 
+  async getAvailableBarberIdsForToday(shopId: string): Promise<string[]> {
+    const todayDate = this.getTodayDate();
+    const nextDay = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
+    return this.availabilityRepository.findBarbersWithWorkingHoursByShopId(
+      shopId,
+      todayDate,
+      nextDay,
+    );
+  }
+
   async getTodayDefault(barberId: string): Promise<Partial<AvailabilityDto>> {
     const barber = await this.barberService.getBarberById(barberId);
     const shop = await this.shopService.getShopById(barber.shopId);

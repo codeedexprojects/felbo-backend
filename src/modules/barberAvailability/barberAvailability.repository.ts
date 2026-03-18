@@ -119,4 +119,22 @@ export class BarberAvailabilityRepository {
       .exec();
     return docs.map((d) => d.barberId.toString());
   }
+
+  async findBarbersWithWorkingHoursByShopId(
+    shopId: string,
+    todayStart: Date,
+    todayEnd: Date,
+  ): Promise<string[]> {
+    const docs = await BarberAvailabilityModel.find(
+      {
+        shopId: new mongoose.Types.ObjectId(shopId),
+        date: { $gte: todayStart, $lt: todayEnd },
+        'workingHours.start': { $exists: true },
+      },
+      { barberId: 1 },
+    )
+      .lean<Pick<IBarberAvailability, 'barberId'>[]>()
+      .exec();
+    return docs.map((d) => d.barberId.toString());
+  }
 }

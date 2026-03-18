@@ -62,6 +62,7 @@ interface TodayAvailabilityData {
 export class BarberService {
   private availabilityService?: {
     getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
+    getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
   };
 
   constructor(
@@ -76,6 +77,7 @@ export class BarberService {
 
   setAvailabilityService(svc: {
     getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
+    getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
   }): void {
     this.availabilityService = svc;
   }
@@ -990,27 +992,22 @@ export class BarberService {
   }
 
   async getAvailableServiceIds(shopId: string): Promise<Set<string>> {
-    const barbers = await this.barberRepository.findAllActiveByShopId(shopId);
-    const availableBarbers = barbers.filter((b) => b.isAvailable);
+    const [barbers, availableTodayIds] = await Promise.all([
+      this.barberRepository.findAllActiveByShopId(shopId),
+      this.availabilityService?.getAvailableBarberIdsForToday(shopId) ?? Promise.resolve([]),
+    ]);
+
+    const availableTodaySet = new Set(availableTodayIds);
+    const availableBarbers = barbers.filter(
+      (b) => b.isAvailable && availableTodaySet.has(b._id.toString()),
+    );
 
     if (availableBarbers.length === 0) {
       return new Set();
     }
 
     const barberIds = availableBarbers.map((b) => b._id.toString());
-    const serviceIds = new Set<string>();
-
-    await Promise.all(
-      barberIds.map(async (barberId) => {
-        const links = await this.barberRepository.findBarberServicesByBarberId(barberId);
-        links.forEach((l) => {
-          if (l.isActive) {
-            serviceIds.add(l.serviceId.toString());
-          }
-        });
-      }),
-    );
-
-    return serviceIds;
+    const links = await this.barberRepository.findBarberServicesByBarberIds(barberIds);
+    return new Set(links.map((l) => l.serviceId.toString()));
   }
 }
