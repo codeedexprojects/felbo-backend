@@ -302,6 +302,44 @@ export class BookingService {
     return booking.advancePaid;
   }
 
+  async getBookingPaymentDetails(bookingId: string): Promise<{
+    advancePaid: number;
+    paymentId?: string;
+    paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
+    bookingNumber: string;
+  }> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    return {
+      advancePaid: booking.advancePaid,
+      paymentId: booking.paymentId,
+      paymentMethod: booking.paymentMethod,
+      bookingNumber: booking.bookingNumber,
+    };
+  }
+
+  async refundIssuePayment(razorpayPaymentId: string, amountPaise: number): Promise<string> {
+    return this.paymentService.refundIssuePayment(razorpayPaymentId, amountPaise);
+  }
+
+  async processIssueCoinsRefund(bookingId: string, userId: string): Promise<void> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    // Refund exactly the coins that were originally paid (1 coin = ₹1 = 1 advance rupee),
+    // so config changes after booking time don't affect the refund amount.
+    const coinsToRefund = booking.advancePaid;
+
+    await this.felboCoinService.creditCoins({
+      userId,
+      coins: coinsToRefund,
+      type: 'COIN_REFUND',
+      bookingId: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      description: `Coins refunded for issue resolution on booking ${booking.bookingNumber}`,
+    });
+  }
+
   async getGlobalDashboardStats(): Promise<{
     totalBookings: number;
     todaysBookings: number;
@@ -1454,7 +1492,9 @@ export class BookingService {
             cancelledAt: booking.cancellation.cancelledAt,
             cancelledBy: booking.cancellation.cancelledBy,
             reason: booking.cancellation.reason,
+            refundAmount: booking.cancellation.refundAmount,
             refundCoins: booking.cancellation.refundCoins ?? 0,
+            refundType: booking.cancellation.refundType,
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,

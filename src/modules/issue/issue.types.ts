@@ -2,8 +2,14 @@ import { IBookingIssue } from './issue.model';
 
 export interface PopulatedBookingIssue extends Omit<
   IBookingIssue,
-  'userId' | 'vendorId' | 'shopId'
+  'bookingId' | 'userId' | 'vendorId' | 'shopId'
 > {
+  bookingId: {
+    _id: { toString(): string };
+    bookingNumber: string;
+    paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
+    advancePaid: number;
+  } | null;
   userId: { _id: { toString(): string }; name: string; phone: string } | null;
   vendorId: {
     _id: { toString(): string };
@@ -80,11 +86,11 @@ export interface CreateIssueInput {
   userLocation: { lat: number; lng: number };
   razorpayPaymentId?: string;
 }
-export type RefundStatus = 'NONE' | 'PENDING' | 'ISSUED' | 'FAILED';
+export type RefundStatus = 'NONE' | 'PENDING' | 'ISSUED' | 'COMPLETED' | 'FAILED';
 
 export interface IssueDetailDTO {
   id: string;
-  bookingId: string;
+  bookingNumber: string | null;
   user: { id: string; name: string; phone: string } | null;
   vendor: { id: string; name: string; phone: string; isFlagged: boolean } | null;
   shop: { id: string; name: string; phone: string; address: { area: string; city: string } } | null;
@@ -92,9 +98,13 @@ export interface IssueDetailDTO {
   type: IssueType;
   description: string;
   status: IssueStatus;
-  refundStatus: RefundStatus;
-  refundId: string | null;
-  razorpayPaymentId: string | null;
+  refund: {
+    status: RefundStatus;
+    method: 'RAZORPAY' | 'FELBO_COINS' | null;
+    amount: number | null;
+    coins: number | null;
+    refundId: string | null;
+  };
   userLocation: { lat: number; lng: number } | null;
   reviewedBy: string | null;
   adminNote: string | null;
