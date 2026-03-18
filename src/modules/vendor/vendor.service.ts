@@ -442,13 +442,13 @@ export default class VendorService {
   }
 
   async getRegistrationPaymentSummary(): Promise<RegistrationPaymentSummaryResponse> {
-    const [registrationFee, gstPercentage] = await Promise.all([
+    const [total, gstPercentage] = await Promise.all([
       this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE),
       this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_GST_PERCENTAGE),
     ]);
 
-    const gstAmount = Math.round(registrationFee * gstPercentage) / 100;
-    const total = Number((registrationFee + gstAmount).toFixed(2));
+    const gstAmount = Number(((total * gstPercentage) / 100).toFixed(2));
+    const registrationFee = Number((total - gstAmount).toFixed(2));
 
     return { registrationFee, gstPercentage, gstAmount, total };
   }
