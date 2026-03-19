@@ -108,6 +108,7 @@ export default class VendorService {
     vendor: IVendor,
     onboardingStatus: VendorProfileDto['onboardingStatus'],
     shopDetails: VendorProfileDto['shopDetails'],
+    isVendorBarber: boolean,
   ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
@@ -120,6 +121,7 @@ export default class VendorService {
       status: vendor.status,
       onboardingStatus,
       shopDetails,
+      isVendorBarber,
     };
   }
 
@@ -212,6 +214,8 @@ export default class VendorService {
       ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
+    const isVendorBarber = !!barberProfile;
+
     const token = this.jwtService.signToken(tokenPayload);
     const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
 
@@ -227,7 +231,14 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus, shopDetails };
+    return {
+      token,
+      refreshToken,
+      vendor: this.toVendorDto(vendor),
+      onboardingStatus,
+      shopDetails,
+      isVendorBarber,
+    };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
@@ -487,9 +498,12 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+    const isVendorBarber = !!barberProfile;
+
     const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
 
-    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null);
+    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null, isVendorBarber);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
