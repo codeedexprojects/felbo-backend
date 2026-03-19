@@ -30,6 +30,9 @@ import {
   UserBookingDetailDto,
   BarberDashboardStatsDto,
   BarberTodayBookingsResponse,
+  AdminCancellationListParams,
+  AdminCancellationListResponse,
+  AdminCancellationDetailDto,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import {
@@ -1508,6 +1511,110 @@ export class BookingService {
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,
+    };
+  }
+
+  async adminGetCancelledBookings(
+    params: AdminCancellationListParams,
+  ): Promise<AdminCancellationListResponse> {
+    const { cancellations, total } = await this.bookingRepository.adminGetCancelledBookings(params);
+
+    return {
+      cancellations: cancellations.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        userPhone: b.userPhone,
+        date: b.date,
+        startTime: b.startTime,
+        paymentMethod: b.paymentMethod,
+        advancePaid: b.advancePaid,
+        status: b.status,
+        cancelledBy: b.cancellation.cancelledBy,
+        cancelledAt: b.cancellation.cancelledAt,
+        reason: b.cancellation.reason,
+        refundType: b.cancellation.refundType,
+        refundStatus: b.cancellation.refundStatus,
+        refundAmount: b.cancellation.refundAmount,
+        refundCoins: b.cancellation.refundCoins,
+        createdAt: b.createdAt,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetCancelledBookingDetail(bookingId: string): Promise<AdminCancellationDetailDto> {
+    const booking = await this.bookingRepository.adminGetCancelledBookingDetail(bookingId);
+
+    if (!booking) throw new NotFoundError('Cancelled booking not found.');
+
+    if (!booking.cancellation) {
+      throw new NotFoundError('Cancellation details not found.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      totalDurationMinutes: booking.totalDurationMinutes,
+      status: booking.status,
+      services: booking.services.map((s) => ({
+        serviceId: s.serviceId.toString(),
+        serviceName: s.serviceName,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      })),
+      totalServiceAmount: booking.totalServiceAmount,
+      advancePaid: booking.advancePaid,
+      remainingAmount: booking.remainingAmount,
+      paymentMethod: booking.paymentMethod,
+      paymentId: booking.paymentId,
+      cancellation: {
+        cancelledAt: booking.cancellation.cancelledAt,
+        cancelledBy: booking.cancellation.cancelledBy,
+        reason: booking.cancellation.reason,
+        refundAmount: booking.cancellation.refundAmount,
+        refundCoins: booking.cancellation.refundCoins,
+        refundType: booking.cancellation.refundType,
+        refundStatus: booking.cancellation.refundStatus,
+      },
+      user: {
+        id: booking.userId.toString(),
+        name: booking.userName,
+        phone: booking.userPhone,
+      },
+      shop: booking.shop
+        ? {
+            id: booking.shop._id.toString(),
+            name: booking.shop.name,
+            phone: booking.shop.phone,
+            address: booking.shop.address as AdminCancellationDetailDto['shop']['address'],
+            photos: booking.shop.photos,
+          }
+        : { id: '', name: '', phone: '', address: null, photos: [] },
+      vendor: booking.vendor
+        ? {
+            id: booking.vendor._id.toString(),
+            ownerName: booking.vendor.ownerName,
+            phone: booking.vendor.phone,
+            email: booking.vendor.email,
+          }
+        : { id: '', ownerName: '', phone: '' },
+      barber: booking.barber
+        ? {
+            id: booking.barber._id.toString(),
+            name: booking.barber.name,
+            phone: booking.barber.phone,
+            email: booking.barber.email,
+            photo: booking.barber.photo,
+          }
+        : { id: '', name: '', phone: '' },
+      createdAt: booking.createdAt,
     };
   }
 }
