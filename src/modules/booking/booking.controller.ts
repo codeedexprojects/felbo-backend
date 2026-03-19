@@ -214,6 +214,12 @@ export class BookingController {
     res.json({ success: true, data: result });
   };
 
+  getUserHomeBookingData = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.sub;
+    const result = await this.bookingService.getUserHomeBookingData(userId);
+    res.json({ success: true, data: result });
+  };
+
   adminGetCancelledBookings = async (req: Request, res: Response): Promise<void> => {
     const query = adminCancellationListQuerySchema.parse(req.query);
 
