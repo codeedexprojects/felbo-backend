@@ -504,6 +504,18 @@ export interface AdminCancellationDetailDto {
 
 // ──────────────────────────────────────────────────────────────────────────────
 
+export interface UserHomeBookingDto {
+  lastConfirmedBooking: {
+    id: string;
+    bookingNumber: string;
+    shopName: string;
+    shopImage: string | null;
+    bookingTime: string;
+    shopCoordinates: { longitude: number; latitude: number } | null;
+  } | null;
+  totalConfirmedCount: number;
+}
+
 export interface AdminBookingDetailDto {
   id: string;
   bookingNumber: string;
