@@ -804,7 +804,10 @@ export class BookingRepository {
     };
   }
 
-  async getUserHomeBooking(userId: string): Promise<{
+  async getUserHomeBooking(
+    userId: string,
+    todayDate: Date,
+  ): Promise<{
     lastConfirmedBooking: {
       _id: mongoose.Types.ObjectId;
       bookingNumber: string;
@@ -820,6 +823,7 @@ export class BookingRepository {
         $match: {
           userId: new mongoose.Types.ObjectId(userId),
           status: 'CONFIRMED',
+          date: todayDate,
         },
       },
       {
