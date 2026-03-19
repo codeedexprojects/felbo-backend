@@ -426,7 +426,7 @@ export interface StaffMemberDto {
 }
 
 export interface VendorDashboardCountsDto {
-  totalBookings: number;
+  dailyBookings: number;
   staffWorking: { count: number; staff: StaffMemberDto[] };
   staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }
