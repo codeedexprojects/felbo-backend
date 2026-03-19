@@ -31,6 +31,8 @@ import {
   BarberProfileDto,
   TestNotificationInput,
   TestNotificationResult,
+  TestBookingFlowInput,
+  TestBookingFlowResult,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -54,11 +56,12 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { formatRating } from '../../shared/utils/rating';
 import { getCurrentIstDate, getTodayInIst } from '../../shared/utils/time';
-import { sendFcmNotification, FCM_CHANNELS } from '../../shared/notification/fcm.service';
 import {
-  synthesiseMalayalamSpeech,
-  buildBookingTtsText,
-} from '../../shared/notification/tts.service';
+  enqueueNewBookingVendor,
+  enqueueBookingConfirmedUser,
+  enqueueReminder15Min,
+} from '../../shared/notification/notification.queue';
+import { UserModel } from '../user/user.model';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -551,6 +554,10 @@ export class BarberService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.barberRepository.updateRefreshToken(barber._id.toString(), refreshTokenHash);
 
+    if (input.fcmToken) {
+      void this.barberRepository.addFcmToken(barber._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'BARBER_LOGIN',
       module: 'barber',
@@ -1026,61 +1033,80 @@ export class BarberService {
     await this.barberRepository.removeFcmToken(barberId, token);
   }
 
+  async testBookingFlow(input: TestBookingFlowInput): Promise<TestBookingFlowResult> {
+    const [user, barber] = await Promise.all([
+      UserModel.findById(input.userId, { name: 1 }).lean(),
+      this.barberRepository.findById(input.barberId),
+    ]);
+
+    if (!user) throw new NotFoundError('User not found.');
+    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
+
+    const shop = await this.getShopService().getShopById(barber.shopId.toString());
+
+    const userId = input.userId;
+    const barberId = barber._id.toString();
+    const shopName = shop.name;
+    const customerName = (user.name as string | undefined) ?? 'Customer';
+    const serviceName = 'Haircut';
+    const appointmentTime = '10:30 AM';
+    const bookingId = `test-${Date.now()}`;
+    const appointmentAt = new Date(Date.now() + 15 * 60 * 1000 + input.reminderDelaySeconds * 1000);
+
+    await Promise.all([
+      enqueueBookingConfirmedUser({ userId, shopName, appointmentTime, bookingId }),
+      enqueueNewBookingVendor({ barberId, customerName, serviceName, appointmentTime }),
+      enqueueReminder15Min({
+        userId,
+        barberId,
+        shopName,
+        appointmentTime,
+        appointmentAt,
+        bookingId,
+      }),
+    ]);
+
+    this.logger.info({
+      action: 'TEST_BOOKING_FLOW_QUEUED',
+      module: 'barber',
+      userId,
+      barberId,
+      reminderFiresInSeconds: input.reminderDelaySeconds,
+    });
+
+    return {
+      queued: true,
+      userId,
+      barberId,
+      shopName,
+      reminderFiresInSeconds: input.reminderDelaySeconds,
+    };
+  }
+
   async sendTestNotification(
-    barberId: string,
+    id: string,
     input: TestNotificationInput,
   ): Promise<TestNotificationResult> {
-    const tokens = await this.barberRepository.getFcmTokens(barberId);
-    if (!tokens.length) {
-      throw new NotFoundError('No FCM tokens registered. Please register a token first.');
+    const barber = await this.barberRepository.findById(id);
+    if (!barber || barber.status === 'DELETED') {
+      throw new NotFoundError('Barber not found.');
     }
 
-    const ttsText = buildBookingTtsText();
+    const barberId = barber._id.toString();
 
-    const fcmData: Record<string, string> = {
-      type: 'NEW_BOOKING',
+    await enqueueNewBookingVendor({
+      barberId,
       customerName: input.customerName,
       serviceName: input.serviceName,
       appointmentTime: input.appointmentTime,
-      ttsText,
-    };
-
-    let audioUrl: string | undefined;
-    if (input.voiceEnabled) {
-      try {
-        const ttsResult = await synthesiseMalayalamSpeech(ttsText);
-        audioUrl = ttsResult.audioUrl;
-        fcmData.audioUrl = audioUrl;
-      } catch (err) {
-        this.logger.warn('TTS generation failed in test notification', {
-          barberId,
-          error: (err as Error).message,
-          stack: (err as Error).stack,
-        });
-      }
-    }
-
-    const result = await sendFcmNotification({
-      tokens,
-      channel: FCM_CHANNELS.BOOKING,
-      title: `New Booking from ${input.customerName}`,
-      body: `${input.serviceName} at ${input.appointmentTime}`,
-      data: fcmData,
     });
-
-    if (result.invalidTokens.length) {
-      await this.barberRepository.pruneInvalidFcmTokens(result.invalidTokens);
-    }
 
     this.logger.info({
-      action: 'BARBER_TEST_NOTIFICATION_SENT',
+      action: 'BARBER_TEST_NOTIFICATION_QUEUED',
       module: 'barber',
       barberId,
-      successCount: result.successCount,
-      failureCount: result.failureCount,
-      voiceEnabled: input.voiceEnabled,
     });
 
-    return { successCount: result.successCount, failureCount: result.failureCount, audioUrl };
+    return { queued: true, barberId, bookingId: input.bookingId };
   }
 }

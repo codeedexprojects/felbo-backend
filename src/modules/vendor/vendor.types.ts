@@ -11,6 +11,7 @@ export interface LoginVerifyOtpInput {
   phone: string;
   otp: string;
   sessionId: string;
+  fcmToken?: string;
 }
 
 export interface LoginVerifyOtpResponse {

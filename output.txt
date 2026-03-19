@@ -211,12 +211,7 @@ export interface ReviewPromptJob {
 
 export interface NewBookingVendorJob {
   jobName: 'NEW_BOOKING_VENDOR';
-  vendorId: string;
-  /**
-   * Whether to generate a Malayalam TTS audio clip.
-   * Copied from vendor.notificationSettings.voiceAnnouncements at enqueue time.
-   * The worker does NOT re-query this — it trusts what was set at booking time.
-   */
+  barberId: string;
   voiceEnabled: boolean;
   customerName: string;
   serviceName: string; // comma-joined if multiple: "Haircut, Beard Trim"
@@ -331,7 +326,7 @@ export async function enqueueBookingConfirmedUser(data: {
 }
 
 export async function enqueueNewBookingVendor(data: {
-  vendorId: string;
+  barberId: string;
   voiceEnabled: boolean;
   customerName: string;
   serviceName: string;
@@ -339,7 +334,7 @@ export async function enqueueNewBookingVendor(data: {
 }): Promise<void> {
   await getQueue().add('NEW_BOOKING_VENDOR', {
     jobName: 'NEW_BOOKING_VENDOR',
-    vendorId: data.vendorId,
+    barberId: data.barberId,
     voiceEnabled: data.voiceEnabled,
     customerName: data.customerName,
     serviceName: data.serviceName,
@@ -450,6 +445,7 @@ import { getBullConnection, QUEUE_NAMES } from '../queue/bull';
 import { logger } from '../logger/logger';
 import { UserModel } from '../../modules/user/user.model';
 import { VendorModel } from '../../modules/vendor/vendor.model';
+import { BarberModel } from '@modules/barber/barber.model';
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -473,6 +469,11 @@ async function getVendorTokens(vendorId: string): Promise<string[]> {
   return vendor?.fcmTokens ?? [];
 }
 
+async function getBarberTokens(barberId: string): Promise<string[]> {
+  const barber = await BarberModel.findById(barberId, { fcmTokens: 1 }).lean();
+  return barber?.fcmTokens ?? [];
+}
+
 async function pruneUserTokens(invalidTokens: string[]): Promise<void> {
   if (!invalidTokens.length) return;
   await UserModel.updateMany(
@@ -489,10 +490,19 @@ async function pruneVendorTokens(invalidTokens: string[]): Promise<void> {
   );
 }
 
+async function pruneBarberTokens(invalidTokens: string[]): Promise<void> {
+  if (!invalidTokens.length) return;
+  await BarberModel.updateMany(
+    { fcmTokens: { $in: invalidTokens } },
+    { $pull: { fcmTokens: { $in: invalidTokens } } },
+  );
+}
+
 // ─── Job processor ────────────────────────────────────────────────────────────
 
 async function processJob(job: Job<NotificationJobData>): Promise<void> {
   const { data } = job;
+
   logger.info('Processing notification job', { jobName: data.jobName, jobId: job.id });
 
   switch (data.jobName) {
@@ -616,8 +626,11 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
 
     // ── Vendor: new booking (loud alert + optional TTS) ──────────────────────
     case 'NEW_BOOKING_VENDOR': {
-      const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
+      const tokens = await getBarberTokens(data.barberId);
+      if (!tokens.length) {
+        logger.error('No tokens found for barber', { barberId: data.barberId });
+        return;
+      }
 
       // Build FCM data payload. Flutter uses these fields to:
       //   1. Play the booking_alert sound via the felbo_booking channel
@@ -629,7 +642,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         serviceName: data.serviceName,
         appointmentTime: data.appointmentTime,
         // Flutter uses ttsText for in-app TTS (app open/background, no audio file needed)
-        ttsText: buildBookingTtsText(data.customerName, data.serviceName, data.appointmentTime),
+        ttsText: buildBookingTtsText(),
       };
 
       // Generate TTS audio only when voiceAnnouncements is enabled.
@@ -637,11 +650,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       // and Flutter can't run TTS locally — it streams our pre-generated MP3.
       if (data.voiceEnabled) {
         try {
-          const ttsText = buildBookingTtsText(
-            data.customerName,
-            data.serviceName,
-            data.appointmentTime,
-          );
+          const ttsText = buildBookingTtsText();
           const { audioUrl } = await synthesiseMalayalamSpeech(ttsText);
           // Flutter checks for audioUrl in FCM data. If present and app is backgrounded,
           // it downloads and plays via platform audio player.
@@ -650,7 +659,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
           // TTS failure must never block the push notification itself.
           // The vendor will still get the visual notification and ttsText fallback.
           logger.error('TTS generation failed, sending notification without audio', {
-            vendorId: data.vendorId,
+            barberId: data.barberId,
             error: (ttsErr as Error).message,
           });
         }
@@ -664,7 +673,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         data: fcmData,
       });
 
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
+      if (result.invalidTokens.length) await pruneBarberTokens(result.invalidTokens);
       logger.info('NEW_BOOKING_VENDOR sent', { ...result, voiceEnabled: data.voiceEnabled });
       break;
     }

@@ -145,6 +145,10 @@ export default class UserService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.userRepository.updateRefreshToken(user._id.toString(), refreshTokenHash);
 
+    if (input.fcmToken) {
+      void this.userRepository.addFcmToken(user._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'USER_AUTHENTICATED',
       module: 'user',

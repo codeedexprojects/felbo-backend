@@ -19,31 +19,18 @@ export function initFirebase(): void {
   logger.info('Firebase Admin SDK initialized');
 }
 
-/**
- * Android notification channels.
- *
- * Flutter must create these channels on startup with matching IDs and sounds:
- *
- *   felbo_booking   — plays 'booking_alert.mp3' (loud, ~10s)
- *   felbo_reminder  — plays 'reminder_chime.mp3' (softer, ~3s)
- *   felbo_general   — plays default system sound (cancellations, review prompts)
- *
- * iOS uses APNs sound fields. Bundle the mp3 files in the Flutter app under
- * ios/Runner/ and reference by filename (without extension).
- */
 export const FCM_CHANNELS = {
-  BOOKING: 'felbo_booking', // new booking (vendor) + booking confirmed (user)
-  REMINDER: 'felbo_reminder', // 1hr and 30min reminders
-  GENERAL: 'felbo_general', // cancellations, review prompt, warnings
+  BOOKING: 'felbo_booking',
+  REMINDER: 'felbo_reminder',
+  GENERAL: 'felbo_general',
 } as const;
 
 export type FcmChannel = (typeof FCM_CHANNELS)[keyof typeof FCM_CHANNELS];
 
-// Sound file names bundled in Flutter app. Must match exactly.
 const CHANNEL_SOUNDS: Record<FcmChannel, string> = {
-  [FCM_CHANNELS.BOOKING]: 'booking_alert',
-  [FCM_CHANNELS.REMINDER]: 'reminder_chime',
-  [FCM_CHANNELS.GENERAL]: 'default',
+  [FCM_CHANNELS.BOOKING]: 'booking',
+  [FCM_CHANNELS.REMINDER]: 'reminder_tone',
+  [FCM_CHANNELS.GENERAL]: 'scissors',
 };
 
 export interface FcmPayload {
@@ -79,13 +66,10 @@ export async function sendFcmNotification(payload: FcmPayload): Promise<FcmResul
         body: payload.body,
       },
       android: {
-        // BOOKING channel gets high priority so it wakes the screen.
-        // REMINDER and GENERAL use normal priority.
         priority: payload.channel === FCM_CHANNELS.BOOKING ? 'high' : 'normal',
         notification: {
           channelId: payload.channel,
           sound,
-          // Booking alert vibrates distinctly; others use default vibration.
           vibrateTimingsMillis:
             payload.channel === FCM_CHANNELS.BOOKING ? [0, 500, 200, 500, 200, 500] : undefined,
         },
@@ -93,8 +77,9 @@ export async function sendFcmNotification(payload: FcmPayload): Promise<FcmResul
       apns: {
         payload: {
           aps: {
-            sound: sound === 'default' ? 'default' : `${sound}.mp3`,
+            sound: `${sound}.caf`,
             contentAvailable: true,
+            mutableContent: payload.channel === FCM_CHANNELS.BOOKING ? true : undefined,
           },
         },
       },

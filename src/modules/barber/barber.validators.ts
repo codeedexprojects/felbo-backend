@@ -98,6 +98,7 @@ export const barberSetPasswordSchema = z.object({
 export const barberLoginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const barberRefreshTokenSchema = z.object({
@@ -131,8 +132,14 @@ export const fcmTokenSchema = z.object({
 });
 
 export const testNotificationSchema = z.object({
-  voiceEnabled: z.boolean().optional().default(false),
   customerName: z.string().optional().default('Test Customer'),
   serviceName: z.string().optional().default('Haircut'),
   appointmentTime: z.string().optional().default('10:30 AM'),
+  bookingId: z.string().optional().default('000000000000000000000001'),
+});
+
+export const testBookingFlowSchema = z.object({
+  userId: mongoIdSchema,
+  barberId: mongoIdSchema,
+  reminderDelaySeconds: z.coerce.number().int().positive().max(300).default(30),
 });

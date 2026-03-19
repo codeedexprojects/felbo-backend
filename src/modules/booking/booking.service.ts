@@ -37,7 +37,14 @@ import {
   getCurrentIstMinutes,
   parseDateAsIst,
   getIstDayRangeUtc,
+  buildAppointmentDate,
+  formatAppointmentTime,
 } from '../../shared/utils/time';
+import {
+  enqueueBookingConfirmedUser,
+  enqueueNewBookingVendor,
+  enqueueReminder15Min,
+} from '../../shared/notification/notification.queue';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -615,6 +622,33 @@ export class BookingService {
         coinsUsed: coinRedeemThreshold,
       });
 
+      const coinAppointmentTime = formatAppointmentTime(booking!.startTime);
+      const coinAppointmentAt = buildAppointmentDate(booking!.date, booking!.startTime);
+      const coinBookingId = booking!._id.toString();
+      const coinBarberId = booking!.barberId.toString();
+      const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
+
+      void enqueueBookingConfirmedUser({
+        userId,
+        shopName: shop.name,
+        appointmentTime: coinAppointmentTime,
+        bookingId: coinBookingId,
+      });
+      void enqueueNewBookingVendor({
+        barberId: coinBarberId,
+        customerName: user.name ?? '',
+        serviceName: coinServiceName,
+        appointmentTime: coinAppointmentTime,
+      });
+      void enqueueReminder15Min({
+        userId,
+        barberId: coinBarberId,
+        shopName: shop.name,
+        appointmentTime: coinAppointmentTime,
+        appointmentAt: coinAppointmentAt,
+        bookingId: coinBookingId,
+      });
+
       return {
         booking: {
           id: booking!._id.toString(),
@@ -741,6 +775,34 @@ export class BookingService {
       bookingId,
       paymentId: input.razorpayPaymentId,
       userId,
+    });
+
+    const appointmentTime = formatAppointmentTime(confirmed.startTime);
+    const appointmentAt = buildAppointmentDate(confirmed.date, confirmed.startTime);
+    const confirmedBarberId = confirmed.barberId.toString();
+    const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
+
+    void enqueueBookingConfirmedUser({
+      userId,
+      shopName: confirmed.shopName,
+      appointmentTime,
+      bookingId,
+    });
+
+    void enqueueNewBookingVendor({
+      barberId: confirmedBarberId,
+      customerName: confirmed.userName,
+      serviceName: confirmedServiceName,
+      appointmentTime,
+    });
+
+    void enqueueReminder15Min({
+      userId,
+      barberId: confirmedBarberId,
+      shopName: confirmed.shopName,
+      appointmentTime,
+      appointmentAt,
+      bookingId,
     });
 
     return {

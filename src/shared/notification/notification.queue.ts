@@ -10,10 +10,9 @@ export type NotificationJobName =
   | 'BOOKING_CONFIRMED_USER'
   | 'BOOKING_CANCELLED_BY_VENDOR' // always 100% refund
   | 'BOOKING_CANCELLED_BY_USER' // refund amount varies
-  | 'REMINDER_1HR'
-  | 'REMINDER_30MIN'
+  | 'REMINDER_15MIN' // 15-min reminder for both user and barber
   | 'REVIEW_PROMPT'
-  // Vendor-facing
+  // Barber-facing
   | 'NEW_BOOKING_VENDOR' // loud alert + optional TTS voice
   | 'BOOKING_CANCELLED_VENDOR' // customer cancelled their booking
   | 'VENDOR_WARNING' // approaching cancellation limit
@@ -30,7 +29,6 @@ export interface BookingConfirmedUserJob {
   userId: string;
   shopName: string;
   appointmentTime: string; // "10:30 AM"
-  appointmentAt: string; // ISO datetime — used to schedule reminder jobs
   bookingId: string;
 }
 
@@ -47,9 +45,10 @@ export interface BookingCancelledByUserJob {
   refundAmount: number;
 }
 
-export interface ReminderJob {
-  jobName: 'REMINDER_1HR' | 'REMINDER_30MIN';
+export interface Reminder15MinJob {
+  jobName: 'REMINDER_15MIN';
   userId: string;
+  barberId: string;
   shopName: string;
   appointmentTime: string;
 }
@@ -63,13 +62,7 @@ export interface ReviewPromptJob {
 
 export interface NewBookingVendorJob {
   jobName: 'NEW_BOOKING_VENDOR';
-  vendorId: string;
-  /**
-   * Whether to generate a Malayalam TTS audio clip.
-   * Copied from vendor.notificationSettings.voiceAnnouncements at enqueue time.
-   * The worker does NOT re-query this — it trusts what was set at booking time.
-   */
-  voiceEnabled: boolean;
+  barberId: string;
   customerName: string;
   serviceName: string; // comma-joined if multiple: "Haircut, Beard Trim"
   appointmentTime: string; // "10:30 AM"
@@ -103,7 +96,7 @@ export type NotificationJobData =
   | BookingConfirmedUserJob
   | BookingCancelledByVendorJob
   | BookingCancelledByUserJob
-  | ReminderJob
+  | Reminder15MinJob
   | ReviewPromptJob
   | NewBookingVendorJob
   | BookingCancelledVendorJob
@@ -130,69 +123,53 @@ export async function enqueueBookingConfirmedUser(data: {
   userId: string;
   shopName: string;
   appointmentTime: string;
-  appointmentAt: Date;
   bookingId: string;
 }): Promise<void> {
-  const queue = getQueue();
-
-  // 1. Immediate booking confirmation
-  await queue.add('BOOKING_CONFIRMED_USER', {
+  await getQueue().add('BOOKING_CONFIRMED_USER', {
     jobName: 'BOOKING_CONFIRMED_USER',
     userId: data.userId,
     shopName: data.shopName,
     appointmentTime: data.appointmentTime,
-    appointmentAt: data.appointmentAt.toISOString(),
     bookingId: data.bookingId,
   });
+}
 
-  // 2. Schedule reminder jobs at the same time.
-  //    Use stable jobIds so re-enqueuing the same booking is idempotent.
-  const now = Date.now();
-  const appointmentMs = data.appointmentAt.getTime();
+export async function enqueueReminder15Min(data: {
+  userId: string;
+  barberId: string;
+  shopName: string;
+  appointmentTime: string;
+  appointmentAt: Date;
+  bookingId: string;
+}): Promise<void> {
+  const delay = data.appointmentAt.getTime() - 15 * 60 * 1000 - Date.now();
+  if (delay <= 0) return; // appointment is too soon or already past
 
-  const oneHourBefore = appointmentMs - 60 * 60 * 1000;
-  const thirtyMinBefore = appointmentMs - 30 * 60 * 1000;
-
-  const reminderPayloadBase = {
-    userId: data.userId,
-    shopName: data.shopName,
-    appointmentTime: data.appointmentTime,
-  };
-
-  if (oneHourBefore > now) {
-    await queue.add(
-      'REMINDER_1HR',
-      { jobName: 'REMINDER_1HR', ...reminderPayloadBase },
-      {
-        delay: oneHourBefore - now,
-        jobId: `reminder-1hr-${data.bookingId}`, // dedup by bookingId
-      },
-    );
-  }
-
-  if (thirtyMinBefore > now) {
-    await queue.add(
-      'REMINDER_30MIN',
-      { jobName: 'REMINDER_30MIN', ...reminderPayloadBase },
-      {
-        delay: thirtyMinBefore - now,
-        jobId: `reminder-30m-${data.bookingId}`,
-      },
-    );
-  }
+  await getQueue().add(
+    'REMINDER_15MIN',
+    {
+      jobName: 'REMINDER_15MIN',
+      userId: data.userId,
+      barberId: data.barberId,
+      shopName: data.shopName,
+      appointmentTime: data.appointmentTime,
+    },
+    {
+      delay,
+      jobId: `reminder-15m-${data.bookingId}`, // dedup by bookingId
+    },
+  );
 }
 
 export async function enqueueNewBookingVendor(data: {
-  vendorId: string;
-  voiceEnabled: boolean;
+  barberId: string;
   customerName: string;
   serviceName: string;
   appointmentTime: string;
 }): Promise<void> {
   await getQueue().add('NEW_BOOKING_VENDOR', {
     jobName: 'NEW_BOOKING_VENDOR',
-    vendorId: data.vendorId,
-    voiceEnabled: data.voiceEnabled,
+    barberId: data.barberId,
     customerName: data.customerName,
     serviceName: data.serviceName,
     appointmentTime: data.appointmentTime,

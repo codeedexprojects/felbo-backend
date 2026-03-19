@@ -1,25 +1,21 @@
 import { Worker, Job } from 'bullmq';
 import { connectMongo } from '../database/mongo';
 import { initFirebase, sendFcmNotification, FCM_CHANNELS } from './fcm.service';
-import { synthesiseMalayalamSpeech, buildBookingTtsText } from './tts.service';
 import { NotificationJobData } from './notification.queue';
 import { getBullConnection, QUEUE_NAMES } from '../queue/bull';
 import { logger } from '../logger/logger';
 import { UserModel } from '../../modules/user/user.model';
 import { VendorModel } from '../../modules/vendor/vendor.model';
+import { BarberModel } from '../../modules/barber/barber.model';
 
-// ─── Bootstrap ───────────────────────────────────────────────────────────────
-
+// Bootstraping worker
 async function bootstrap(): Promise<void> {
   await connectMongo();
   initFirebase();
   logger.info('Notification worker started');
 }
 
-// ─── Token helpers ────────────────────────────────────────────────────────────
-// These are the ONLY DB queries the worker makes. Everything else was
-// denormalised at enqueue time.
-
+// DB queries for getting tokens for worker
 async function getUserTokens(userId: string): Promise<string[]> {
   const user = await UserModel.findById(userId, { fcmTokens: 1 }).lean();
   return user?.fcmTokens ?? [];
@@ -30,6 +26,12 @@ async function getVendorTokens(vendorId: string): Promise<string[]> {
   return vendor?.fcmTokens ?? [];
 }
 
+async function getBarberTokens(barberId: string): Promise<string[]> {
+  const barber = await BarberModel.findById(barberId, { fcmTokens: 1 }).lean();
+  return barber?.fcmTokens ?? [];
+}
+
+// Pruning invalid tokens from database
 async function pruneUserTokens(invalidTokens: string[]): Promise<void> {
   if (!invalidTokens.length) return;
   await UserModel.updateMany(
@@ -46,21 +48,29 @@ async function pruneVendorTokens(invalidTokens: string[]): Promise<void> {
   );
 }
 
-// ─── Job processor ────────────────────────────────────────────────────────────
+async function pruneBarberTokens(invalidTokens: string[]): Promise<void> {
+  if (!invalidTokens.length) return;
+  await BarberModel.updateMany(
+    { fcmTokens: { $in: invalidTokens } },
+    { $pull: { fcmTokens: { $in: invalidTokens } } },
+  );
+}
 
+// Job processor
 async function processJob(job: Job<NotificationJobData>): Promise<void> {
   const { data } = job;
+
   logger.info('Processing notification job', { jobName: data.jobName, jobId: job.id });
 
   switch (data.jobName) {
-    // ── User: booking confirmed ──────────────────────────────────────────────
+    // User: booking confirmed
     case 'BOOKING_CONFIRMED_USER': {
       const tokens = await getUserTokens(data.userId);
       if (!tokens.length) return;
 
       const result = await sendFcmNotification({
         tokens,
-        channel: FCM_CHANNELS.BOOKING,
+        channel: FCM_CHANNELS.GENERAL,
         title: 'Booking Confirmed!',
         body: `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
         data: {
@@ -75,7 +85,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── User: booking cancelled by vendor ────────────────────────────────────
+    // User: booking cancelled by vendor
     case 'BOOKING_CANCELLED_BY_VENDOR': {
       const tokens = await getUserTokens(data.userId);
       if (!tokens.length) return;
@@ -97,7 +107,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── User: booking cancelled by user (their own cancellation confirmation) ─
+    // User: booking cancelled by user (their own cancellation confirmation)
     case 'BOOKING_CANCELLED_BY_USER': {
       const tokens = await getUserTokens(data.userId);
       if (!tokens.length) return;
@@ -123,33 +133,38 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── User: reminder (1hr and 30min share same handler) ───────────────────
-    case 'REMINDER_1HR':
-    case 'REMINDER_30MIN': {
-      const tokens = await getUserTokens(data.userId);
-      if (!tokens.length) return;
+    // 15-min reminder: sent to both user and barber
+    case 'REMINDER_15MIN': {
+      const [userTokens, barberTokens] = await Promise.all([
+        getUserTokens(data.userId),
+        getBarberTokens(data.barberId),
+      ]);
 
-      const timeLabel = data.jobName === 'REMINDER_1HR' ? '1 hour' : '30 minutes';
-
-      const result = await sendFcmNotification({
-        tokens,
-        // Reminders get their own channel with a softer, distinct sound
+      const reminderPayload = {
         channel: FCM_CHANNELS.REMINDER,
-        title: 'Appointment Reminder',
-        body: `Your appointment at ${data.shopName} is in ${timeLabel}`,
-        data: {
-          type: 'REMINDER',
-          shopName: data.shopName,
-          minutesBefore: data.jobName === 'REMINDER_1HR' ? '60' : '30',
-        },
-      });
+        title: 'Appointment in 15 minutes',
+        body: `Your appointment at ${data.shopName} starts in 15 minutes`,
+        data: { type: 'REMINDER', shopName: data.shopName, minutesBefore: '15' },
+      };
 
-      if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens);
-      logger.info(`${data.jobName} sent`, result);
+      const [userResult, barberResult] = await Promise.all([
+        userTokens.length ? sendFcmNotification({ tokens: userTokens, ...reminderPayload }) : null,
+        barberTokens.length
+          ? sendFcmNotification({ tokens: barberTokens, ...reminderPayload })
+          : null,
+      ]);
+
+      if (userResult?.invalidTokens.length) await pruneUserTokens(userResult.invalidTokens);
+      if (barberResult?.invalidTokens.length) await pruneBarberTokens(barberResult.invalidTokens);
+
+      logger.info('REMINDER_15MIN sent', {
+        user: userResult ?? 'no tokens',
+        barber: barberResult ?? 'no tokens',
+      });
       break;
     }
 
-    // ── User: review prompt ──────────────────────────────────────────────────
+    // User: review prompt
     case 'REVIEW_PROMPT': {
       const tokens = await getUserTokens(data.userId);
       if (!tokens.length) return;
@@ -171,62 +186,33 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── Vendor: new booking (loud alert + optional TTS) ──────────────────────
+    // Barber: new booking alert (booking.caf plays via felbo_booking channel)
     case 'NEW_BOOKING_VENDOR': {
-      const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
-
-      // Build FCM data payload. Flutter uses these fields to:
-      //   1. Play the booking_alert sound via the felbo_booking channel
-      //   2. Show the TTS readout if audioUrl is present
-      //   3. Read aloud using flutter_tts if the app is in foreground (ttsText fallback)
-      const fcmData: Record<string, string> = {
-        type: 'NEW_BOOKING',
-        customerName: data.customerName,
-        serviceName: data.serviceName,
-        appointmentTime: data.appointmentTime,
-        // Flutter uses ttsText for in-app TTS (app open/background, no audio file needed)
-        ttsText: buildBookingTtsText(data.customerName, data.serviceName, data.appointmentTime),
-      };
-
-      // Generate TTS audio only when voiceAnnouncements is enabled.
-      // The audio file is for the case where the app is in the background/killed
-      // and Flutter can't run TTS locally — it streams our pre-generated MP3.
-      if (data.voiceEnabled) {
-        try {
-          const ttsText = buildBookingTtsText(
-            data.customerName,
-            data.serviceName,
-            data.appointmentTime,
-          );
-          const { audioUrl } = await synthesiseMalayalamSpeech(ttsText);
-          // Flutter checks for audioUrl in FCM data. If present and app is backgrounded,
-          // it downloads and plays via platform audio player.
-          fcmData.audioUrl = audioUrl;
-        } catch (ttsErr) {
-          // TTS failure must never block the push notification itself.
-          // The vendor will still get the visual notification and ttsText fallback.
-          logger.error('TTS generation failed, sending notification without audio', {
-            vendorId: data.vendorId,
-            error: (ttsErr as Error).message,
-          });
-        }
+      const tokens = await getBarberTokens(data.barberId);
+      if (!tokens.length) {
+        logger.error('No tokens found for barber', { barberId: data.barberId });
+        return;
       }
 
       const result = await sendFcmNotification({
         tokens,
-        channel: FCM_CHANNELS.BOOKING, // loud distinct sound
+        channel: FCM_CHANNELS.BOOKING,
         title: `New Booking from ${data.customerName}`,
         body: `${data.serviceName} at ${data.appointmentTime}`,
-        data: fcmData,
+        data: {
+          type: 'NEW_BOOKING',
+          customerName: data.customerName,
+          serviceName: data.serviceName,
+          appointmentTime: data.appointmentTime,
+        },
       });
 
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
-      logger.info('NEW_BOOKING_VENDOR sent', { ...result, voiceEnabled: data.voiceEnabled });
+      if (result.invalidTokens.length) await pruneBarberTokens(result.invalidTokens);
+      logger.info('NEW_BOOKING_VENDOR sent', { ...result });
       break;
     }
 
-    // ── Vendor: customer cancelled ────────────────────────────────────────────
+    // Vendor: customer cancelled
     case 'BOOKING_CANCELLED_VENDOR': {
       const tokens = await getVendorTokens(data.vendorId);
       if (!tokens.length) return;
@@ -248,7 +234,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── Vendor: cancellation warning ──────────────────────────────────────────
+    // Vendor: cancellation warning
     case 'VENDOR_WARNING': {
       const tokens = await getVendorTokens(data.vendorId);
       if (!tokens.length) return;
@@ -269,7 +255,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── Vendor: account suspended ─────────────────────────────────────────────
+    // Vendor: account suspended
     case 'VENDOR_SUSPENDED': {
       const tokens = await getVendorTokens(data.vendorId);
       if (!tokens.length) return;
@@ -287,7 +273,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
       break;
     }
 
-    // ── Vendor: account reactivated ───────────────────────────────────────────
+    // Vendor: account reactivated
     case 'VENDOR_REACTIVATED': {
       const tokens = await getVendorTokens(data.vendorId);
       if (!tokens.length) return;
@@ -313,8 +299,7 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
   }
 }
 
-// ─── Worker startup ───────────────────────────────────────────────────────────
-
+// Worker startup
 bootstrap()
   .then(() => {
     const worker = new Worker<NotificationJobData>(QUEUE_NAMES.NOTIFICATIONS, processJob, {

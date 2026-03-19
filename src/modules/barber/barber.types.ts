@@ -169,6 +169,7 @@ export interface BarberAuthResult {
 export interface BarberLoginInput {
   email: string;
   password: string;
+  fcmToken?: string;
 }
 
 export interface BarberRefreshTokenResponse {
@@ -233,14 +234,28 @@ export interface PublicBarberDto {
 }
 
 export interface TestNotificationInput {
-  voiceEnabled: boolean;
   customerName: string;
   serviceName: string;
   appointmentTime: string;
+  bookingId: string;
 }
 
 export interface TestNotificationResult {
-  successCount: number;
-  failureCount: number;
-  audioUrl?: string;
+  queued: boolean;
+  barberId: string;
+  bookingId: string;
+}
+
+export interface TestBookingFlowInput {
+  userId: string;
+  barberId: string;
+  reminderDelaySeconds: number;
+}
+
+export interface TestBookingFlowResult {
+  queued: boolean;
+  userId: string;
+  barberId: string;
+  shopName: string;
+  reminderFiresInSeconds: number;
 }

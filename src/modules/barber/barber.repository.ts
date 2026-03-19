@@ -458,7 +458,8 @@ export class BarberRepository {
   }
 
   async getFcmTokens(barberId: string): Promise<string[]> {
-    const doc = await BarberModel.findById(barberId, { fcmTokens: 1 })
+    const doc = await BarberModel.findById(barberId)
+      .select('+fcmTokens')
       .lean<{ fcmTokens?: string[] }>()
       .exec();
     return doc?.fcmTokens ?? [];

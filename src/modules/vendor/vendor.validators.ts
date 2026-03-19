@@ -47,6 +47,7 @@ export const loginVerifyOtpSchema = z.object({
   phone: phoneSchema,
   otp: otpSchema,
   sessionId: z.string().min(1, 'Session ID is required'),
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerVerifyOtpSchema = z.object({
