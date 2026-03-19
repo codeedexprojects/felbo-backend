@@ -37,6 +37,7 @@ export interface LoginVerifyOtpResponse {
     address: AddressInput;
     phoneNo: string;
   } | null;
+  isVendorBarber: boolean;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -161,6 +162,7 @@ export interface VendorProfileDto {
     address: AddressInput;
     phoneNo: string;
   } | null;
+  isVendorBarber: boolean;
 }
 
 export interface CreateVendorData {

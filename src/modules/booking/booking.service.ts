@@ -1517,7 +1517,7 @@ export class BookingService {
 
   async getUserHomeBookingData(userId: string): Promise<UserHomeBookingDto> {
     const { lastConfirmedBooking, totalConfirmedCount } =
-      await this.bookingRepository.getUserHomeBooking(userId);
+      await this.bookingRepository.getUserHomeBooking(userId, getTodayInIst());
 
     return {
       lastConfirmedBooking: lastConfirmedBooking
