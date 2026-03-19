@@ -1430,6 +1430,7 @@ export class BookingService {
       date: booking.date,
       startTime: booking.startTime,
       endTime: booking.endTime,
+      barberName: booking.barberName,
       user: {
         name: booking.userName,
         profileUrl: booking.userProfileUrl,
@@ -1457,6 +1458,7 @@ export class BookingService {
         bookingNumber: b.bookingNumber,
         userName: b.userName,
         userImage: b.userImage,
+        barberName: b.barberName,
         date: b.date,
         startTime: b.startTime,
         endTime: b.endTime,
@@ -1505,6 +1507,7 @@ export class BookingService {
         bookingNumber: b.bookingNumber,
         shopName: b.shopName,
         shopImage: b.shopImage,
+        barberName: b.barberName,
         services: b.services.map((s) => s.serviceName),
         status: b.status,
         date: b.date,
@@ -1539,6 +1542,7 @@ export class BookingService {
       status: booking.status,
       paymentMethod: booking.paymentMethod,
       otp: booking.verificationCode,
+      barberName: booking.barberName,
       shop: {
         id: booking.shopId.toString(),
         name: booking.shopName,

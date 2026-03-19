@@ -449,13 +449,13 @@ export default class VendorService {
   }
 
   async getRegistrationPaymentSummary(): Promise<RegistrationPaymentSummaryResponse> {
-    const [registrationFee, gstPercentage] = await Promise.all([
+    const [total, gstPercentage] = await Promise.all([
       this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE),
       this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_GST_PERCENTAGE),
     ]);
 
-    const gstAmount = Math.round(registrationFee * gstPercentage) / 100;
-    const total = Number((registrationFee + gstAmount).toFixed(2));
+    const gstAmount = Number(((total * gstPercentage) / 100).toFixed(2));
+    const registrationFee = Number((total - gstAmount).toFixed(2));
 
     return { registrationFee, gstPercentage, gstAmount, total };
   }
@@ -828,7 +828,18 @@ export default class VendorService {
   }
 
   async getAllPhotoKeys(): Promise<string[]> {
-    return this.vendorRepository.getAllPhotoKeys();
+    const [vendorKeys, shopPhotoUrls, barberPhotoUrls] = await Promise.all([
+      this.vendorRepository.getAllPhotoKeys(),
+      this.shopService.getAllPhotoUrls(),
+      this.barberService.getAllPhotoUrls(),
+    ]);
+
+    const extractKey = (url: string): string => new URL(url).pathname.slice(1);
+
+    const shopKeys = shopPhotoUrls.map(extractKey);
+    const barberKeys = barberPhotoUrls.map(extractKey);
+
+    return [...new Set([...vendorKeys, ...shopKeys, ...barberKeys])];
   }
 
   async registerFcmToken(vendorId: string, token: string): Promise<void> {

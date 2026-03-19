@@ -1109,4 +1109,8 @@ export class BarberService {
 
     return { queued: true, barberId, bookingId: input.bookingId };
   }
+
+  getAllPhotoUrls(): Promise<string[]> {
+    return this.barberRepository.getAllPhotoUrls();
+  }
 }

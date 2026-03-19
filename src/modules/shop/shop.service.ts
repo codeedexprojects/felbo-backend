@@ -218,6 +218,7 @@ export default class ShopService {
       return {
         id: shopId,
         name: shop.name,
+        imageUrl: shop.photos?.[0] || null,
         address: this.formatAddress(shop.address),
         serviceCount: serviceCounts.get(shopId) || 0,
         barberCount: barberCounts.get(shopId) || 0,
@@ -684,6 +685,10 @@ export default class ShopService {
 
   getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
+  }
+
+  getAllPhotoUrls(): Promise<string[]> {
+    return this.shopRepository.getAllPhotoUrls();
   }
 
   async getPendingShopDetails(shopId: string): Promise<PendingShopDetailsDto> {

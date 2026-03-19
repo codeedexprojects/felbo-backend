@@ -401,6 +401,7 @@ export class BookingRepository {
     endTime: string;
     userName: string;
     userProfileUrl: string | null;
+    barberName: string;
     services: Array<{ serviceName: string; durationMinutes: number; price: number }>;
     totalServiceAmount: number;
     advancePaid: number;
@@ -433,6 +434,7 @@ export class BookingRepository {
           endTime: 1,
           userName: 1,
           userProfileUrl: { $ifNull: [{ $arrayElemAt: ['$user.profileUrl', 0] }, null] },
+          barberName: 1,
           services: 1,
           totalServiceAmount: 1,
           advancePaid: 1,
@@ -458,6 +460,7 @@ export class BookingRepository {
       bookingNumber: string;
       shopName: string;
       shopImage: string | null;
+      barberName: string;
       services: Array<{ serviceName: string }>;
       status: string;
       date: Date;
@@ -512,6 +515,7 @@ export class BookingRepository {
                 shopImage: {
                   $ifNull: [{ $arrayElemAt: [{ $arrayElemAt: ['$shop.photos', 0] }, 0] }, null],
                 },
+                barberName: 1,
                 services: 1,
                 status: 1,
                 date: 1,
@@ -546,6 +550,7 @@ export class BookingRepository {
     status: string;
     paymentMethod: string;
     verificationCode: string;
+    barberName: string;
     shopId: mongoose.Types.ObjectId;
     shopName: string;
     shopImage: string | null;
@@ -599,6 +604,7 @@ export class BookingRepository {
           status: 1,
           shopId: 1,
           shopName: 1,
+          barberName: 1,
           verificationCode: 1,
           shopImage: {
             $ifNull: [{ $arrayElemAt: [{ $arrayElemAt: ['$shop.photos', 0] }, 0] }, null],
@@ -641,8 +647,8 @@ export class BookingRepository {
           completedBookings: [
             {
               $match: {
+                date: { $gte: todayStart, $lt: todayEnd },
                 status: 'COMPLETED',
-                completedAt: { $gte: todayStart, $lt: todayEnd },
               },
             },
             { $count: 'count' },
@@ -707,6 +713,7 @@ export class BookingRepository {
       bookingNumber: string;
       userName: string;
       userImage: string | null;
+      barberName: string;
       date: Date;
       startTime: string;
       endTime: string;
@@ -758,6 +765,7 @@ export class BookingRepository {
                 bookingNumber: 1,
                 userName: 1,
                 userImage: { $ifNull: [{ $arrayElemAt: ['$user.profileUrl', 0] }, null] },
+                barberName: 1,
                 date: 1,
                 startTime: 1,
                 endTime: 1,

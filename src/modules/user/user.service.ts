@@ -31,6 +31,8 @@ import {
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
+import { getRedisClient } from '../../shared/redis/redis';
+import { config } from '../../shared/config/config.service';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -284,6 +286,7 @@ export default class UserService {
     if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
     if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
     await this.userRepository.blockById(userId, reason);
+    await getRedisClient().set(`user:blocked:${userId}`, '1', { EX: config.jwt.expirySeconds });
   }
 
   async unblockUser(userId: string): Promise<void> {
@@ -291,6 +294,7 @@ export default class UserService {
     if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
     if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
     await this.userRepository.unblockById(userId);
+    await getRedisClient().del(`user:blocked:${userId}`);
   }
 
   async listUsersForAdmin(filter: ListUsersFilter): Promise<ListUsersResponse> {

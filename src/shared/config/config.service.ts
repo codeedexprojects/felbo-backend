@@ -72,10 +72,6 @@ export const config = {
     taxPercentage: getEnvFloat('RAZORPAY_TAX_PERCENTAGE', 18),
   },
 
-  vendor: {
-    registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
-  },
-
   brevo: {
     apiKey: getEnv('BREVO_API_KEY', ''),
     fromEmail: getEnv('BREVO_FROM_EMAIL', 'noreply@felbo.in'),
