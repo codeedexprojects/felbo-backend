@@ -19,6 +19,7 @@ export interface TokenPayload {
 export interface DecodedToken extends TokenPayload {
   iat: number;
   exp: number;
+  jti?: string;
 }
 
 export class JwtService {
@@ -43,7 +44,11 @@ export class JwtService {
   }
 
   signToken(payload: TokenPayload): string {
-    const claims: Record<string, unknown> = { sub: payload.sub, role: payload.role };
+    const claims: Record<string, unknown> = {
+      sub: payload.sub,
+      role: payload.role,
+      jti: crypto.randomUUID(),
+    };
     if (payload.barberId) claims.barberId = payload.barberId;
     return jwt.sign(claims, this.secret, { expiresIn: this.expirySeconds });
   }
