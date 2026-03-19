@@ -2,10 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '../services/jwt.service';
 import { config } from '../config/config.service';
 import { UnauthorizedError } from '../errors/index';
+import { getRedisClient } from '../redis/redis';
 
 const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+export async function authenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,6 +24,11 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
   }
 
   const decoded = jwtService.verifyToken(token);
+
+  const isBlocked = await getRedisClient().get(`user:blocked:${decoded.sub}`);
+  if (isBlocked) {
+    throw new UnauthorizedError('Your account has been suspended. Please contact support.');
+  }
 
   req.user = decoded;
   next();
