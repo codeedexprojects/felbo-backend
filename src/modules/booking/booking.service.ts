@@ -33,6 +33,7 @@ import {
   AdminCancellationListParams,
   AdminCancellationListResponse,
   AdminCancellationDetailDto,
+  UserHomeBookingDto,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import {
@@ -1511,6 +1512,30 @@ export class BookingService {
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,
+    };
+  }
+
+  async getUserHomeBookingData(userId: string): Promise<UserHomeBookingDto> {
+    const { lastConfirmedBooking, totalConfirmedCount } =
+      await this.bookingRepository.getUserHomeBooking(userId);
+
+    return {
+      lastConfirmedBooking: lastConfirmedBooking
+        ? {
+            id: lastConfirmedBooking._id.toString(),
+            bookingNumber: lastConfirmedBooking.bookingNumber,
+            shopName: lastConfirmedBooking.shopName,
+            shopImage: lastConfirmedBooking.shopImage,
+            bookingTime: lastConfirmedBooking.startTime,
+            shopCoordinates: lastConfirmedBooking.shopCoordinates
+              ? {
+                  longitude: lastConfirmedBooking.shopCoordinates[0],
+                  latitude: lastConfirmedBooking.shopCoordinates[1],
+                }
+              : null,
+          }
+        : null,
+      totalConfirmedCount,
     };
   }
 
