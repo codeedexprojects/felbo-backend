@@ -804,6 +804,63 @@ export class BookingRepository {
     };
   }
 
+  async getUserHomeBooking(userId: string): Promise<{
+    lastConfirmedBooking: {
+      _id: mongoose.Types.ObjectId;
+      bookingNumber: string;
+      shopName: string;
+      shopImage: string | null;
+      startTime: string;
+      shopCoordinates: [number, number] | null;
+    } | null;
+    totalConfirmedCount: number;
+  }> {
+    const [result] = await BookingModel.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          status: 'CONFIRMED',
+        },
+      },
+      {
+        $facet: {
+          lastConfirmedBooking: [
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            {
+              $lookup: {
+                from: 'shops',
+                localField: 'shopId',
+                foreignField: '_id',
+                as: 'shop',
+                pipeline: [{ $project: { photos: 1, location: 1 } }],
+              },
+            },
+            {
+              $project: {
+                bookingNumber: 1,
+                shopName: 1,
+                startTime: 1,
+                shopImage: {
+                  $ifNull: [{ $arrayElemAt: [{ $arrayElemAt: ['$shop.photos', 0] }, 0] }, null],
+                },
+                shopCoordinates: {
+                  $ifNull: [{ $arrayElemAt: ['$shop.location.coordinates', 0] }, null],
+                },
+              },
+            },
+          ],
+          totalConfirmedCount: [{ $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    return {
+      lastConfirmedBooking: result.lastConfirmedBooking[0] ?? null,
+      totalConfirmedCount: result.totalConfirmedCount[0]?.count ?? 0,
+    };
+  }
+
   async adminGetCancelledBookingDetail(
     bookingId: string,
     associatedShopIds?: string[],
