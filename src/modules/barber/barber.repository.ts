@@ -449,6 +449,34 @@ export class BarberRepository {
     return countsMap;
   }
 
+  incrementCancellation(barberId: string): Promise<IBarber | null> {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return BarberModel.findByIdAndUpdate(
+      barberId,
+      [
+        {
+          $set: {
+            cancellationCount: { $add: ['$cancellationCount', 1] },
+            cancellationsThisWeek: {
+              $cond: {
+                if: {
+                  $or: [
+                    { $eq: ['$lastCancellationAt', null] },
+                    { $lt: ['$lastCancellationAt', oneWeekAgo] },
+                  ],
+                },
+                then: 1,
+                else: { $add: ['$cancellationsThisWeek', 1] },
+              },
+            },
+            lastCancellationAt: new Date(),
+          },
+        },
+      ],
+      { returnDocument: 'after', updatePipeline: true },
+    ).exec();
+  }
+
   async getAllPhotoUrls(): Promise<string[]> {
     const barbers = await BarberModel.find({}, { photo: 1 }).lean().exec();
     return barbers.map((b) => b.photo).filter((p): p is string => !!p);

@@ -566,6 +566,11 @@ export default class ShopService {
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
+    const trimmedQuery = input.query?.trim();
+    const serviceShopIds = trimmedQuery
+      ? await this.serviceService.getShopIdsByServiceQuery(trimmedQuery)
+      : undefined;
+
     const { shops, total } = await this.shopRepository.searchByName(
       input.query,
       {
@@ -574,6 +579,7 @@ export default class ShopService {
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
+        serviceShopIds,
       },
       skip,
       limit,
@@ -660,6 +666,8 @@ export default class ShopService {
       photo: b.photo,
       isAvailable: b.isAvailable,
       shopId: b.shopId,
+      cancellationCount: b.cancellationCount,
+      cancellationsThisWeek: b.cancellationsThisWeek,
     }));
   }
 
@@ -685,6 +693,12 @@ export default class ShopService {
 
   getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
     return this.shopRepository.findIdsByVendorIds(vendorIds);
+  }
+
+  getCancellationStatsByVendorId(
+    vendorId: string,
+  ): Promise<{ cancellationCount: number; cancellationsThisWeek: number }> {
+    return this.shopRepository.getCancellationStatsByVendorId(vendorId);
   }
 
   getAllPhotoUrls(): Promise<string[]> {

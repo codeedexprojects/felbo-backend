@@ -51,7 +51,7 @@ export class BookingRepository {
     const objectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
 
     const result = await BookingModel.aggregate([
-      { $match: { shopId: { $in: objectIds } } },
+      { $match: { shopId: { $in: objectIds }, status: { $ne: 'PENDING_PAYMENT' } } },
       {
         $facet: {
           totalBookings: [{ $count: 'count' }],
@@ -639,7 +639,15 @@ export class BookingRepository {
             {
               $match: {
                 date: { $gte: todayStart, $lt: todayEnd },
-                status: { $in: ['CONFIRMED', 'COMPLETED'] },
+                status: {
+                  $in: [
+                    'CONFIRMED',
+                    'COMPLETED',
+                    'CANCELLED_BY_BARBER',
+                    'CANCELLED_BY_USER',
+                    'NO_SHOW',
+                  ],
+                },
               },
             },
             { $count: 'count' },
