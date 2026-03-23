@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import z, { ZodError } from 'zod';
+import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 import { logger } from '../logger/logger';
 import mongoose from 'mongoose';
@@ -23,13 +23,12 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }
 
   if (err instanceof ZodError) {
-    const flattened = z.flattenError(err);
+    const firstMessage = err.issues[0]?.message ?? 'Validation failed';
     res.status(400).json({
       success: false,
       error: {
         code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
-        fieldErrors: flattened.fieldErrors,
+        message: firstMessage,
       },
     });
     return;

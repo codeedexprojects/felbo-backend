@@ -34,6 +34,7 @@ import {
   AdminCancellationListResponse,
   AdminCancellationDetailDto,
   UserHomeBookingDto,
+  AdminVendorBookingListResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import {
@@ -53,6 +54,7 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { FelboCoinService } from '../felbocoin/felbocoin.service';
 import { withTransaction } from '../../shared/database/transaction';
+import { IssueService } from '../issue/issue.service';
 
 // const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
@@ -74,6 +76,7 @@ export class BookingService {
     private readonly getVendorService: () => VendorService,
     private readonly logger: Logger,
     private readonly getFelboCoinService: () => FelboCoinService,
+    private readonly getIssueService: () => IssueService,
   ) {}
 
   private get barberService(): BarberService {
@@ -106,6 +109,10 @@ export class BookingService {
 
   private get felboCoinService(): FelboCoinService {
     return this.getFelboCoinService();
+  }
+
+  private get issueService(): IssueService {
+    return this.getIssueService();
   }
 
   async getBarbersForServices(
@@ -753,6 +760,8 @@ export class BookingService {
         bookingNumber: confirmed.bookingNumber,
         status: confirmed.status,
         paymentId: input.razorpayPaymentId,
+        paidAmount: confirmed.advancePaid,
+        remainingBalance: confirmed.remainingAmount,
       },
     };
   }
@@ -845,8 +854,10 @@ export class BookingService {
       }
     }
 
-    const { cancellationsThisWeek, vendorId } =
-      await this.shopService.incrementShopCancellationCount(booking.shopId.toString());
+    const [{ cancellationsThisWeek, vendorId }] = await Promise.all([
+      this.shopService.incrementShopCancellationCount(booking.shopId.toString()),
+      this.barberService.incrementCancellationCount(barberId),
+    ]);
 
     let flagged = false;
     if (cancellationsThisWeek >= weeklyLimit) {
@@ -1009,9 +1020,11 @@ export class BookingService {
       throw new ValidationError('Invalid verification code.');
     }
 
-    const coinsEarned = await this.configService.getValueAsNumber(
-      CONFIG_KEYS.COIN_EARN_PER_BOOKING,
-    );
+    const isRazorpay = booking.paymentMethod === 'RAZORPAY';
+
+    const coinsEarned = isRazorpay
+      ? await this.configService.getValueAsNumber(CONFIG_KEYS.COIN_EARN_PER_BOOKING)
+      : 0;
 
     let completed: Awaited<ReturnType<BookingRepository['updateBookingCompleted']>>;
 
@@ -1019,17 +1032,19 @@ export class BookingService {
       completed = await this.bookingRepository.updateBookingCompleted(bookingId, session);
       if (!completed) throw new ConflictError('Booking has already been completed.');
 
-      await this.felboCoinService.creditCoins(
-        {
-          userId: booking.userId.toString(),
-          coins: coinsEarned,
-          type: 'COIN_EARNED',
-          bookingId: booking._id.toString(),
-          bookingNumber: booking.bookingNumber,
-          description: `Coins earned for completing booking ${booking.bookingNumber}`,
-        },
-        session,
-      );
+      if (isRazorpay && coinsEarned > 0) {
+        await this.felboCoinService.creditCoins(
+          {
+            userId: booking.userId.toString(),
+            coins: coinsEarned,
+            type: 'COIN_EARNED',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Coins earned for completing booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      }
     });
 
     this.logger.info({
@@ -1287,6 +1302,39 @@ export class BookingService {
     };
   }
 
+  async adminGetVendorBookings(
+    vendorId: string,
+    params: { page: number; limit: number; status?: string; startDate?: Date; endDate?: Date },
+  ): Promise<AdminVendorBookingListResponse> {
+    const shopIds = await this.shopService.getShopIdsByVendorIds([vendorId]);
+
+    const { bookings, total } = await this.bookingRepository.adminGetBookings({
+      page: params.page,
+      limit: params.limit,
+      status: params.status,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      associatedShopIds: shopIds,
+    });
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        barberName: b.barberName,
+        shopName: b.shopName,
+        userName: b.userName,
+        date: b.date,
+        startTime: b.startTime,
+        status: b.status,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
   async adminGetBookingDetail(bookingId: string, role: string): Promise<AdminBookingDetailDto> {
     let associatedShopIds: string[] | undefined;
 
@@ -1468,6 +1516,8 @@ export class BookingService {
     const booking = await this.bookingRepository.findUserBookingDetail(bookingId, userId);
     if (!booking) throw new NotFoundError('Booking not found.');
 
+    const isReported = await this.issueService.existsByBookingId(bookingId);
+
     const addr = booking.shopAddress;
     const addressStr = addr
       ? [addr.line1, addr.line2, addr.area, addr.city, addr.district, addr.state, addr.pincode]
@@ -1512,6 +1562,7 @@ export class BookingService {
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,
+      isReported,
     };
   }
 

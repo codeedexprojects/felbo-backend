@@ -16,6 +16,8 @@ import {
   barberBookingListQuerySchema,
   completeBookingBodySchema,
   userBookingListQuerySchema,
+  vendorIdParamSchema,
+  adminVendorBookingListQuerySchema,
 } from './booking.validators';
 
 export class BookingController {
@@ -239,6 +241,21 @@ export class BookingController {
     const { bookingId } = bookingIdParamSchema.parse(req.params);
 
     const result = await this.bookingService.adminGetCancelledBookingDetail(bookingId);
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  adminGetVendorBookings = async (req: Request, res: Response): Promise<void> => {
+    const { id: vendorId } = vendorIdParamSchema.parse(req.params);
+    const query = adminVendorBookingListQuerySchema.parse(req.query);
+
+    const result = await this.bookingService.adminGetVendorBookings(vendorId, {
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+      startDate: query.startDate ? new Date(`${query.startDate}T00:00:00.000Z`) : undefined,
+      endDate: query.endDate ? new Date(`${query.endDate}T23:59:59.999Z`) : undefined,
+    });
 
     res.status(200).json({ success: true, data: result });
   };

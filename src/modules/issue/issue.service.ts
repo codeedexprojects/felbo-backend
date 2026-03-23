@@ -275,4 +275,8 @@ export class IssueService {
       createdAt: issue.createdAt,
     }));
   }
+
+  existsByBookingId(bookingId: string): Promise<boolean> {
+    return this.issueRepository.existsByBookingId(bookingId);
+  }
 }

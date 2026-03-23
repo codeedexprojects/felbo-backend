@@ -347,6 +347,8 @@ export interface VendorAdminDetail {
       phone: string;
       photo?: string;
       isAvailable: boolean;
+      cancellationCount: number;
+      cancellationsThisWeek: number;
     }[];
     barberCount: number;
 

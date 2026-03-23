@@ -596,7 +596,10 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const shopDtos = await this.shopService.getMyShops(vendorId);
+    const [shopDtos, cancellationStats] = await Promise.all([
+      this.shopService.getMyShops(vendorId),
+      this.shopService.getCancellationStatsByVendorId(vendorId),
+    ]);
 
     const shopIds = shopDtos.map((shop) => shop.id);
 
@@ -649,6 +652,8 @@ export default class VendorService {
             phone: b.phone,
             photo: b.photo,
             isAvailable: b.isAvailable,
+            cancellationCount: b.cancellationCount,
+            cancellationsThisWeek: b.cancellationsThisWeek,
           })),
           barberCount: barberList.length,
 
@@ -680,8 +685,8 @@ export default class VendorService {
       documents: vendor.documents,
       associationMemberId: vendor.associationMemberId,
       associationIdProofUrl: vendor.associationIdProofUrl,
-      cancellationCount: vendor.cancellationCount,
-      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      cancellationCount: cancellationStats.cancellationCount,
+      cancellationsThisWeek: cancellationStats.cancellationsThisWeek,
       shops,
       recentBookings: [],
     };
