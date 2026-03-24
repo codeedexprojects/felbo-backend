@@ -7,6 +7,7 @@ import { uploadService } from './modules/upload/upload.container';
 import { configService } from './modules/config/config.container';
 import { SEVEN_DAYS_MS } from './shared/constants';
 import { initFirebase } from './shared/notification/fcm.service';
+import { scheduleBarberAvailabilityCron } from './shared/notification/barber.cron';
 
 async function bootstrap(): Promise<void> {
   await connectMongo();
@@ -20,6 +21,7 @@ async function bootstrap(): Promise<void> {
 
   void uploadService.runCleanupJob();
   setInterval(() => void uploadService.runCleanupJob(), SEVEN_DAYS_MS);
+  scheduleBarberAvailabilityCron();
   logger.info({ action: 'CLEANUP_JOB_SCHEDULED', module: 'upload', intervalDays: SEVEN_DAYS_MS });
 }
 

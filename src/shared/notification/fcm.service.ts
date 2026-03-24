@@ -119,6 +119,57 @@ export async function sendFcmNotification(payload: FcmPayload): Promise<FcmResul
   return { successCount, failureCount, invalidTokens };
 }
 
+export interface FcmTopicPayload {
+  title: string;
+  body: string;
+  channel: FcmChannel;
+  data?: Record<string, string>;
+}
+
+export async function sendTopicNotification(
+  topic: string,
+  payload: FcmTopicPayload,
+): Promise<void> {
+  const sound = CHANNEL_SOUNDS[payload.channel];
+
+  const message: admin.messaging.Message = {
+    topic,
+    notification: {
+      title: payload.title,
+      body: payload.body,
+    },
+    android: {
+      notification: {
+        channelId: payload.channel,
+        sound,
+      },
+    },
+    apns: {
+      headers: {
+        'apns-priority': '10',
+      },
+      payload: {
+        aps: {
+          sound: `${sound}.caf`,
+          alert: {
+            title: payload.title,
+            body: payload.body,
+          },
+        },
+      },
+    },
+    data: {
+      ...payload.data,
+      channel: payload.channel,
+      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+    },
+  };
+
+  await admin.messaging().send(message);
+
+  logger.info('FCM topic notification sent', { topic, title: payload.title });
+}
+
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
