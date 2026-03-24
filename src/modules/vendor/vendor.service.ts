@@ -224,6 +224,13 @@ export default class VendorService {
 
     const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendor._id.toString());
 
+    if (input.fcmToken) {
+      void this.vendorRepository.addFcmToken(vendor._id.toString(), input.fcmToken);
+      if (barberProfile) {
+        void this.barberService.registerFcmToken(barberProfile.id, input.fcmToken);
+      }
+    }
+
     this.logger.info({
       action: 'VENDOR_LOGIN',
       module: 'vendor',

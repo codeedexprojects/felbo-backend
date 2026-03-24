@@ -98,6 +98,7 @@ export const barberSetPasswordSchema = z.object({
 export const barberLoginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const barberRefreshTokenSchema = z.object({
@@ -124,4 +125,8 @@ export const releaseSlotBlockParamSchema = z.object({
 export const listSlotBlocksQuerySchema = z.object({
   date: z.string().date('Invalid date format. Use YYYY-MM-DD').optional(),
   status: z.enum(['ACTIVE', 'RELEASED']).optional(),
+});
+
+export const fcmTokenSchema = z.object({
+  token: z.string({ error: 'Token is required' }).min(1, 'Token is required'),
 });

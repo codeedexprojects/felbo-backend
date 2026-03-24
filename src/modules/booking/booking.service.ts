@@ -42,7 +42,9 @@ import {
   getCurrentIstMinutes,
   parseDateAsIst,
   getIstDayRangeUtc,
+  formatAppointmentTime,
 } from '../../shared/utils/time';
+import { sendFcmNotification, FCM_CHANNELS } from '../../shared/notification/fcm.service';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -626,6 +628,28 @@ export class BookingService {
         coinsUsed: coinRedeemThreshold,
       });
 
+      const coinAppointmentTime = formatAppointmentTime(booking!.startTime);
+      const coinBarberId = booking!.barberId.toString();
+      const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
+
+      void this.notifyUser(userId, {
+        channel: FCM_CHANNELS.GENERAL,
+        title: 'Booking Confirmed!',
+        body: `Your booking at ${shop.name} is confirmed for ${coinAppointmentTime}`,
+        data: {
+          type: 'BOOKING_CONFIRMED',
+          bookingId: booking!._id.toString(),
+          shopName: shop.name,
+        },
+      });
+
+      void this.notifyBarber(coinBarberId, {
+        channel: FCM_CHANNELS.BOOKING,
+        title: 'New Booking!',
+        body: `${user.name ?? 'A customer'} booked ${coinServiceName} at ${coinAppointmentTime}`,
+        data: { type: 'NEW_BOOKING', shopName: shop.name },
+      });
+
       return {
         booking: {
           id: booking!._id.toString(),
@@ -754,6 +778,24 @@ export class BookingService {
       userId,
     });
 
+    const appointmentTime = formatAppointmentTime(confirmed.startTime);
+    const confirmedBarberId = confirmed.barberId.toString();
+    const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
+
+    void this.notifyUser(userId, {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Confirmed!',
+      body: `Your booking at ${confirmed.shopName} is confirmed for ${appointmentTime}`,
+      data: { type: 'BOOKING_CONFIRMED', bookingId, shopName: confirmed.shopName },
+    });
+
+    void this.notifyBarber(confirmedBarberId, {
+      channel: FCM_CHANNELS.BOOKING,
+      title: 'New Booking!',
+      body: `${confirmed.userName} booked ${confirmedServiceName} at ${appointmentTime}`,
+      data: { type: 'NEW_BOOKING', shopName: confirmed.shopName },
+    });
+
     return {
       booking: {
         id: confirmed._id.toString(),
@@ -875,6 +917,13 @@ export class BookingService {
       flagged,
     });
 
+    void this.notifyUser(booking.userId.toString(), {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Cancelled',
+      body: `Your booking at ${booking.shopName} has been cancelled by the barber.`,
+      data: { type: 'BOOKING_CANCELLED', bookingId },
+    });
+
     return {
       booking: {
         id: cancelled!._id.toString(),
@@ -979,6 +1028,13 @@ export class BookingService {
       userId,
       isEarlyCancel,
       refundCoins,
+    });
+
+    void this.notifyBarber(booking.barberId.toString(), {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Cancelled',
+      body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
+      data: { type: 'BOOKING_CANCELLED', bookingId },
     });
 
     return {
@@ -1262,6 +1318,40 @@ export class BookingService {
       workingHours: { start: '00:00', end: '00:00' },
       slots: [],
     };
+  }
+
+  private async notifyUser(
+    userId: string,
+    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
+  ): Promise<void> {
+    const tokens = await this.userService.getFcmTokens(userId);
+    if (!tokens.length) return;
+    const result = await sendFcmNotification({ tokens, ...payload });
+    if (result.failureCount > 0) {
+      this.logger.warn('FCM user notification had failures', {
+        userId,
+        failureCount: result.failureCount,
+      });
+    }
+    if (result.invalidTokens.length)
+      void this.userService.pruneInvalidFcmTokens(result.invalidTokens);
+  }
+
+  private async notifyBarber(
+    barberId: string,
+    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
+  ): Promise<void> {
+    const tokens = await this.barberService.getFcmTokens(barberId);
+    if (!tokens.length) return;
+    const result = await sendFcmNotification({ tokens, ...payload });
+    if (result.failureCount > 0) {
+      this.logger.warn('FCM barber notification had failures', {
+        barberId,
+        failureCount: result.failureCount,
+      });
+    }
+    if (result.invalidTokens.length)
+      void this.barberService.pruneInvalidFcmTokens(result.invalidTokens);
   }
 
   private toMinutes(time: string): number {

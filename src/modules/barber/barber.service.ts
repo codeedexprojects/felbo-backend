@@ -544,6 +544,10 @@ export class BarberService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.barberRepository.updateRefreshToken(barber._id.toString(), refreshTokenHash);
 
+    if (input.fcmToken) {
+      void this.barberRepository.addFcmToken(barber._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'BARBER_LOGIN',
       module: 'barber',
@@ -1015,6 +1019,22 @@ export class BarberService {
     const barberIds = availableBarbers.map((b) => b._id.toString());
     const links = await this.barberRepository.findBarberServicesByBarberIds(barberIds);
     return new Set(links.map((l) => l.serviceId.toString()));
+  }
+
+  async getFcmTokens(barberId: string): Promise<string[]> {
+    return this.barberRepository.getFcmTokens(barberId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.barberRepository.pruneInvalidFcmTokens(tokens);
+  }
+
+  async registerFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.addFcmToken(barberId, token);
+  }
+
+  async unregisterFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.removeFcmToken(barberId, token);
   }
 
   getAllPhotoUrls(): Promise<string[]> {

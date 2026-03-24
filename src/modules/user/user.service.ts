@@ -147,6 +147,10 @@ export default class UserService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.userRepository.updateRefreshToken(user._id.toString(), refreshTokenHash);
 
+    if (input.fcmToken) {
+      void this.userRepository.addFcmToken(user._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'USER_AUTHENTICATED',
       module: 'user',
@@ -252,6 +256,14 @@ export default class UserService {
 
   async unregisterFcmToken(userId: string, token: string): Promise<void> {
     await this.userRepository.removeFcmToken(userId, token);
+  }
+
+  async getFcmTokens(userId: string): Promise<string[]> {
+    return this.userRepository.getFcmTokens(userId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.userRepository.pruneInvalidFcmTokens(tokens);
   }
 
   async incrementCancellationCount(userId: string, session?: ClientSession): Promise<void> {

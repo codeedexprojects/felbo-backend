@@ -171,6 +171,7 @@ export interface BarberAuthResult {
 export interface BarberLoginInput {
   email: string;
   password: string;
+  fcmToken?: string;
 }
 
 export interface BarberRefreshTokenResponse {

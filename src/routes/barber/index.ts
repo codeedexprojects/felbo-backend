@@ -7,6 +7,7 @@ import slotBlockRoutes from './slotBlock.routes';
 import bookingRoutes from './booking.routes';
 import dashboardRoutes from './dashboard.routes';
 import profileRoutes from './profile.routes';
+import fcmRoutes from './fcm.routes';
 import avatarRoutes from './avatar.routes';
 
 const router = Router();
@@ -22,5 +23,6 @@ router.use('/', availabilityRoutes);
 router.use('/', slotBlockRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/', dashboardRoutes);
+router.use('/fcm', fcmRoutes);
 
 export default router;

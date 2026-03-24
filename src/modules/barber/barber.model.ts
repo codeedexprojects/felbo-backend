@@ -22,6 +22,7 @@ export interface IBarber extends Document {
   lastCancellationAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  fcmTokens: string[];
 }
 
 const barberSchema = new Schema<IBarber>(
@@ -49,6 +50,11 @@ const barberSchema = new Schema<IBarber>(
     cancellationCount: { type: Number, default: 0 },
     cancellationsThisWeek: { type: Number, default: 0 },
     lastCancellationAt: { type: Date },
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
   },
   { timestamps: true },
 );
