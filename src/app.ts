@@ -13,7 +13,7 @@ const app = express();
 
 // Security & parsing
 app.use(helmet());
-app.use(cors({ credentials: true, origin: 'https://felbo-dashboard.netlify.app' }));
+app.use(cors({ credentials: true, origin: true }));
 app.use(cookieParser());
 app.use(compression());
 app.use(express.json());

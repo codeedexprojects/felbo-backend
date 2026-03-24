@@ -74,6 +74,18 @@ export class ServiceRepository {
     );
   }
 
+  updateBarberServiceDuration(
+    barberId: string,
+    serviceId: string,
+    durationMinutes: number,
+  ): Promise<IBarberService | null> {
+    return BarberServiceModel.findOneAndUpdate(
+      { barberId, serviceId },
+      { $set: { durationMinutes } },
+      { new: true },
+    ).exec();
+  }
+
   async removeBarberServiceByBarberAndServiceId(
     barberId: string,
     serviceId: string,

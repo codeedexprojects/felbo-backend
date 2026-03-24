@@ -226,6 +226,25 @@ export interface BarberProfileDto {
   }>;
 }
 
+export interface BookedSlotSummary {
+  bookingNumber: string;
+  customerName: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  services: Array<{ name: string; durationMinutes: number }>;
+}
+
+export interface BarberDayScheduleResult {
+  date: string;
+  isWorking: boolean;
+  workingHours: { start: string; end: string } | null;
+  breaks: Array<{ start: string; end: string }>;
+  blocks: SlotBlockResult[];
+  bookings: BookedSlotSummary[];
+  availableRanges: Array<{ startTime: string; endTime: string }>;
+}
+
 // Public-facing barber DTO used in booking flow (select barber screen)
 export interface PublicBarberDto {
   id: string;
