@@ -354,6 +354,10 @@ export default class VendorService {
       status: 'PENDING',
     });
 
+    if (input.fcmToken) {
+      await this.vendorRepository.addFcmToken(newVendor._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'VENDOR_REGISTRATION_SUBMITTED',
       module: 'vendor',
@@ -388,7 +392,7 @@ export default class VendorService {
       amountRupees: amount,
     });
 
-    await this.vendorRepository.upsertByPhone(input.phone, {
+    const upsertedVendor = await this.vendorRepository.upsertByPhone(input.phone, {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'INDEPENDENT',
@@ -398,6 +402,10 @@ export default class VendorService {
       verificationStatus: 'PAYMENT_PENDING',
       status: 'PENDING',
     });
+
+    if (input.fcmToken && upsertedVendor) {
+      await this.vendorRepository.addFcmToken(upsertedVendor._id.toString(), input.fcmToken);
+    }
 
     this.logger.info({
       action: 'VENDOR_REGISTRATION_PAYMENT_INITIATED',

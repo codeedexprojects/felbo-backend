@@ -77,6 +77,7 @@ export interface RegisterAssociationInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterAssociationResponse {
@@ -100,6 +101,7 @@ export interface RegisterIndependentInitiateInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterIndependentInitiateResponse {
