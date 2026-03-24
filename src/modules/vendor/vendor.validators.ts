@@ -65,6 +65,7 @@ export const registerAssociationSchema = z.object({
   associationMemberId: z.string().min(1, 'Member ID is required'),
   associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
   shopDetails: shopDetailsSchema,
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerIndependentInitiateSchema = z.object({
@@ -79,6 +80,7 @@ export const registerIndependentInitiateSchema = z.object({
     ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
   }),
   shopDetails: shopDetailsSchema,
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerIndependentConfirmSchema = z.object({
