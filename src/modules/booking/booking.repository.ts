@@ -51,7 +51,7 @@ export class BookingRepository {
     const objectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
 
     const result = await BookingModel.aggregate([
-      { $match: { shopId: { $in: objectIds } } },
+      { $match: { shopId: { $in: objectIds }, status: { $ne: 'PENDING_PAYMENT' } } },
       {
         $facet: {
           totalBookings: [{ $count: 'count' }],
@@ -639,7 +639,15 @@ export class BookingRepository {
             {
               $match: {
                 date: { $gte: todayStart, $lt: todayEnd },
-                status: { $in: ['CONFIRMED', 'COMPLETED'] },
+                status: {
+                  $in: [
+                    'CONFIRMED',
+                    'COMPLETED',
+                    'CANCELLED_BY_BARBER',
+                    'CANCELLED_BY_USER',
+                    'NO_SHOW',
+                  ],
+                },
               },
             },
             { $count: 'count' },
@@ -705,6 +713,315 @@ export class BookingRepository {
         },
       },
     ]).exec();
+  }
+
+  async adminGetCancelledBookings(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    startDate?: Date;
+    endDate?: Date;
+    cancelledBy?: 'USER' | 'VENDOR';
+    associatedShopIds?: string[];
+  }): Promise<{
+    cancellations: Array<{
+      _id: mongoose.Types.ObjectId;
+      bookingNumber: string;
+      shopName: string;
+      userPhone: string;
+      date: Date;
+      startTime: string;
+      paymentMethod: string;
+      advancePaid: number;
+      status: string;
+      cancellation: {
+        cancelledAt: Date;
+        cancelledBy: 'USER' | 'VENDOR';
+        reason: string;
+        refundAmount: number;
+        refundCoins: number;
+        refundType: string;
+        refundStatus: string;
+      };
+      createdAt: Date;
+    }>;
+    total: number;
+  }> {
+    const skip = (params.page - 1) * params.limit;
+
+    const match: Record<string, unknown> = {
+      status: params.cancelledBy
+        ? params.cancelledBy === 'USER'
+          ? 'CANCELLED_BY_USER'
+          : 'CANCELLED_BY_VENDOR'
+        : { $in: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR'] },
+    };
+
+    if (params.search) {
+      const escaped = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      match.$or = [
+        { bookingNumber: { $regex: escaped, $options: 'i' } },
+        { shopName: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+
+    if (params.startDate || params.endDate) {
+      const dateFilter: Record<string, Date> = {};
+      if (params.startDate) dateFilter.$gte = params.startDate;
+      if (params.endDate) dateFilter.$lte = params.endDate;
+      match['cancellation.cancelledAt'] = dateFilter;
+    }
+
+    if (params.associatedShopIds && params.associatedShopIds.length > 0) {
+      match.shopId = {
+        $in: params.associatedShopIds.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    const [result] = await BookingModel.aggregate([
+      { $match: match },
+      {
+        $facet: {
+          cancellations: [
+            { $sort: { 'cancellation.cancelledAt': -1 } },
+            { $skip: skip },
+            { $limit: params.limit },
+            {
+              $project: {
+                bookingNumber: 1,
+                shopName: 1,
+                userPhone: 1,
+                date: 1,
+                startTime: 1,
+                paymentMethod: 1,
+                advancePaid: 1,
+                status: 1,
+                cancellation: 1,
+                createdAt: 1,
+              },
+            },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    return {
+      cancellations: result.cancellations,
+      total: result.total[0]?.count ?? 0,
+    };
+  }
+
+  async getUserHomeBooking(
+    userId: string,
+    todayDate: Date,
+  ): Promise<{
+    lastConfirmedBooking: {
+      _id: mongoose.Types.ObjectId;
+      bookingNumber: string;
+      shopName: string;
+      shopImage: string | null;
+      startTime: string;
+      shopCoordinates: [number, number] | null;
+    } | null;
+    totalConfirmedCount: number;
+  }> {
+    const [result] = await BookingModel.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          status: 'CONFIRMED',
+          date: todayDate,
+        },
+      },
+      {
+        $facet: {
+          lastConfirmedBooking: [
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            {
+              $lookup: {
+                from: 'shops',
+                localField: 'shopId',
+                foreignField: '_id',
+                as: 'shop',
+                pipeline: [{ $project: { photos: 1, location: 1 } }],
+              },
+            },
+            {
+              $project: {
+                bookingNumber: 1,
+                shopName: 1,
+                startTime: 1,
+                shopImage: {
+                  $ifNull: [{ $arrayElemAt: [{ $arrayElemAt: ['$shop.photos', 0] }, 0] }, null],
+                },
+                shopCoordinates: {
+                  $ifNull: [{ $arrayElemAt: ['$shop.location.coordinates', 0] }, null],
+                },
+              },
+            },
+          ],
+          totalConfirmedCount: [{ $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    return {
+      lastConfirmedBooking: result.lastConfirmedBooking[0] ?? null,
+      totalConfirmedCount: result.totalConfirmedCount[0]?.count ?? 0,
+    };
+  }
+
+  async adminGetCancelledBookingDetail(
+    bookingId: string,
+    associatedShopIds?: string[],
+  ): Promise<{
+    _id: mongoose.Types.ObjectId;
+    bookingNumber: string;
+    userId: mongoose.Types.ObjectId;
+    userName: string;
+    userPhone: string;
+    date: Date;
+    startTime: string;
+    endTime: string;
+    totalDurationMinutes: number;
+    status: string;
+    services: Array<{
+      serviceId: mongoose.Types.ObjectId;
+      serviceName: string;
+      categoryName: string;
+      durationMinutes: number;
+      price: number;
+    }>;
+    totalServiceAmount: number;
+    advancePaid: number;
+    remainingAmount: number;
+    paymentMethod: string;
+    paymentId?: string;
+    cancellation: {
+      cancelledAt: Date;
+      cancelledBy: 'USER' | 'VENDOR';
+      reason: string;
+      refundAmount: number;
+      refundCoins: number;
+      refundType: string;
+      refundStatus: string;
+    };
+    shop: {
+      _id: mongoose.Types.ObjectId;
+      name: string;
+      phone: string;
+      address: object | null;
+      photos: string[];
+    } | null;
+    vendor: {
+      _id: mongoose.Types.ObjectId;
+      ownerName: string;
+      phone: string;
+      email?: string;
+    } | null;
+    barber: {
+      _id: mongoose.Types.ObjectId;
+      name: string;
+      phone: string;
+      email?: string;
+      photo?: string;
+    } | null;
+    createdAt: Date;
+  } | null> {
+    const matchFilter: Record<string, unknown> = {
+      _id: new mongoose.Types.ObjectId(bookingId),
+      status: { $in: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR'] },
+    };
+
+    if (associatedShopIds && associatedShopIds.length > 0) {
+      matchFilter.shopId = {
+        $in: associatedShopIds.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    const [result] = await BookingModel.aggregate([
+      { $match: matchFilter },
+      {
+        $lookup: {
+          from: 'shops',
+          localField: 'shopId',
+          foreignField: '_id',
+          as: 'shopData',
+          pipeline: [{ $project: { name: 1, phone: 1, address: 1, photos: 1, vendorId: 1 } }],
+        },
+      },
+      {
+        $lookup: {
+          from: 'barbers',
+          localField: 'barberId',
+          foreignField: '_id',
+          as: 'barberData',
+          pipeline: [{ $project: { name: 1, phone: 1, email: 1, photo: 1 } }],
+        },
+      },
+      { $addFields: { shopInfo: { $arrayElemAt: ['$shopData', 0] } } },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: 'shopInfo.vendorId',
+          foreignField: '_id',
+          as: 'vendorData',
+          pipeline: [{ $project: { ownerName: 1, phone: 1, email: 1 } }],
+        },
+      },
+      {
+        $project: {
+          bookingNumber: 1,
+          userId: 1,
+          userName: 1,
+          userPhone: 1,
+          date: 1,
+          startTime: 1,
+          endTime: 1,
+          totalDurationMinutes: 1,
+          status: 1,
+          services: 1,
+          totalServiceAmount: 1,
+          advancePaid: 1,
+          remainingAmount: 1,
+          paymentMethod: 1,
+          paymentId: 1,
+          cancellation: 1,
+          createdAt: 1,
+          shop: {
+            $cond: {
+              if: { $gt: [{ $size: '$shopData' }, 0] },
+              then: {
+                _id: '$shopInfo._id',
+                name: '$shopInfo.name',
+                phone: '$shopInfo.phone',
+                address: '$shopInfo.address',
+                photos: '$shopInfo.photos',
+              },
+              else: null,
+            },
+          },
+          vendor: {
+            $cond: {
+              if: { $gt: [{ $size: '$vendorData' }, 0] },
+              then: { $arrayElemAt: ['$vendorData', 0] },
+              else: null,
+            },
+          },
+          barber: {
+            $cond: {
+              if: { $gt: [{ $size: '$barberData' }, 0] },
+              then: { $arrayElemAt: ['$barberData', 0] },
+              else: null,
+            },
+          },
+        },
+      },
+    ]).exec();
+
+    return result ?? null;
   }
 
   async vendorGetBookings(params: VendorBookingListParams): Promise<{

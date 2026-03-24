@@ -29,6 +29,8 @@ export interface BarberManagementDto {
   rating: { average: number; count: number };
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
   serviceCount: number;
   services?: { id: string; name: string }[];
   createdAt: Date;

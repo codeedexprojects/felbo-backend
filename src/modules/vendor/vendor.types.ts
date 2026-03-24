@@ -38,6 +38,7 @@ export interface LoginVerifyOtpResponse {
     address: AddressInput;
     phoneNo: string;
   } | null;
+  isVendorBarber: boolean;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -162,6 +163,7 @@ export interface VendorProfileDto {
     address: AddressInput;
     phoneNo: string;
   } | null;
+  isVendorBarber: boolean;
 }
 
 export interface CreateVendorData {
@@ -346,6 +348,8 @@ export interface VendorAdminDetail {
       phone: string;
       photo?: string;
       isAvailable: boolean;
+      cancellationCount: number;
+      cancellationsThisWeek: number;
     }[];
     barberCount: number;
 
@@ -427,7 +431,7 @@ export interface StaffMemberDto {
 }
 
 export interface VendorDashboardCountsDto {
-  totalBookings: number;
+  dailyBookings: number;
   staffWorking: { count: number; staff: StaffMemberDto[] };
   staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }

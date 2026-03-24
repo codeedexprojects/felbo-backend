@@ -249,4 +249,31 @@ export class ServiceRepository {
     }
     return countsMap;
   }
+
+  async findShopIdsByServiceOrCategoryName(query: string): Promise<Set<string>> {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = { $regex: escaped, $options: 'i' };
+
+    const pipeline: PipelineStage[] = [
+      { $match: { isActive: true } },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      { $unwind: '$category' },
+      {
+        $match: {
+          $or: [{ name: regex }, { 'category.name': regex }],
+        },
+      },
+      { $group: { _id: '$shopId' } },
+    ];
+
+    const results = await ServiceModel.aggregate<{ _id: Types.ObjectId }>(pipeline).exec();
+    return new Set(results.map((r) => r._id.toString()));
+  }
 }

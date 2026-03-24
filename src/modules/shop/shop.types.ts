@@ -288,6 +288,8 @@ export interface AdminBarberSummaryDto {
   phone: string;
   photo?: string;
   isAvailable: boolean;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
 }
 
 export interface AdminServiceSummaryDto {

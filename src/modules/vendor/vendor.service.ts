@@ -108,6 +108,7 @@ export default class VendorService {
     vendor: IVendor,
     onboardingStatus: VendorProfileDto['onboardingStatus'],
     shopDetails: VendorProfileDto['shopDetails'],
+    isVendorBarber: boolean,
   ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
@@ -120,6 +121,7 @@ export default class VendorService {
       status: vendor.status,
       onboardingStatus,
       shopDetails,
+      isVendorBarber,
     };
   }
 
@@ -212,6 +214,8 @@ export default class VendorService {
       ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
+    const isVendorBarber = !!barberProfile;
+
     const token = this.jwtService.signToken(tokenPayload);
     const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
 
@@ -234,7 +238,14 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus, shopDetails };
+    return {
+      token,
+      refreshToken,
+      vendor: this.toVendorDto(vendor),
+      onboardingStatus,
+      shopDetails,
+      isVendorBarber,
+    };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
@@ -494,9 +505,12 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+    const isVendorBarber = !!barberProfile;
+
     const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
 
-    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null);
+    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null, isVendorBarber);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
@@ -589,7 +603,10 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const shopDtos = await this.shopService.getMyShops(vendorId);
+    const [shopDtos, cancellationStats] = await Promise.all([
+      this.shopService.getMyShops(vendorId),
+      this.shopService.getCancellationStatsByVendorId(vendorId),
+    ]);
 
     const shopIds = shopDtos.map((shop) => shop.id);
 
@@ -642,6 +659,8 @@ export default class VendorService {
             phone: b.phone,
             photo: b.photo,
             isAvailable: b.isAvailable,
+            cancellationCount: b.cancellationCount,
+            cancellationsThisWeek: b.cancellationsThisWeek,
           })),
           barberCount: barberList.length,
 
@@ -673,8 +692,8 @@ export default class VendorService {
       documents: vendor.documents,
       associationMemberId: vendor.associationMemberId,
       associationIdProofUrl: vendor.associationIdProofUrl,
-      cancellationCount: vendor.cancellationCount,
-      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      cancellationCount: cancellationStats.cancellationCount,
+      cancellationsThisWeek: cancellationStats.cancellationsThisWeek,
       shops,
       recentBookings: [],
     };
@@ -891,7 +910,7 @@ export default class VendorService {
 
     if (shopIds.length === 0) {
       return {
-        totalBookings: 0,
+        dailyBookings: 0,
         staffWorking: { count: 0, staff: [] },
         staffOnLeave: { count: 0, staff: [] },
       };
@@ -908,7 +927,7 @@ export default class VendorService {
     const onLeaveStaff = allActiveStaff.filter((b) => !workingSet.has(b.id));
 
     return {
-      totalBookings: bookingStats.totalBookings,
+      dailyBookings: bookingStats.todaysBookings,
       staffWorking: { count: workingStaff.length, staff: workingStaff },
       staffOnLeave: { count: onLeaveStaff.length, staff: onLeaveStaff },
     };

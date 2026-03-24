@@ -812,11 +812,17 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      cancellationCount: barber.cancellationCount ?? 0,
+      cancellationsThisWeek: barber.cancellationsThisWeek ?? 0,
       serviceCount,
       services,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
     };
+  }
+
+  async incrementCancellationCount(barberId: string): Promise<void> {
+    await this.barberRepository.incrementCancellation(barberId);
   }
 
   async getVendorBarberProfile(vendorId: string): Promise<SelfBarberDto | null> {

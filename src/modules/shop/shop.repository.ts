@@ -356,6 +356,7 @@ export default class ShopRepository {
       latitude?: number;
       longitude?: number;
       maxDistanceMeters?: number;
+      serviceShopIds?: Set<string>;
     },
     skip: number,
     limit: number,
@@ -376,14 +377,21 @@ export default class ShopRepository {
 
     const trimmedQuery = query?.trim();
 
-    const buildRegexFilter = (q: string): Record<string, unknown> => {
+    const buildSearchFilter = (
+      q: string,
+      serviceShopIds?: Set<string>,
+    ): Record<string, unknown> => {
       const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return {
-        $or: [
-          { name: { $regex: escaped, $options: 'i' } },
-          { 'address.area': { $regex: escaped, $options: 'i' } },
-        ],
-      };
+      const orConditions: Record<string, unknown>[] = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { 'address.area': { $regex: escaped, $options: 'i' } },
+      ];
+      if (serviceShopIds && serviceShopIds.size > 0) {
+        orConditions.push({
+          _id: { $in: [...serviceShopIds].map((id) => new Types.ObjectId(id)) },
+        });
+      }
+      return { $or: orConditions };
     };
 
     if (filter.latitude !== undefined && filter.longitude !== undefined) {
@@ -391,7 +399,7 @@ export default class ShopRepository {
 
       const geoFilter = { ...baseFilter };
       if (trimmedQuery) {
-        Object.assign(geoFilter, buildRegexFilter(trimmedQuery));
+        Object.assign(geoFilter, buildSearchFilter(trimmedQuery, filter.serviceShopIds));
       }
 
       const geoNearStage: PipelineStage = {
@@ -417,10 +425,10 @@ export default class ShopRepository {
       return { shops, total };
     }
 
-    // Non-geo path: use $regex for consistent partial/prefix matching (same as geo path)
+    // Non-geo path
     const textFilter = { ...baseFilter };
     if (trimmedQuery) {
-      Object.assign(textFilter, buildRegexFilter(trimmedQuery));
+      Object.assign(textFilter, buildSearchFilter(trimmedQuery, filter.serviceShopIds));
     }
 
     const [shops, total] = await Promise.all([
@@ -515,6 +523,33 @@ export default class ShopRepository {
       ],
       { returnDocument: 'after', updatePipeline: true },
     ).exec();
+  }
+
+  async getCancellationStatsByVendorId(
+    vendorId: string,
+  ): Promise<{ cancellationCount: number; cancellationsThisWeek: number }> {
+    const result = await ShopModel.aggregate([
+      {
+        $match: {
+          vendorId: new Types.ObjectId(vendorId),
+          status: { $ne: 'DELETED' },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          cancellationCount: { $sum: '$cancellationCount' },
+          cancellationsThisWeek: { $sum: '$cancellationsThisWeek' },
+        },
+      },
+    ]).exec();
+
+    return result.length > 0
+      ? {
+          cancellationCount: result[0].cancellationCount,
+          cancellationsThisWeek: result[0].cancellationsThisWeek,
+        }
+      : { cancellationCount: 0, cancellationsThisWeek: 0 };
   }
 
   updateRating(shopId: string, average: number, count: number): Promise<void> {
