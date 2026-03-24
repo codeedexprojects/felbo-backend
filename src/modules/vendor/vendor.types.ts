@@ -432,8 +432,16 @@ export interface StaffMemberDto {
   photo: string | null;
 }
 
+export interface BookingComparisonDto {
+  today: number;
+  yesterday: number;
+  diff: number;
+  trend: 'up' | 'down' | 'same';
+}
+
 export interface VendorDashboardCountsDto {
   dailyBookings: number;
+  bookingComparison: BookingComparisonDto;
   staffWorking: { count: number; staff: StaffMemberDto[] };
   staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }

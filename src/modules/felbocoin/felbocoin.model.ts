@@ -10,6 +10,7 @@ export interface IFelboCoinTransaction extends Document {
   balanceAfter: number;
   bookingId?: Types.ObjectId;
   bookingNumber?: string;
+  adminId?: Types.ObjectId;
   description: string;
   createdAt: Date;
 }
@@ -19,7 +20,14 @@ const felboCoinTransactionSchema = new Schema<IFelboCoinTransaction>(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: {
       type: String,
-      enum: ['COIN_EARNED', 'COIN_REDEEMED', 'COIN_REFUND', 'COIN_REVERSAL'],
+      enum: [
+        'COIN_EARNED',
+        'COIN_REDEEMED',
+        'COIN_REFUND',
+        'COIN_REVERSAL',
+        'ADMIN_CREDIT',
+        'ADMIN_DEBIT',
+      ],
       required: true,
     },
     direction: { type: String, enum: ['CREDIT', 'DEBIT'], required: true },
@@ -28,6 +36,7 @@ const felboCoinTransactionSchema = new Schema<IFelboCoinTransaction>(
     balanceAfter: { type: Number, required: true },
     bookingId: { type: Schema.Types.ObjectId, ref: 'Booking' },
     bookingNumber: { type: String },
+    adminId: { type: Schema.Types.ObjectId, ref: 'Admin' },
     description: { type: String, required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

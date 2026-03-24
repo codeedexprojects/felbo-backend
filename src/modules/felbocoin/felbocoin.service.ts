@@ -4,6 +4,13 @@ import { ValidationError, NotFoundError } from '../../shared/errors';
 import UserRepository from '../user/user.repository';
 import { FelboCoinRepository } from './felbocoin.repository';
 import {
+  AdminCoinStatsDto,
+  AdminCreditCoinsInput,
+  AdminDebitCoinsInput,
+  AdminLogListDto,
+  AdminTransactionListDto,
+  CoinTrendBucketDto,
+  CoinUserLeaderboardDto,
   CreditCoinsInput,
   DebitCoinsInput,
   FelboCoinOverviewDto,
@@ -143,6 +150,124 @@ export class FelboCoinService {
     limit: number,
   ): Promise<FelboCoinOverviewDto> {
     return this.getFelboCoinOverview(userId, page, limit);
+  }
+
+  async adminCreditCoins(input: AdminCreditCoinsInput): Promise<void> {
+    await withTransaction(async (session) => {
+      const updatedUser = await this.userRepository.incrementCoinBalance(
+        input.userId,
+        input.coins,
+        session,
+      );
+      if (!updatedUser) throw new NotFoundError('User not found.');
+
+      const balanceAfter = updatedUser.felboCoinBalance;
+      const balanceBefore = balanceAfter - input.coins;
+
+      await this.felboCoinRepository.createTransaction(
+        {
+          userId: input.userId,
+          type: 'ADMIN_CREDIT',
+          direction: 'CREDIT',
+          coins: input.coins,
+          balanceBefore,
+          balanceAfter,
+          adminId: input.adminId,
+          description: input.reason,
+        },
+        session,
+      );
+    });
+
+    this.logger.info({
+      action: 'ADMIN_COINS_CREDITED',
+      module: 'felbocoin',
+      adminId: input.adminId,
+      userId: input.userId,
+      coins: input.coins,
+    });
+  }
+
+  async adminDebitCoins(input: AdminDebitCoinsInput): Promise<void> {
+    await withTransaction(async (session) => {
+      const updatedUser = await this.userRepository.decrementCoinBalance(
+        input.userId,
+        input.coins,
+        session,
+      );
+
+      if (!updatedUser) {
+        const exists = await this.userRepository.findById(input.userId);
+        if (!exists) throw new NotFoundError('User not found.');
+        throw new ValidationError('Insufficient FelboCoin balance.');
+      }
+
+      const balanceAfter = updatedUser.felboCoinBalance;
+      const balanceBefore = balanceAfter + input.coins;
+
+      await this.felboCoinRepository.createTransaction(
+        {
+          userId: input.userId,
+          type: 'ADMIN_DEBIT',
+          direction: 'DEBIT',
+          coins: input.coins,
+          balanceBefore,
+          balanceAfter,
+          adminId: input.adminId,
+          description: input.reason,
+        },
+        session,
+      );
+    });
+
+    this.logger.info({
+      action: 'ADMIN_COINS_DEBITED',
+      module: 'felbocoin',
+      adminId: input.adminId,
+      userId: input.userId,
+      coins: input.coins,
+    });
+  }
+
+  async getAdminCoinStats(from?: Date, to?: Date): Promise<AdminCoinStatsDto> {
+    return this.felboCoinRepository.getStats(from, to);
+  }
+
+  async getAllTransactions(
+    filters: {
+      search?: string;
+      type?: string;
+      direction?: string;
+      from?: Date;
+      to?: Date;
+    },
+    page: number,
+    limit: number,
+  ): Promise<AdminTransactionListDto> {
+    const { transactions, total } = await this.felboCoinRepository.findAllWithFilters(
+      filters as Parameters<FelboCoinRepository['findAllWithFilters']>[0],
+      page,
+      limit,
+    );
+    return { transactions, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getCoinTrend(
+    from: Date,
+    to: Date,
+    granularity: 'daily' | 'weekly' | 'monthly' | 'yearly',
+  ): Promise<CoinTrendBucketDto[]> {
+    return this.felboCoinRepository.getTrend(from, to, granularity);
+  }
+
+  async getUsersLeaderboard(page: number, limit: number): Promise<CoinUserLeaderboardDto> {
+    const { users, total } = await this.felboCoinRepository.findUsersLeaderboard(page, limit);
+    return { users, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getAdminLogs(page: number, limit: number): Promise<AdminLogListDto> {
+    const { logs, total } = await this.felboCoinRepository.findAdminLogs(page, limit);
+    return { logs, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   private mapTransaction(t: {

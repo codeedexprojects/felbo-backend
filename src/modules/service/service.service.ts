@@ -67,9 +67,13 @@ export class ServiceService {
     }
 
     const existing = await this.serviceRepository.findBarberServicesByBarberId(barberId);
-    const existingServiceIds = new Set(existing.map((e) => e.serviceId.toString()));
+    const existingMap = new Map(existing.map((e) => [e.serviceId.toString(), e]));
 
-    const newServices = input.services.filter((s) => !existingServiceIds.has(s.serviceId));
+    const newServices = input.services.filter((s) => !existingMap.has(s.serviceId));
+    const updatedServices = input.services.filter((s) => {
+      const ex = existingMap.get(s.serviceId);
+      return ex && ex.durationMinutes !== s.durationMinutes;
+    });
 
     if (newServices.length > 0) {
       const newServiceIds = newServices.map((s) => s.serviceId);
@@ -90,13 +94,26 @@ export class ServiceService {
       );
     }
 
+    if (updatedServices.length > 0) {
+      await Promise.all(
+        updatedServices.map((s) =>
+          this.serviceRepository.updateBarberServiceDuration(
+            barberId,
+            s.serviceId,
+            s.durationMinutes,
+          ),
+        ),
+      );
+    }
+
     this.logger.info({
       action: 'BARBER_SERVICES_ASSIGNED',
       module: 'service',
       barberId,
       vendorId,
       added: newServices.length,
-      skipped: input.services.length - newServices.length,
+      updated: updatedServices.length,
+      skipped: input.services.length - newServices.length - updatedServices.length,
     });
 
     const allLinks = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);

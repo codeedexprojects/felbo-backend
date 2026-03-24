@@ -919,6 +919,7 @@ export default class VendorService {
     if (shopIds.length === 0) {
       return {
         dailyBookings: 0,
+        bookingComparison: { today: 0, yesterday: 0, diff: 0, trend: 'same' },
         staffWorking: { count: 0, staff: [] },
         staffOnLeave: { count: 0, staff: [] },
       };
@@ -934,8 +935,18 @@ export default class VendorService {
     const workingStaff = allActiveStaff.filter((b) => workingSet.has(b.id));
     const onLeaveStaff = allActiveStaff.filter((b) => !workingSet.has(b.id));
 
+    const today = bookingStats.todaysBookings;
+    const yesterday = bookingStats.yesterdaysBookings;
+    const diff = today - yesterday;
+
     return {
-      dailyBookings: bookingStats.todaysBookings,
+      dailyBookings: today,
+      bookingComparison: {
+        today,
+        yesterday,
+        diff,
+        trend: diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
+      },
       staffWorking: { count: workingStaff.length, staff: workingStaff },
       staffOnLeave: { count: onLeaveStaff.length, staff: onLeaveStaff },
     };

@@ -359,6 +359,55 @@ export class BookingService {
     });
   }
 
+  async findOverlappingConfirmedBookings(
+    barberId: string,
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ): Promise<Array<{ bookingNumber: string; startTime: string; endTime: string }>> {
+    const bookings = await this.bookingRepository.findOverlappingConfirmedBookings(
+      barberId,
+      date,
+      startTime,
+      endTime,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      startTime: b.startTime,
+      endTime: b.endTime,
+    }));
+  }
+
+  async getConfirmedBookingsByBarberAndDate(
+    barberId: string,
+    date: Date,
+  ): Promise<
+    Array<{
+      bookingNumber: string;
+      customerName: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      services: Array<{ name: string; durationMinutes: number }>;
+    }>
+  > {
+    const bookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      barberId,
+      date,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      customerName: b.userName,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      durationMinutes: b.totalDurationMinutes,
+      services: b.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+      })),
+    }));
+  }
+
   async getGlobalDashboardStats(): Promise<{
     totalBookings: number;
     todaysBookings: number;
@@ -370,6 +419,7 @@ export class BookingService {
   async getStatsByShopIds(shopIds: string[]): Promise<{
     totalBookings: number;
     todaysBookings: number;
+    yesterdaysBookings: number;
     totalRevenue: number;
   }> {
     return this.bookingRepository.getStatsByShopIds(shopIds);
