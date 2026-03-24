@@ -10,12 +10,14 @@ import { serviceService } from '../service/service.container';
 import { paymentService } from '../payment/payment.container';
 import { vendorService } from '../vendor/vendor.container';
 import { felboCoinService } from '../felbocoin/felbocoin.container';
+import { issueService } from '../issue/issue.container';
+import type { IssueService } from '../issue/issue.service';
 
 import { logger } from '../../shared/logger/logger';
 
 const bookingRepository = new BookingRepository();
 
-const bookingService = new BookingService(
+const bookingService: BookingService = new BookingService(
   bookingRepository,
   () => barberService,
   () => availabilityService,
@@ -27,8 +29,11 @@ const bookingService = new BookingService(
   () => vendorService,
   logger,
   () => felboCoinService,
+  (): IssueService => issueService,
 );
 
 const bookingController = new BookingController(bookingService);
+
+barberService.setBookingService(bookingService);
 
 export { bookingController, bookingService };

@@ -13,7 +13,7 @@ import {
   BookingServiceSnapshotData,
 } from './service.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
-import { withTransaction } from '../../shared/database/transaction';
+
 import ShopService from '../shop/shop.service';
 import { BarberService } from '../barber/barber.service';
 import { CategoryService } from '../category/category.service';
@@ -66,47 +66,67 @@ export class ServiceService {
       throw new ValidationError('Duplicate service IDs are not allowed.');
     }
 
-    const validServices = await this.shopService.getActiveServicesByIds(uniqueServiceIds, shopId);
-    if (validServices.length !== uniqueServiceIds.length) {
-      throw new ValidationError(
-        'One or more service IDs are invalid or do not belong to this shop.',
+    const existing = await this.serviceRepository.findBarberServicesByBarberId(barberId);
+    const existingMap = new Map(existing.map((e) => [e.serviceId.toString(), e]));
+
+    const newServices = input.services.filter((s) => !existingMap.has(s.serviceId));
+    const updatedServices = input.services.filter((s) => {
+      const ex = existingMap.get(s.serviceId);
+      return ex && ex.durationMinutes !== s.durationMinutes;
+    });
+
+    if (newServices.length > 0) {
+      const newServiceIds = newServices.map((s) => s.serviceId);
+      const validServices = await this.shopService.getActiveServicesByIds(newServiceIds, shopId);
+      if (validServices.length !== newServiceIds.length) {
+        throw new ValidationError(
+          'One or more service IDs are invalid or do not belong to this shop.',
+        );
+      }
+
+      await this.serviceRepository.createBarberService(
+        newServices.map((s) => ({
+          barberId,
+          shopId,
+          serviceId: s.serviceId,
+          durationMinutes: s.durationMinutes,
+        })),
       );
     }
 
-    const newLinks = await withTransaction((session) =>
-      this.serviceRepository.replaceBarberServicesForBarber(
-        barberId,
-        shopId,
-        input.services,
-        session,
-      ),
-    );
+    if (updatedServices.length > 0) {
+      await Promise.all(
+        updatedServices.map((s) =>
+          this.serviceRepository.updateBarberServiceDuration(
+            barberId,
+            s.serviceId,
+            s.durationMinutes,
+          ),
+        ),
+      );
+    }
 
     this.logger.info({
       action: 'BARBER_SERVICES_ASSIGNED',
       module: 'service',
       barberId,
       vendorId,
-      serviceCount: newLinks.length,
+      added: newServices.length,
+      updated: updatedServices.length,
+      skipped: input.services.length - newServices.length - updatedServices.length,
     });
 
-    const serviceMap = new Map(
-      validServices.map((s) => [s.id, { name: s.name, price: s.basePrice }]),
-    );
-
-    return newLinks.map((l) => {
-      const serviceInfo = serviceMap.get(l.serviceId.toString());
-      return {
-        id: l._id.toString(),
-        barberId: l.barberId.toString(),
-        serviceId: l.serviceId.toString(),
-        shopId: l.shopId.toString(),
-        serviceName: serviceInfo?.name ?? '',
-        price: serviceInfo?.price ?? 0,
-        duration: l.durationMinutes,
-        isActive: l.isActive,
-      };
-    });
+    const allLinks = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);
+    return allLinks.map((l) => ({
+      id: l._id.toString(),
+      barberId: l.barberId.toString(),
+      serviceId: l.serviceId._id.toString(),
+      shopId: l.shopId.toString(),
+      serviceName: l.serviceId.name,
+      price: l.serviceId.basePrice,
+      duration: l.durationMinutes,
+      isActive: l.isActive,
+    }));
   }
 
   async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
@@ -490,5 +510,9 @@ export class ServiceService {
 
   async countServicesByShopIds(shopIds: string[]): Promise<Map<string, number>> {
     return this.serviceRepository.countServicesByShopIds(shopIds);
+  }
+
+  getShopIdsByServiceQuery(query: string): Promise<Set<string>> {
+    return this.serviceRepository.findShopIdsByServiceOrCategoryName(query);
   }
 }

@@ -449,6 +449,58 @@ export class BarberRepository {
     return countsMap;
   }
 
+  addFcmToken(barberId: string, token: string): Promise<unknown> {
+    return BarberModel.updateOne({ _id: barberId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(barberId: string, token: string): Promise<unknown> {
+    return BarberModel.updateOne({ _id: barberId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  async getFcmTokens(barberId: string): Promise<string[]> {
+    const doc = await BarberModel.findById(barberId)
+      .select('+fcmTokens')
+      .lean<{ fcmTokens?: string[] }>()
+      .exec();
+    return doc?.fcmTokens ?? [];
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    if (!tokens.length) return;
+    await BarberModel.updateMany(
+      { fcmTokens: { $in: tokens } },
+      { $pull: { fcmTokens: { $in: tokens } } },
+    ).exec();
+  }
+
+  incrementCancellation(barberId: string): Promise<IBarber | null> {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return BarberModel.findByIdAndUpdate(
+      barberId,
+      [
+        {
+          $set: {
+            cancellationCount: { $add: ['$cancellationCount', 1] },
+            cancellationsThisWeek: {
+              $cond: {
+                if: {
+                  $or: [
+                    { $eq: ['$lastCancellationAt', null] },
+                    { $lt: ['$lastCancellationAt', oneWeekAgo] },
+                  ],
+                },
+                then: 1,
+                else: { $add: ['$cancellationsThisWeek', 1] },
+              },
+            },
+            lastCancellationAt: new Date(),
+          },
+        },
+      ],
+      { returnDocument: 'after', updatePipeline: true },
+    ).exec();
+  }
+
   async getAllPhotoUrls(): Promise<string[]> {
     const barbers = await BarberModel.find({}, { photo: 1 }).lean().exec();
     return barbers.map((b) => b.photo).filter((p): p is string => !!p);

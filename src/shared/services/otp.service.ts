@@ -2,8 +2,6 @@ import { Logger } from 'winston';
 import { getRedisClient } from '../redis/redis';
 import { AppError, ServiceUnavailableError } from '../errors/index';
 
-export type OtpFlowType = 'USER' | 'VENDOR';
-
 export interface SendOtpResult {
   sessionId: string;
 }
@@ -119,15 +117,24 @@ export class TwoFactorOtpService {
 
 export class DevOtpService {
   private readonly fixedOtp: string;
+  private readonly test_phone: string;
 
   constructor(
     private readonly logger: Logger,
     fixedOtp: string = '123456',
+    test_phone: string = '9876543210',
   ) {
     this.fixedOtp = fixedOtp;
+    this.test_phone = test_phone;
   }
 
   async sendOtp(phone: string): Promise<SendOtpResult> {
+    if (this.test_phone === phone) {
+      const sessionId = `test-session-${Date.now()}-${Math.random()}`;
+      this.logger.info('[TEST] OTP bypassed for test phone', { phone: phone.slice(-4) });
+      return { sessionId };
+    }
+
     const redis = getRedisClient();
     const dailyKey = `otp:daily:${phone}`;
 
@@ -153,6 +160,12 @@ export class DevOtpService {
   }
 
   async verifyOtp(sessionId: string, otp: string): Promise<VerifyOtpResult> {
+    if (sessionId.startsWith('test-session-')) {
+      const verified = otp === this.fixedOtp;
+      this.logger.info('[TEST] OTP verification bypassed', { sessionId, verified });
+      return { verified };
+    }
+
     const redis = getRedisClient();
     const verifyKey = `otp:verify:${sessionId}`;
 

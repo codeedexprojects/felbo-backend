@@ -34,6 +34,7 @@ import {
   AdminCancellationListResponse,
   AdminCancellationDetailDto,
   UserHomeBookingDto,
+  AdminVendorBookingListResponse,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import {
@@ -41,7 +42,9 @@ import {
   getCurrentIstMinutes,
   parseDateAsIst,
   getIstDayRangeUtc,
+  formatAppointmentTime,
 } from '../../shared/utils/time';
+import { sendFcmNotification, FCM_CHANNELS } from '../../shared/notification/fcm.service';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -53,6 +56,7 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { FelboCoinService } from '../felbocoin/felbocoin.service';
 import { withTransaction } from '../../shared/database/transaction';
+import { IssueService } from '../issue/issue.service';
 
 // const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
@@ -74,6 +78,7 @@ export class BookingService {
     private readonly getVendorService: () => VendorService,
     private readonly logger: Logger,
     private readonly getFelboCoinService: () => FelboCoinService,
+    private readonly getIssueService: () => IssueService,
   ) {}
 
   private get barberService(): BarberService {
@@ -106,6 +111,10 @@ export class BookingService {
 
   private get felboCoinService(): FelboCoinService {
     return this.getFelboCoinService();
+  }
+
+  private get issueService(): IssueService {
+    return this.getIssueService();
   }
 
   async getBarbersForServices(
@@ -350,6 +359,55 @@ export class BookingService {
     });
   }
 
+  async findOverlappingConfirmedBookings(
+    barberId: string,
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ): Promise<Array<{ bookingNumber: string; startTime: string; endTime: string }>> {
+    const bookings = await this.bookingRepository.findOverlappingConfirmedBookings(
+      barberId,
+      date,
+      startTime,
+      endTime,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      startTime: b.startTime,
+      endTime: b.endTime,
+    }));
+  }
+
+  async getConfirmedBookingsByBarberAndDate(
+    barberId: string,
+    date: Date,
+  ): Promise<
+    Array<{
+      bookingNumber: string;
+      customerName: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      services: Array<{ name: string; durationMinutes: number }>;
+    }>
+  > {
+    const bookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      barberId,
+      date,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      customerName: b.userName,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      durationMinutes: b.totalDurationMinutes,
+      services: b.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+      })),
+    }));
+  }
+
   async getGlobalDashboardStats(): Promise<{
     totalBookings: number;
     todaysBookings: number;
@@ -361,6 +419,7 @@ export class BookingService {
   async getStatsByShopIds(shopIds: string[]): Promise<{
     totalBookings: number;
     todaysBookings: number;
+    yesterdaysBookings: number;
     totalRevenue: number;
   }> {
     return this.bookingRepository.getStatsByShopIds(shopIds);
@@ -619,6 +678,28 @@ export class BookingService {
         coinsUsed: coinRedeemThreshold,
       });
 
+      const coinAppointmentTime = formatAppointmentTime(booking!.startTime);
+      const coinBarberId = booking!.barberId.toString();
+      const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
+
+      void this.notifyUser(userId, {
+        channel: FCM_CHANNELS.GENERAL,
+        title: 'Booking Confirmed!',
+        body: `Your booking at ${shop.name} is confirmed for ${coinAppointmentTime}`,
+        data: {
+          type: 'BOOKING_CONFIRMED',
+          bookingId: booking!._id.toString(),
+          shopName: shop.name,
+        },
+      });
+
+      void this.notifyBarber(coinBarberId, {
+        channel: FCM_CHANNELS.BOOKING,
+        title: 'New Booking!',
+        body: `${user.name ?? 'A customer'} booked ${coinServiceName} at ${coinAppointmentTime}`,
+        data: { type: 'NEW_BOOKING', shopName: shop.name },
+      });
+
       return {
         booking: {
           id: booking!._id.toString(),
@@ -747,12 +828,32 @@ export class BookingService {
       userId,
     });
 
+    const appointmentTime = formatAppointmentTime(confirmed.startTime);
+    const confirmedBarberId = confirmed.barberId.toString();
+    const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
+
+    void this.notifyUser(userId, {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Confirmed!',
+      body: `Your booking at ${confirmed.shopName} is confirmed for ${appointmentTime}`,
+      data: { type: 'BOOKING_CONFIRMED', bookingId, shopName: confirmed.shopName },
+    });
+
+    void this.notifyBarber(confirmedBarberId, {
+      channel: FCM_CHANNELS.BOOKING,
+      title: 'New Booking!',
+      body: `${confirmed.userName} booked ${confirmedServiceName} at ${appointmentTime}`,
+      data: { type: 'NEW_BOOKING', shopName: confirmed.shopName },
+    });
+
     return {
       booking: {
         id: confirmed._id.toString(),
         bookingNumber: confirmed.bookingNumber,
         status: confirmed.status,
         paymentId: input.razorpayPaymentId,
+        paidAmount: confirmed.advancePaid,
+        remainingBalance: confirmed.remainingAmount,
       },
     };
   }
@@ -845,8 +946,10 @@ export class BookingService {
       }
     }
 
-    const { cancellationsThisWeek, vendorId } =
-      await this.shopService.incrementShopCancellationCount(booking.shopId.toString());
+    const [{ cancellationsThisWeek, vendorId }] = await Promise.all([
+      this.shopService.incrementShopCancellationCount(booking.shopId.toString()),
+      this.barberService.incrementCancellationCount(barberId),
+    ]);
 
     let flagged = false;
     if (cancellationsThisWeek >= weeklyLimit) {
@@ -862,6 +965,13 @@ export class BookingService {
       shopId: booking.shopId.toString(),
       reason,
       flagged,
+    });
+
+    void this.notifyUser(booking.userId.toString(), {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Cancelled',
+      body: `Your booking at ${booking.shopName} has been cancelled by the barber.`,
+      data: { type: 'BOOKING_CANCELLED', bookingId },
     });
 
     return {
@@ -970,6 +1080,13 @@ export class BookingService {
       refundCoins,
     });
 
+    void this.notifyBarber(booking.barberId.toString(), {
+      channel: FCM_CHANNELS.GENERAL,
+      title: 'Booking Cancelled',
+      body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
+      data: { type: 'BOOKING_CANCELLED', bookingId },
+    });
+
     return {
       booking: {
         id: cancelled!._id.toString(),
@@ -1009,9 +1126,11 @@ export class BookingService {
       throw new ValidationError('Invalid verification code.');
     }
 
-    const coinsEarned = await this.configService.getValueAsNumber(
-      CONFIG_KEYS.COIN_EARN_PER_BOOKING,
-    );
+    const isRazorpay = booking.paymentMethod === 'RAZORPAY';
+
+    const coinsEarned = isRazorpay
+      ? await this.configService.getValueAsNumber(CONFIG_KEYS.COIN_EARN_PER_BOOKING)
+      : 0;
 
     let completed: Awaited<ReturnType<BookingRepository['updateBookingCompleted']>>;
 
@@ -1019,17 +1138,19 @@ export class BookingService {
       completed = await this.bookingRepository.updateBookingCompleted(bookingId, session);
       if (!completed) throw new ConflictError('Booking has already been completed.');
 
-      await this.felboCoinService.creditCoins(
-        {
-          userId: booking.userId.toString(),
-          coins: coinsEarned,
-          type: 'COIN_EARNED',
-          bookingId: booking._id.toString(),
-          bookingNumber: booking.bookingNumber,
-          description: `Coins earned for completing booking ${booking.bookingNumber}`,
-        },
-        session,
-      );
+      if (isRazorpay && coinsEarned > 0) {
+        await this.felboCoinService.creditCoins(
+          {
+            userId: booking.userId.toString(),
+            coins: coinsEarned,
+            type: 'COIN_EARNED',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Coins earned for completing booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      }
     });
 
     this.logger.info({
@@ -1249,6 +1370,40 @@ export class BookingService {
     };
   }
 
+  private async notifyUser(
+    userId: string,
+    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
+  ): Promise<void> {
+    const tokens = await this.userService.getFcmTokens(userId);
+    if (!tokens.length) return;
+    const result = await sendFcmNotification({ tokens, ...payload });
+    if (result.failureCount > 0) {
+      this.logger.warn('FCM user notification had failures', {
+        userId,
+        failureCount: result.failureCount,
+      });
+    }
+    if (result.invalidTokens.length)
+      void this.userService.pruneInvalidFcmTokens(result.invalidTokens);
+  }
+
+  private async notifyBarber(
+    barberId: string,
+    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
+  ): Promise<void> {
+    const tokens = await this.barberService.getFcmTokens(barberId);
+    if (!tokens.length) return;
+    const result = await sendFcmNotification({ tokens, ...payload });
+    if (result.failureCount > 0) {
+      this.logger.warn('FCM barber notification had failures', {
+        barberId,
+        failureCount: result.failureCount,
+      });
+    }
+    if (result.invalidTokens.length)
+      void this.barberService.pruneInvalidFcmTokens(result.invalidTokens);
+  }
+
   private toMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
     return h * 60 + m;
@@ -1279,6 +1434,39 @@ export class BookingService {
         remainingAmount: b.remainingAmount,
         status: b.status,
         createdAt: b.createdAt,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetVendorBookings(
+    vendorId: string,
+    params: { page: number; limit: number; status?: string; startDate?: Date; endDate?: Date },
+  ): Promise<AdminVendorBookingListResponse> {
+    const shopIds = await this.shopService.getShopIdsByVendorIds([vendorId]);
+
+    const { bookings, total } = await this.bookingRepository.adminGetBookings({
+      page: params.page,
+      limit: params.limit,
+      status: params.status,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      associatedShopIds: shopIds,
+    });
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        barberName: b.barberName,
+        shopName: b.shopName,
+        userName: b.userName,
+        date: b.date,
+        startTime: b.startTime,
+        status: b.status,
       })),
       total,
       page: params.page,
@@ -1468,6 +1656,8 @@ export class BookingService {
     const booking = await this.bookingRepository.findUserBookingDetail(bookingId, userId);
     if (!booking) throw new NotFoundError('Booking not found.');
 
+    const isReported = await this.issueService.existsByBookingId(bookingId);
+
     const addr = booking.shopAddress;
     const addressStr = addr
       ? [addr.line1, addr.line2, addr.area, addr.city, addr.district, addr.state, addr.pincode]
@@ -1512,6 +1702,7 @@ export class BookingService {
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,
+      isReported,
     };
   }
 

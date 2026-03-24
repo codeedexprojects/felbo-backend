@@ -44,19 +44,29 @@ export class BookingRepository {
   async getStatsByShopIds(shopIds: string[]): Promise<{
     totalBookings: number;
     todaysBookings: number;
+    yesterdaysBookings: number;
     totalRevenue: number;
   }> {
-    const { start, end } = this.utcDayRange(new Date());
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setUTCDate(today.getUTCDate() - 1);
+
+    const { start: todayStart, end: todayEnd } = this.utcDayRange(today);
+    const { start: yesterdayStart, end: yesterdayEnd } = this.utcDayRange(yesterday);
 
     const objectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
 
     const result = await BookingModel.aggregate([
-      { $match: { shopId: { $in: objectIds } } },
+      { $match: { shopId: { $in: objectIds }, status: { $ne: 'PENDING_PAYMENT' } } },
       {
         $facet: {
           totalBookings: [{ $count: 'count' }],
           todaysBookings: [
-            { $match: { createdAt: { $gte: start, $lt: end } } },
+            { $match: { createdAt: { $gte: todayStart, $lt: todayEnd } } },
+            { $count: 'count' },
+          ],
+          yesterdaysBookings: [
+            { $match: { createdAt: { $gte: yesterdayStart, $lt: yesterdayEnd } } },
             { $count: 'count' },
           ],
           totalRevenue: [{ $group: { _id: null, total: { $sum: '$advancePaid' } } }],
@@ -69,6 +79,7 @@ export class BookingRepository {
     return {
       totalBookings: data.totalBookings[0]?.count ?? 0,
       todaysBookings: data.todaysBookings[0]?.count ?? 0,
+      yesterdaysBookings: data.yesterdaysBookings[0]?.count ?? 0,
       totalRevenue: data.totalRevenue[0]?.total ?? 0,
     };
   }
@@ -83,6 +94,24 @@ export class BookingRepository {
       barberId,
       date: { $gte: start, $lt: end },
       status: 'CONFIRMED',
+    })
+      .lean<IBooking[]>()
+      .exec();
+  }
+
+  findOverlappingConfirmedBookings(
+    barberId: string,
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ): Promise<IBooking[]> {
+    const { start, end } = this.utcDayRange(date);
+    return BookingModel.find({
+      barberId,
+      date: { $gte: start, $lt: end },
+      status: 'CONFIRMED',
+      startTime: { $lt: endTime },
+      endTime: { $gt: startTime },
     })
       .lean<IBooking[]>()
       .exec();
@@ -639,7 +668,15 @@ export class BookingRepository {
             {
               $match: {
                 date: { $gte: todayStart, $lt: todayEnd },
-                status: { $in: ['CONFIRMED', 'COMPLETED'] },
+                status: {
+                  $in: [
+                    'CONFIRMED',
+                    'COMPLETED',
+                    'CANCELLED_BY_BARBER',
+                    'CANCELLED_BY_USER',
+                    'NO_SHOW',
+                  ],
+                },
               },
             },
             { $count: 'count' },

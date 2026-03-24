@@ -224,6 +224,13 @@ export default class VendorService {
 
     const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendor._id.toString());
 
+    if (input.fcmToken) {
+      void this.vendorRepository.addFcmToken(vendor._id.toString(), input.fcmToken);
+      if (barberProfile) {
+        void this.barberService.registerFcmToken(barberProfile.id, input.fcmToken);
+      }
+    }
+
     this.logger.info({
       action: 'VENDOR_LOGIN',
       module: 'vendor',
@@ -347,6 +354,10 @@ export default class VendorService {
       status: 'PENDING',
     });
 
+    if (input.fcmToken) {
+      await this.vendorRepository.addFcmToken(newVendor._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'VENDOR_REGISTRATION_SUBMITTED',
       module: 'vendor',
@@ -381,7 +392,7 @@ export default class VendorService {
       amountRupees: amount,
     });
 
-    await this.vendorRepository.upsertByPhone(input.phone, {
+    const upsertedVendor = await this.vendorRepository.upsertByPhone(input.phone, {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'INDEPENDENT',
@@ -391,6 +402,10 @@ export default class VendorService {
       verificationStatus: 'PAYMENT_PENDING',
       status: 'PENDING',
     });
+
+    if (input.fcmToken && upsertedVendor) {
+      await this.vendorRepository.addFcmToken(upsertedVendor._id.toString(), input.fcmToken);
+    }
 
     this.logger.info({
       action: 'VENDOR_REGISTRATION_PAYMENT_INITIATED',
@@ -596,7 +611,10 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const shopDtos = await this.shopService.getMyShops(vendorId);
+    const [shopDtos, cancellationStats] = await Promise.all([
+      this.shopService.getMyShops(vendorId),
+      this.shopService.getCancellationStatsByVendorId(vendorId),
+    ]);
 
     const shopIds = shopDtos.map((shop) => shop.id);
 
@@ -649,6 +667,8 @@ export default class VendorService {
             phone: b.phone,
             photo: b.photo,
             isAvailable: b.isAvailable,
+            cancellationCount: b.cancellationCount,
+            cancellationsThisWeek: b.cancellationsThisWeek,
           })),
           barberCount: barberList.length,
 
@@ -680,8 +700,8 @@ export default class VendorService {
       documents: vendor.documents,
       associationMemberId: vendor.associationMemberId,
       associationIdProofUrl: vendor.associationIdProofUrl,
-      cancellationCount: vendor.cancellationCount,
-      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      cancellationCount: cancellationStats.cancellationCount,
+      cancellationsThisWeek: cancellationStats.cancellationsThisWeek,
       shops,
       recentBookings: [],
     };
@@ -899,6 +919,7 @@ export default class VendorService {
     if (shopIds.length === 0) {
       return {
         dailyBookings: 0,
+        bookingComparison: { today: 0, yesterday: 0, diff: 0, trend: 'same' },
         staffWorking: { count: 0, staff: [] },
         staffOnLeave: { count: 0, staff: [] },
       };
@@ -914,8 +935,18 @@ export default class VendorService {
     const workingStaff = allActiveStaff.filter((b) => workingSet.has(b.id));
     const onLeaveStaff = allActiveStaff.filter((b) => !workingSet.has(b.id));
 
+    const today = bookingStats.todaysBookings;
+    const yesterday = bookingStats.yesterdaysBookings;
+    const diff = today - yesterday;
+
     return {
-      dailyBookings: bookingStats.todaysBookings,
+      dailyBookings: today,
+      bookingComparison: {
+        today,
+        yesterday,
+        diff,
+        trend: diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
+      },
       staffWorking: { count: workingStaff.length, staff: workingStaff },
       staffOnLeave: { count: onLeaveStaff.length, staff: onLeaveStaff },
     };

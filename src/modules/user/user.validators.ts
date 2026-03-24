@@ -17,6 +17,7 @@ export const verifyOtpSchema = z.object({
     .length(6, 'Enter 6-digit OTP')
     .regex(/^\d{6}$/, 'Enter 6-digit OTP'),
   sessionId: z.string({ error: 'Session ID is required' }).min(1, 'Session ID is required'),
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const updateProfileSchema = z.object({

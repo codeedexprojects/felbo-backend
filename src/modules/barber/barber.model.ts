@@ -17,8 +17,12 @@ export interface IBarber extends Document {
   isVendorBarber: boolean;
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+  lastCancellationAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  fcmTokens: string[];
 }
 
 const barberSchema = new Schema<IBarber>(
@@ -43,6 +47,14 @@ const barberSchema = new Schema<IBarber>(
       default: 'ACTIVE',
     },
     isAvailable: { type: Boolean, default: true },
+    cancellationCount: { type: Number, default: 0 },
+    cancellationsThisWeek: { type: Number, default: 0 },
+    lastCancellationAt: { type: Date },
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
   },
   { timestamps: true },
 );

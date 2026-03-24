@@ -100,6 +100,8 @@ export interface ConfirmBookingResponse {
     bookingNumber: string;
     status: string;
     paymentId: string;
+    paidAmount: number;
+    remainingBalance: number;
   };
 }
 
@@ -402,6 +404,26 @@ export interface UserBookingDetailDto {
     refundType: string;
     refundStatus: string;
   };
+  isReported: boolean;
+}
+
+export interface AdminVendorBookingListItemDto {
+  id: string;
+  bookingNumber: string;
+  barberName: string;
+  shopName: string;
+  userName: string;
+  date: Date;
+  startTime: string;
+  status: string;
+}
+
+export interface AdminVendorBookingListResponse {
+  bookings: AdminVendorBookingListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 // ─── Admin Cancellation Management ────────────────────────────────────────────

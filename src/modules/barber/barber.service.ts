@@ -29,6 +29,7 @@ import {
   SlotBlockRange,
   PublicBarberDto,
   BarberProfileDto,
+  BarberDayScheduleResult,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -52,6 +53,7 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { formatRating } from '../../shared/utils/rating';
 import { getCurrentIstDate, getTodayInIst } from '../../shared/utils/time';
+import type { BookingService } from '../booking/booking.service';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -64,6 +66,8 @@ export class BarberService {
     getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
     getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
   };
+
+  private bookingService?: BookingService;
 
   constructor(
     private readonly barberRepository: BarberRepository,
@@ -80,6 +84,10 @@ export class BarberService {
     getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
   }): void {
     this.availabilityService = svc;
+  }
+
+  setBookingService(svc: BookingService): void {
+    this.bookingService = svc;
   }
 
   private get shopService(): ShopService {
@@ -544,6 +552,10 @@ export class BarberService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.barberRepository.updateRefreshToken(barber._id.toString(), refreshTokenHash);
 
+    if (input.fcmToken) {
+      void this.barberRepository.addFcmToken(barber._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'BARBER_LOGIN',
       module: 'barber',
@@ -685,6 +697,21 @@ export class BarberService {
       );
     }
 
+    if (this.bookingService) {
+      const overlappingBookings = await this.bookingService.findOverlappingConfirmedBookings(
+        input.barberId,
+        nowIst,
+        startTime,
+        endTime,
+      );
+      if (overlappingBookings.length > 0) {
+        const booking = overlappingBookings[0];
+        throw new ConflictError(
+          `You have a confirmed booking (${booking.bookingNumber}) from ${this.formatTime(booking.startTime)} to ${this.formatTime(booking.endTime)} that overlaps with this slot.`,
+        );
+      }
+    }
+
     const slotBlock = await this.barberRepository.createSlotBlock({
       shopId,
       barberId: input.barberId,
@@ -762,10 +789,91 @@ export class BarberService {
     return this.toSlotBlockDto(releasedBlock);
   }
 
-  async listSlotBlocks(barberId: string, query: ListSlotBlocksQuery): Promise<SlotBlockResult[]> {
-    const date = query.date ? new Date(query.date) : new Date();
-    const blocks = await this.barberRepository.listSlotBlocks(barberId, date, query.status);
-    return blocks.map((b) => this.toSlotBlockDto(b));
+  async listSlotBlocks(
+    barberId: string,
+    query: ListSlotBlocksQuery,
+  ): Promise<BarberDayScheduleResult> {
+    const date = query.date ? new Date(query.date) : getTodayInIst();
+
+    // Fetch all blocks for this date (unfiltered — needed for available range computation)
+    const allBlocks = await this.barberRepository.listSlotBlocks(barberId, date);
+    // Apply status filter for display only
+    const displayBlocks = query.status
+      ? allBlocks.filter((b) => b.status === query.status)
+      : allBlocks;
+    const activeBlocks = allBlocks.filter((b) => b.status === 'ACTIVE');
+
+    // Fetch confirmed bookings for this date
+    const bookings = this.bookingService
+      ? await this.bookingService.getConfirmedBookingsByBarberAndDate(barberId, date)
+      : [];
+
+    // Fetch today's availability (breaks + working hours) — returns null for non-today dates
+    const availability = (await this.availabilityService?.getTodayAvailability(barberId)) ?? null;
+    const isWorking = availability?.isWorking ?? false;
+    const workingHours = availability?.workingHours ?? null;
+    const breaks = availability?.breaks ?? [];
+
+    const availableRanges = this.computeAvailableRanges(
+      isWorking ? workingHours : null,
+      breaks,
+      activeBlocks,
+      bookings,
+    );
+
+    const dateStr =
+      query.date ??
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+
+    return {
+      date: dateStr,
+      isWorking,
+      workingHours: workingHours ?? null,
+      breaks,
+      blocks: displayBlocks.map((b) => this.toSlotBlockDto(b)),
+      bookings,
+      availableRanges,
+    };
+  }
+
+  private computeAvailableRanges(
+    workingHours: { start: string; end: string } | null | undefined,
+    breaks: Array<{ start: string; end: string }>,
+    activeBlocks: Array<{ startTime: string; endTime: string }>,
+    bookings: Array<{ startTime: string; endTime: string }>,
+  ): Array<{ startTime: string; endTime: string }> {
+    if (!workingHours) return [];
+
+    const toMins = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const toHHMM = (mins: number) =>
+      `${Math.floor(mins / 60)
+        .toString()
+        .padStart(2, '0')}:${(mins % 60).toString().padStart(2, '0')}`;
+
+    const occupied = [
+      ...breaks.map((b) => ({ start: toMins(b.start), end: toMins(b.end) })),
+      ...activeBlocks.map((b) => ({ start: toMins(b.startTime), end: toMins(b.endTime) })),
+      ...bookings.map((b) => ({ start: toMins(b.startTime), end: toMins(b.endTime) })),
+    ].sort((a, b) => a.start - b.start);
+
+    const free: Array<{ startTime: string; endTime: string }> = [];
+    let cursor = toMins(workingHours.start);
+    const workEnd = toMins(workingHours.end);
+
+    for (const occ of occupied) {
+      if (occ.start > cursor) {
+        free.push({ startTime: toHHMM(cursor), endTime: toHHMM(occ.start) });
+      }
+      cursor = Math.max(cursor, occ.end);
+    }
+    if (cursor < workEnd) {
+      free.push({ startTime: toHHMM(cursor), endTime: toHHMM(workEnd) });
+    }
+
+    return free;
   }
 
   async activateBarbersByVendorId(vendorId: string, session?: ClientSession): Promise<void> {
@@ -798,11 +906,17 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      cancellationCount: barber.cancellationCount ?? 0,
+      cancellationsThisWeek: barber.cancellationsThisWeek ?? 0,
       serviceCount,
       services,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
     };
+  }
+
+  async incrementCancellationCount(barberId: string): Promise<void> {
+    await this.barberRepository.incrementCancellation(barberId);
   }
 
   async getVendorBarberProfile(vendorId: string): Promise<SelfBarberDto | null> {
@@ -1009,6 +1123,22 @@ export class BarberService {
     const barberIds = availableBarbers.map((b) => b._id.toString());
     const links = await this.barberRepository.findBarberServicesByBarberIds(barberIds);
     return new Set(links.map((l) => l.serviceId.toString()));
+  }
+
+  async getFcmTokens(barberId: string): Promise<string[]> {
+    return this.barberRepository.getFcmTokens(barberId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.barberRepository.pruneInvalidFcmTokens(tokens);
+  }
+
+  async registerFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.addFcmToken(barberId, token);
+  }
+
+  async unregisterFcmToken(barberId: string, token: string): Promise<void> {
+    await this.barberRepository.removeFcmToken(barberId, token);
   }
 
   getAllPhotoUrls(): Promise<string[]> {

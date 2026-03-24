@@ -128,6 +128,22 @@ export default class UserRepository {
     return UserModel.updateOne({ _id: userId }, { $pull: { fcmTokens: token } }).exec();
   }
 
+  async getFcmTokens(userId: string): Promise<string[]> {
+    const doc = await UserModel.findById(userId)
+      .select('+fcmTokens')
+      .lean<{ fcmTokens?: string[] }>()
+      .exec();
+    return doc?.fcmTokens ?? [];
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    if (!tokens.length) return;
+    await UserModel.updateMany(
+      { fcmTokens: { $in: tokens } },
+      { $pull: { fcmTokens: { $in: tokens } } },
+    ).exec();
+  }
+
   incrementCoinBalance(
     userId: string,
     coins: number,

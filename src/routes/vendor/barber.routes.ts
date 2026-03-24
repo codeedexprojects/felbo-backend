@@ -17,7 +17,7 @@ router.patch('/:barberId/status', barberController.toggleBarberAvailability);
 router.patch('/:barberId/credentials', barberController.updateCredentials);
 
 router.get('/:barberId/services', serviceController.getBarberServices);
-router.put('/:barberId/services', serviceController.assignServices);
+router.patch('/:barberId/services', serviceController.assignServices);
 router.delete('/:barberId/services/:serviceId', serviceController.removeBarberService);
 
 export default router;

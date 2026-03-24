@@ -11,6 +11,7 @@ export interface LoginVerifyOtpInput {
   phone: string;
   otp: string;
   sessionId: string;
+  fcmToken?: string;
 }
 
 export interface LoginVerifyOtpResponse {
@@ -76,6 +77,7 @@ export interface RegisterAssociationInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterAssociationResponse {
@@ -99,6 +101,7 @@ export interface RegisterIndependentInitiateInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterIndependentInitiateResponse {
@@ -347,6 +350,8 @@ export interface VendorAdminDetail {
       phone: string;
       photo?: string;
       isAvailable: boolean;
+      cancellationCount: number;
+      cancellationsThisWeek: number;
     }[];
     barberCount: number;
 
@@ -427,8 +432,16 @@ export interface StaffMemberDto {
   photo: string | null;
 }
 
+export interface BookingComparisonDto {
+  today: number;
+  yesterday: number;
+  diff: number;
+  trend: 'up' | 'down' | 'same';
+}
+
 export interface VendorDashboardCountsDto {
   dailyBookings: number;
+  bookingComparison: BookingComparisonDto;
   staffWorking: { count: number; staff: StaffMemberDto[] };
   staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }
