@@ -73,6 +73,11 @@ export default class UserController {
     });
   };
 
+  deactivateAccount = async (req: Request, res: Response): Promise<void> => {
+    await this.userService.deactivateAccount(req.user!.sub);
+    res.status(200).json({ success: true, message: 'Account deactivated successfully.' });
+  };
+
   registerFcmToken = async (req: Request, res: Response): Promise<void> => {
     const { token } = fcmTokenSchema.parse(req.body);
     await this.userService.registerFcmToken(req.user!.sub, token);
