@@ -11,6 +11,7 @@ import barberRoutes from './barber.routes';
 import bookingsRoutes from './bookings.routes';
 import dashboardRoutes from './dashboard.routes';
 import fcmRoutes from './fcm.routes';
+import eventRoutes from './event.routes';
 
 const router = Router();
 
@@ -27,5 +28,6 @@ router.use('/barbers', barberRoutes);
 router.use('/bookings', bookingsRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/fcm-token', fcmRoutes);
+router.use('/events', eventRoutes);
 
 export default router;

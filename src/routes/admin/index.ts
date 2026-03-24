@@ -15,6 +15,7 @@ import payoutRoutes from './payout.routes';
 import bookingRoutes from './booking.routes';
 import avatarRoutes from './avatar.routes';
 import felbocoinRoutes from './felbocoin.routes';
+import eventRoutes from './event.routes';
 
 const router = Router();
 
@@ -35,5 +36,6 @@ router.use('/payout', payoutRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/avatars', avatarRoutes);
 router.use('/felbocoin', felbocoinRoutes);
+router.use('/events', eventRoutes);
 
 export default router;

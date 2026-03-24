@@ -7,7 +7,7 @@ const BARBER_TOPIC = 'barber_app';
 export function scheduleBarberAvailabilityCron(): void {
   // Scheduled to run everyday at 8:00 AM IST
   cron.schedule(
-    '*/10 * * * * *',
+    '30 8 * * *',
     async () => {
       logger.info({ action: 'BARBER_AVAILABILITY_CRON_START', module: 'barber' });
 
