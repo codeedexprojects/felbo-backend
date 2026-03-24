@@ -29,10 +29,6 @@ import {
   SlotBlockRange,
   PublicBarberDto,
   BarberProfileDto,
-  TestNotificationInput,
-  TestNotificationResult,
-  TestBookingFlowInput,
-  TestBookingFlowResult,
 } from './barber.types';
 import { IBarber, ISlotBlock } from './barber.model';
 import {
@@ -56,12 +52,6 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { formatRating } from '../../shared/utils/rating';
 import { getCurrentIstDate, getTodayInIst } from '../../shared/utils/time';
-import {
-  enqueueNewBookingVendor,
-  enqueueBookingConfirmedUser,
-  enqueueReminder15Min,
-} from '../../shared/notification/notification.queue';
-import { UserModel } from '../user/user.model';
 
 interface TodayAvailabilityData {
   isWorking?: boolean;
@@ -1031,89 +1021,20 @@ export class BarberService {
     return new Set(links.map((l) => l.serviceId.toString()));
   }
 
+  async getFcmTokens(barberId: string): Promise<string[]> {
+    return this.barberRepository.getFcmTokens(barberId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.barberRepository.pruneInvalidFcmTokens(tokens);
+  }
+
   async registerFcmToken(barberId: string, token: string): Promise<void> {
     await this.barberRepository.addFcmToken(barberId, token);
   }
 
   async unregisterFcmToken(barberId: string, token: string): Promise<void> {
     await this.barberRepository.removeFcmToken(barberId, token);
-  }
-
-  async testBookingFlow(input: TestBookingFlowInput): Promise<TestBookingFlowResult> {
-    const [user, barber] = await Promise.all([
-      UserModel.findById(input.userId, { name: 1 }).lean(),
-      this.barberRepository.findById(input.barberId),
-    ]);
-
-    if (!user) throw new NotFoundError('User not found.');
-    if (!barber || barber.status === 'DELETED') throw new NotFoundError('Barber not found.');
-
-    const shop = await this.getShopService().getShopById(barber.shopId.toString());
-
-    const userId = input.userId;
-    const barberId = barber._id.toString();
-    const shopName = shop.name;
-    const customerName = (user.name as string | undefined) ?? 'Customer';
-    const serviceName = 'Haircut';
-    const appointmentTime = '10:30 AM';
-    const bookingId = `test-${Date.now()}`;
-    const appointmentAt = new Date(Date.now() + 15 * 60 * 1000 + input.reminderDelaySeconds * 1000);
-
-    await Promise.all([
-      enqueueBookingConfirmedUser({ userId, shopName, appointmentTime, bookingId }),
-      enqueueNewBookingVendor({ barberId, customerName, serviceName, appointmentTime }),
-      enqueueReminder15Min({
-        userId,
-        barberId,
-        shopName,
-        appointmentTime,
-        appointmentAt,
-        bookingId,
-      }),
-    ]);
-
-    this.logger.info({
-      action: 'TEST_BOOKING_FLOW_QUEUED',
-      module: 'barber',
-      userId,
-      barberId,
-      reminderFiresInSeconds: input.reminderDelaySeconds,
-    });
-
-    return {
-      queued: true,
-      userId,
-      barberId,
-      shopName,
-      reminderFiresInSeconds: input.reminderDelaySeconds,
-    };
-  }
-
-  async sendTestNotification(
-    id: string,
-    input: TestNotificationInput,
-  ): Promise<TestNotificationResult> {
-    const barber = await this.barberRepository.findById(id);
-    if (!barber || barber.status === 'DELETED') {
-      throw new NotFoundError('Barber not found.');
-    }
-
-    const barberId = barber._id.toString();
-
-    await enqueueNewBookingVendor({
-      barberId,
-      customerName: input.customerName,
-      serviceName: input.serviceName,
-      appointmentTime: input.appointmentTime,
-    });
-
-    this.logger.info({
-      action: 'BARBER_TEST_NOTIFICATION_QUEUED',
-      module: 'barber',
-      barberId,
-    });
-
-    return { queued: true, barberId, bookingId: input.bookingId };
   }
 
   getAllPhotoUrls(): Promise<string[]> {

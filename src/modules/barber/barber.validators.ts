@@ -130,16 +130,3 @@ export const listSlotBlocksQuerySchema = z.object({
 export const fcmTokenSchema = z.object({
   token: z.string({ error: 'Token is required' }).min(1, 'Token is required'),
 });
-
-export const testNotificationSchema = z.object({
-  customerName: z.string().optional().default('Test Customer'),
-  serviceName: z.string().optional().default('Haircut'),
-  appointmentTime: z.string().optional().default('10:30 AM'),
-  bookingId: z.string().optional().default('000000000000000000000001'),
-});
-
-export const testBookingFlowSchema = z.object({
-  userId: mongoIdSchema,
-  barberId: mongoIdSchema,
-  reminderDelaySeconds: z.coerce.number().int().positive().max(300).default(30),
-});

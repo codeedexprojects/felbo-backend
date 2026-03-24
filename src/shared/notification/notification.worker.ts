@@ -16,7 +16,7 @@ async function bootstrap(): Promise<void> {
 }
 
 // DB queries for getting tokens for worker
-async function getUserTokens(userId: string): Promise<string[]> {
+export async function getUserTokens(userId: string): Promise<string[]> {
   const user = await UserModel.findById(userId, { fcmTokens: 1 }).lean();
   return user?.fcmTokens ?? [];
 }
@@ -26,7 +26,7 @@ async function getVendorTokens(vendorId: string): Promise<string[]> {
   return vendor?.fcmTokens ?? [];
 }
 
-async function getBarberTokens(barberId: string): Promise<string[]> {
+export async function getBarberTokens(barberId: string): Promise<string[]> {
   const barber = await BarberModel.findById(barberId, { fcmTokens: 1 }).lean();
   return barber?.fcmTokens ?? [];
 }
@@ -70,8 +70,8 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
 
       const result = await sendFcmNotification({
         tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Booking Confirmed!',
+        channel: 'felbo_general',
+        title: 'Booking Confirmed! this is the new data',
         body: `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
         data: {
           type: 'BOOKING_CONFIRMED',

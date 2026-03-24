@@ -234,30 +234,3 @@ export interface PublicBarberDto {
   rating: { average: number; count: number };
   isAvailable: boolean;
 }
-
-export interface TestNotificationInput {
-  customerName: string;
-  serviceName: string;
-  appointmentTime: string;
-  bookingId: string;
-}
-
-export interface TestNotificationResult {
-  queued: boolean;
-  barberId: string;
-  bookingId: string;
-}
-
-export interface TestBookingFlowInput {
-  userId: string;
-  barberId: string;
-  reminderDelaySeconds: number;
-}
-
-export interface TestBookingFlowResult {
-  queued: boolean;
-  userId: string;
-  barberId: string;
-  shopName: string;
-  reminderFiresInSeconds: number;
-}

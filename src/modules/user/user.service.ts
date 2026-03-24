@@ -258,6 +258,14 @@ export default class UserService {
     await this.userRepository.removeFcmToken(userId, token);
   }
 
+  async getFcmTokens(userId: string): Promise<string[]> {
+    return this.userRepository.getFcmTokens(userId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.userRepository.pruneInvalidFcmTokens(tokens);
+  }
+
   async incrementCancellationCount(userId: string, session?: ClientSession): Promise<void> {
     await this.userRepository.incrementCancellationCount(userId, session);
   }

@@ -66,20 +66,22 @@ export async function sendFcmNotification(payload: FcmPayload): Promise<FcmResul
         body: payload.body,
       },
       android: {
-        priority: payload.channel === FCM_CHANNELS.BOOKING ? 'high' : 'normal',
         notification: {
           channelId: payload.channel,
           sound,
-          vibrateTimingsMillis:
-            payload.channel === FCM_CHANNELS.BOOKING ? [0, 500, 200, 500, 200, 500] : undefined,
         },
       },
       apns: {
+        headers: {
+          'apns-priority': '10',
+        },
         payload: {
           aps: {
             sound: `${sound}.caf`,
-            contentAvailable: true,
-            mutableContent: payload.channel === FCM_CHANNELS.BOOKING ? true : undefined,
+            alert: {
+              title: payload.title,
+              body: payload.body,
+            },
           },
         },
       },

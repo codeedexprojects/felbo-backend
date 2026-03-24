@@ -21,8 +21,6 @@ import {
   releaseSlotBlockParamSchema,
   listSlotBlocksQuerySchema,
   fcmTokenSchema,
-  testNotificationSchema,
-  testBookingFlowSchema,
 } from './barber.validators';
 
 export class BarberController {
@@ -208,17 +206,5 @@ export class BarberController {
     const { token } = fcmTokenSchema.parse(req.body);
     await this.barberService.unregisterFcmToken(this.getBarberId(req), token);
     res.status(200).json({ success: true, message: 'Token removed' });
-  };
-
-  sendTestNotification = async (req: Request, res: Response): Promise<void> => {
-    const validated = testNotificationSchema.parse(req.body);
-    const result = await this.barberService.sendTestNotification(this.getBarberId(req), validated);
-    res.status(200).json({ success: true, data: result });
-  };
-
-  testBookingFlow = async (req: Request, res: Response): Promise<void> => {
-    const validated = testBookingFlowSchema.parse(req.body);
-    const result = await this.barberService.testBookingFlow(validated);
-    res.status(200).json({ success: true, data: result });
   };
 }

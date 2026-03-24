@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import { requestId } from './shared/middleware/requestId';
 import { errorHandler } from './shared/middleware/errorHandler';
 import router from './routes';
+import { setupBullBoard } from '@shared/queue/bull-board';
 
 const app = express();
 
@@ -17,6 +18,8 @@ app.use(cookieParser());
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+setupBullBoard(app);
 
 app.use(requestId);
 app.use(morgan('dev'));
