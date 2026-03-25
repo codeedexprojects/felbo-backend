@@ -36,6 +36,25 @@ export const updateIssueStatusSchema = z.object({
   reason: z.string().min(1, 'Reason/Note is required').max(500, 'Reason too long'),
 });
 
+export const userIssueListQuerySchema = z.object({
+  page: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 1)),
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 10)),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+});
+
 export const listIssuesSchema = z.object({
   page: z
     .string()

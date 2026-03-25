@@ -10,6 +10,7 @@ export interface IUser extends Document {
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason?: string | null;
+  deactivatedAt?: Date | null;
   refreshTokenHash?: string | null;
   fcmTokens: string[];
   lastLoginAt: Date;
@@ -58,6 +59,10 @@ const userSchema = new Schema<IUser>(
     },
     blockReason: {
       type: String,
+      default: null,
+    },
+    deactivatedAt: {
+      type: Date,
       default: null,
     },
     refreshTokenHash: {

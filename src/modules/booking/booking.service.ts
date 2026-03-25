@@ -57,6 +57,7 @@ import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { FelboCoinService } from '../felbocoin/felbocoin.service';
 import { withTransaction } from '../../shared/database/transaction';
 import { IssueService } from '../issue/issue.service';
+import { NotificationService } from '@modules/notification/notification.service';
 
 // const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
@@ -79,6 +80,7 @@ export class BookingService {
     private readonly logger: Logger,
     private readonly getFelboCoinService: () => FelboCoinService,
     private readonly getIssueService: () => IssueService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private get barberService(): BarberService {
@@ -700,6 +702,24 @@ export class BookingService {
         data: { type: 'NEW_BOOKING', shopName: shop.name },
       });
 
+      void this.notificationService.save({
+        recipientId: userId,
+        recipientRole: 'user',
+        type: 'BOOKING_CONFIRMED',
+        title: 'Booking Confirmed!',
+        body: `Your booking at ${shop.name} is confirmed for ${coinAppointmentTime}`,
+        data: { bookingId: booking!._id.toString(), shopName: shop.name },
+      });
+
+      void this.notificationService.save({
+        recipientId: coinBarberId,
+        recipientRole: 'barber',
+        type: 'NEW_BOOKING',
+        title: 'New Booking!',
+        body: `${user.name ?? 'A customer'} booked ${coinServiceName} at ${coinAppointmentTime}`,
+        data: { shopName: shop.name },
+      });
+
       return {
         booking: {
           id: booking!._id.toString(),
@@ -846,6 +866,24 @@ export class BookingService {
       data: { type: 'NEW_BOOKING', shopName: confirmed.shopName },
     });
 
+    void this.notificationService.save({
+      recipientId: userId,
+      recipientRole: 'user',
+      type: 'BOOKING_CONFIRMED',
+      title: 'Booking Confirmed!',
+      body: `Your booking at ${confirmed.shopName} is confirmed for ${appointmentTime}`,
+      data: { bookingId, shopName: confirmed.shopName },
+    });
+
+    void this.notificationService.save({
+      recipientId: confirmedBarberId,
+      recipientRole: 'barber',
+      type: 'NEW_BOOKING',
+      title: 'New Booking!',
+      body: `${confirmed.userName} booked ${confirmedServiceName} at ${appointmentTime}`,
+      data: { shopName: confirmed.shopName },
+    });
+
     return {
       booking: {
         id: confirmed._id.toString(),
@@ -974,6 +1012,15 @@ export class BookingService {
       data: { type: 'BOOKING_CANCELLED', bookingId },
     });
 
+    void this.notificationService.save({
+      recipientId: booking.userId.toString(),
+      recipientRole: 'user',
+      type: 'BOOKING_CANCELLED_BY_VENDOR',
+      title: 'Booking Cancelled',
+      body: `Your booking at ${booking.shopName} has been cancelled by the barber.`,
+      data: { bookingId, shopName: booking.shopName },
+    });
+
     return {
       booking: {
         id: cancelled!._id.toString(),
@@ -1085,6 +1132,15 @@ export class BookingService {
       title: 'Booking Cancelled',
       body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
       data: { type: 'BOOKING_CANCELLED', bookingId },
+    });
+
+    void this.notificationService.save({
+      recipientId: booking.barberId.toString(),
+      recipientRole: 'barber',
+      type: 'BOOKING_CANCELLED_BY_CUSTOMER',
+      title: 'Booking Cancelled',
+      body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
+      data: { bookingId, customerName: booking.userName },
     });
 
     return {
