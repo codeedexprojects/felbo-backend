@@ -13,6 +13,7 @@ import {
   dashboardStatsQuerySchema,
   vendorBookingsQuerySchema,
   vendorBookingIdParamSchema,
+  deactivateAccountSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -141,6 +142,12 @@ export default class VendorController {
       success: true,
       message: 'Logged out successfully.',
     });
+  };
+
+  deactivateAccount = async (req: Request, res: Response): Promise<void> => {
+    const { reason } = deactivateAccountSchema.parse(req.body);
+    await this.vendorService.deactivateAccount(req.user!.sub, reason);
+    res.status(200).json({ success: true, message: 'Account deactivated successfully.' });
   };
 
   registerFcmToken = async (req: Request, res: Response): Promise<void> => {

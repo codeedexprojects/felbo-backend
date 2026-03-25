@@ -179,6 +179,30 @@ export default class VendorRepository {
     ).exec();
   }
 
+  deactivateById(id: string, reason?: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: 'DELETED',
+          deactivatedAt: new Date(),
+          deactivationReason: reason ?? null,
+          refreshTokenHash: null,
+          fcmTokens: [],
+        },
+      },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
+  reactivateById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { $set: { status: 'ACTIVE', deactivatedAt: null } },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
   async getAllPhotoKeys(): Promise<string[]> {
     const vendors = await VendorModel.find(
       {},
@@ -221,6 +245,10 @@ export default class VendorRepository {
 
   removeFcmToken(vendorId: string, token: string): Promise<unknown> {
     return VendorModel.updateOne({ _id: vendorId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  clearFcmTokens(vendorId: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $set: { fcmTokens: [] } }).exec();
   }
 
   updateProfile(

@@ -234,6 +234,21 @@ export default class ShopRepository {
     ).exec();
   }
 
+  updateIsAvailableByVendorId(
+    vendorId: string,
+    isAvailable: boolean,
+    session?: ClientSession,
+  ): Promise<unknown> {
+    return ShopModel.updateMany(
+      {
+        vendorId: new mongoose.Types.ObjectId(vendorId),
+        status: { $in: ['ACTIVE', 'PENDING_APPROVAL'] },
+      },
+      { $set: { isAvailable } },
+      { session },
+    ).exec();
+  }
+
   addCategoryIfMissing(shopId: string, categoryId: string): Promise<IShop | null> {
     return ShopModel.findByIdAndUpdate(
       shopId,

@@ -25,17 +25,24 @@ export async function authenticate(
 
   const decoded = jwtService.verifyToken(token);
 
-  const [isBlocked, isDeleted] = await Promise.all([
-    getRedisClient().get(`user:blocked:${decoded.sub}`),
-    getRedisClient().get(`user:deleted:${decoded.sub}`),
-  ]);
+  const role = decoded.role;
 
-  if (isDeleted) {
-    throw new UnauthorizedError('This account has been deactivated.');
-  }
-
-  if (isBlocked) {
-    throw new UnauthorizedError('Your account has been suspended. Please contact support.');
+  if (role === 'USER') {
+    const [isBlocked, isDeleted] = await Promise.all([
+      getRedisClient().get(`user:blocked:${decoded.sub}`),
+      getRedisClient().get(`user:deleted:${decoded.sub}`),
+    ]);
+    if (isDeleted) {
+      throw new UnauthorizedError('This account has been deactivated.');
+    }
+    if (isBlocked) {
+      throw new UnauthorizedError('Your account has been suspended. Please contact support.');
+    }
+  } else if (role === 'VENDOR' || role === 'VENDOR_BARBER') {
+    const isDeleted = await getRedisClient().get(`vendor:deleted:${decoded.sub}`);
+    if (isDeleted) {
+      throw new UnauthorizedError('This account has been deactivated.');
+    }
   }
 
   req.user = decoded;

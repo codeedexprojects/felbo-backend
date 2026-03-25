@@ -129,6 +129,7 @@ const bookingSchema = new Schema<IBooking>(
 bookingSchema.index({ userId: 1, status: 1 });
 bookingSchema.index({ shopId: 1, date: 1, status: 1 });
 bookingSchema.index({ barberId: 1, date: 1, status: 1 });
+bookingSchema.index({ endTime: 1, status: 1 });
 
 export const BookingModel = mongoose.model<IBooking>('Booking', bookingSchema);
 

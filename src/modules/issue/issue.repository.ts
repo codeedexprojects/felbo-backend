@@ -43,10 +43,12 @@ export class IssueRepository {
     userId: string,
     page: number,
     limit: number,
+    status?: string,
     startDate?: Date,
     endDate?: Date,
   ): Promise<{ issues: UserIssueListItem[]; total: number }> {
     const query: Record<string, unknown> = { userId };
+    if (status) query.status = status;
     if (startDate || endDate) {
       const range: Record<string, Date> = {};
       if (startDate) range.$gte = startDate;
@@ -61,10 +63,12 @@ export class IssueRepository {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate<{ shopId: { _id: unknown; name: string } }>('shopId', 'name')
         .populate<{
-          bookingId: { _id: unknown; bookingNumber: string };
-        }>('bookingId', 'bookingNumber')
+          shopId: UserIssueListItem['shopId'];
+        }>('shopId', 'name address.area address.city location')
+        .populate<{
+          bookingId: UserIssueListItem['bookingId'];
+        }>('bookingId', 'bookingNumber advancePaid paymentMethod')
         .lean()
         .exec() as Promise<UserIssueListItem[]>,
       BookingIssueModel.countDocuments(query).exec(),

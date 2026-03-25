@@ -457,6 +457,10 @@ export class BarberRepository {
     return BarberModel.updateOne({ _id: barberId }, { $pull: { fcmTokens: token } }).exec();
   }
 
+  clearFcmTokens(barberId: string): Promise<unknown> {
+    return BarberModel.updateOne({ _id: barberId }, { $set: { fcmTokens: [] } }).exec();
+  }
+
   async getFcmTokens(barberId: string): Promise<string[]> {
     const doc = await BarberModel.findById(barberId)
       .select('+fcmTokens')

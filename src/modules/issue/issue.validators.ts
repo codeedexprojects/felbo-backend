@@ -45,6 +45,7 @@ export const userIssueListQuerySchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? parseInt(val, 10) : 10)),
+  status: z.enum(['OPEN', 'RESOLVED', 'REJECTED']).optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
