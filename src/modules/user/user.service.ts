@@ -33,6 +33,7 @@ import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { getRedisClient } from '../../shared/redis/redis';
 import { config } from '../../shared/config/config.service';
+import { NotificationService } from '../notification/notification.service';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -48,6 +49,7 @@ export default class UserService {
     private readonly getIssueService?: () => IssueService,
     private readonly getBookingService?: () => BookingService,
     private readonly getFavoriteService?: () => FavoriteService,
+    private readonly getNotificationService?: () => NotificationService,
   ) {}
 
   private toUserDto(user: IUser): UserDto {
@@ -66,7 +68,7 @@ export default class UserService {
     };
   }
 
-  private toProfileDto(user: IUser): UserProfileDto {
+  private toProfileDto(user: IUser, unreadNotificationCount: number): UserProfileDto {
     return {
       id: user._id.toString(),
       phone: user.phone,
@@ -75,6 +77,7 @@ export default class UserService {
       profileUrl: user.profileUrl || null,
       gender: user.gender || null,
       felboCoinBalance: user.felboCoinBalance,
+      unreadNotificationCount,
     };
   }
 
@@ -269,13 +272,18 @@ export default class UserService {
   }
 
   async getProfile(userId: string): Promise<UserProfileDto> {
-    const user = await this.userRepository.findById(userId);
+    const [user, unreadNotificationCount] = await Promise.all([
+      this.userRepository.findById(userId),
+      this.getNotificationService
+        ? this.getNotificationService().getUnreadCountForUser(userId)
+        : Promise.resolve(0),
+    ]);
 
     if (!user) {
       throw new NotFoundError('User not found');
     }
 
-    return this.toProfileDto(user);
+    return this.toProfileDto(user, unreadNotificationCount);
   }
 
   async updateProfile(userId: string, input: UpdateProfileInput): Promise<UserProfileDto> {
@@ -293,7 +301,11 @@ export default class UserService {
 
     this.logger.info('User profile updated', { userId });
 
-    return this.toProfileDto(updated);
+    const unreadNotificationCount = this.getNotificationService
+      ? await this.getNotificationService().getUnreadCountForUser(userId)
+      : 0;
+
+    return this.toProfileDto(updated, unreadNotificationCount);
   }
 
   async getUserById(userId: string): Promise<UserDto> {
