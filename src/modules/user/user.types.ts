@@ -29,6 +29,7 @@ export interface UserProfileDto {
   profileUrl: string | null;
   gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
   felboCoinBalance: number;
+  unreadNotificationCount: number;
 }
 
 export interface UpdateProfileInput {

@@ -12,6 +12,8 @@ import type { FavoriteService } from '../favorite/favorite.service';
 import { issueService } from '../issue/issue.container';
 import { bookingService } from '../booking/booking.container';
 import { favoriteService } from '../favorite/favorite.container';
+import { notificationService } from '../notification/notification.container';
+import type { NotificationService } from '../notification/notification.service';
 
 const userRepository = new UserRepository();
 
@@ -37,6 +39,7 @@ const userService = new UserService(
   (): IssueService => issueService,
   (): BookingService => bookingService,
   (): FavoriteService => favoriteService,
+  (): NotificationService => notificationService,
 );
 
 const userController = new UserController(userService);

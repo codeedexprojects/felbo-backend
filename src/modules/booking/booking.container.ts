@@ -31,7 +31,7 @@ const bookingService: BookingService = new BookingService(
   logger,
   () => felboCoinService,
   (): IssueService => issueService,
-  notificationService,
+  () => notificationService,
 );
 
 const bookingController = new BookingController(bookingService);

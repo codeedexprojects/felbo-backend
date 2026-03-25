@@ -80,8 +80,12 @@ export class BookingService {
     private readonly logger: Logger,
     private readonly getFelboCoinService: () => FelboCoinService,
     private readonly getIssueService: () => IssueService,
-    private readonly notificationService: NotificationService,
+    private readonly getNotificationService: () => NotificationService,
   ) {}
+
+  private get notificationService(): NotificationService {
+    return this.getNotificationService();
+  }
 
   private get barberService(): BarberService {
     return this.getBarberService();
