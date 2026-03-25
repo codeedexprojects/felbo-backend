@@ -1,5 +1,10 @@
 import { BookingIssueModel, IBookingIssue } from './issue.model';
-import { ListIssuesFilter, CreateIssueInput, PopulatedBookingIssue } from './issue.types';
+import {
+  ListIssuesFilter,
+  CreateIssueInput,
+  PopulatedBookingIssue,
+  UserIssueListItem,
+} from './issue.types';
 
 export class IssueRepository {
   updateRefundStatus(
@@ -32,6 +37,40 @@ export class IssueRepository {
   }): Promise<IBookingIssue> {
     const issue = await BookingIssueModel.create(data);
     return issue;
+  }
+
+  async findByUserIdPaginated(
+    userId: string,
+    page: number,
+    limit: number,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{ issues: UserIssueListItem[]; total: number }> {
+    const query: Record<string, unknown> = { userId };
+    if (startDate || endDate) {
+      const range: Record<string, Date> = {};
+      if (startDate) range.$gte = startDate;
+      if (endDate) range.$lte = endDate;
+      query.createdAt = range;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [issues, total] = await Promise.all([
+      BookingIssueModel.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate<{ shopId: { _id: unknown; name: string } }>('shopId', 'name')
+        .populate<{
+          bookingId: { _id: unknown; bookingNumber: string };
+        }>('bookingId', 'bookingNumber')
+        .lean()
+        .exec() as Promise<UserIssueListItem[]>,
+      BookingIssueModel.countDocuments(query).exec(),
+    ]);
+
+    return { issues, total };
   }
 
   existsByBookingId(bookingId: string): Promise<boolean> {
