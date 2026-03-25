@@ -84,6 +84,8 @@ export interface IVendor extends Document {
   blockReason?: string;
 
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  deactivatedAt?: Date | null;
+  deactivationReason?: string | null;
   refreshTokenHash?: string | null;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -207,6 +209,8 @@ const vendorSchema = new Schema<IVendor>(
       enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED'],
       default: 'PENDING',
     },
+    deactivatedAt: { type: Date, default: null },
+    deactivationReason: { type: String, default: null },
     refreshTokenHash: { type: String, default: null },
     lastLoginAt: { type: Date },
   },

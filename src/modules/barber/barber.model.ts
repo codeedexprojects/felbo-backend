@@ -117,5 +117,6 @@ const slotBlockSchema = new Schema<ISlotBlock>(
 
 slotBlockSchema.index({ barberId: 1, date: 1, status: 1 });
 slotBlockSchema.index({ shopId: 1, date: 1 });
+slotBlockSchema.index({ endTime: 1, status: 1 });
 
 export const SlotBlockModel = mongoose.model<ISlotBlock>('SlotBlock', slotBlockSchema);

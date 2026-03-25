@@ -31,5 +31,6 @@ router.get(
 
 router.post('/refresh-token', vendorController.refreshToken);
 router.post('/logout', authenticate, authorize('VENDOR'), vendorController.logout);
+router.delete('/deactivate', authenticate, authorize('VENDOR'), vendorController.deactivateAccount);
 
 export default router;

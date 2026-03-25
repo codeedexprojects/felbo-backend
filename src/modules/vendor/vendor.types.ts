@@ -314,6 +314,7 @@ export interface VendorAdminDetail {
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   isBlocked: boolean;
   isFlagged: boolean;
+  deactivationReason?: string;
   documents?: {
     shopLicense?: string;
     ownerIdProof?: string;
