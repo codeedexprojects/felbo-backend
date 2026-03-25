@@ -217,6 +217,7 @@ export class BarberService {
       phone: barber.phone,
       email: barber.email ?? null,
       shopName: shop.name,
+      isVendorBarber: barber.isVendorBarber,
       services,
     };
   }
@@ -967,6 +968,12 @@ export class BarberService {
       status,
     });
 
+    let onboardingStatus = shop.onboardingStatus;
+    if (shop.onboardingStatus === 'PENDING_BARBERS') {
+      await this.shopService.updateOnboardingStatus(shopId, 'PENDING_BARBER_SERVICES');
+      onboardingStatus = 'PENDING_BARBER_SERVICES';
+    }
+
     this.logger.info({
       action: 'VENDOR_ADDED_SELF_AS_BARBER',
       module: 'barber',
@@ -983,6 +990,7 @@ export class BarberService {
       photo: barber.photo,
       isAvailable: barber.isAvailable,
       isVendorBarber: barber.isVendorBarber,
+      onboardingStatus,
     };
   }
 

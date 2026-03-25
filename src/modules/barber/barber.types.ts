@@ -1,3 +1,5 @@
+import { OnboardingStatus } from '../shop/shop.types';
+
 export interface CreateBarberInput {
   shopId: string;
   name: string;
@@ -121,6 +123,7 @@ export interface SelfBarberDto {
   photo?: string;
   isAvailable: boolean;
   isVendorBarber: boolean;
+  onboardingStatus?: OnboardingStatus;
 }
 
 export interface AssignServiceItemInput {
@@ -219,6 +222,7 @@ export interface BarberProfileDto {
   phone: string;
   email: string | null;
   shopName: string;
+  isVendorBarber: boolean;
   services: Array<{
     id: string;
     name: string;
