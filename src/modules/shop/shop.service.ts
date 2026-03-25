@@ -701,6 +701,15 @@ export default class ShopService {
     return this.shopRepository.getCancellationStatsByVendorId(vendorId);
   }
 
+  async setAvailabilityByVendorId(vendorId: string, isAvailable: boolean): Promise<void> {
+    await this.shopRepository.updateIsAvailableByVendorId(vendorId, isAvailable);
+    this.logger.info({
+      action: isAvailable ? 'VENDOR_SHOPS_REOPENED' : 'VENDOR_SHOPS_CLOSED',
+      module: 'shop',
+      vendorId,
+    });
+  }
+
   getAllPhotoUrls(): Promise<string[]> {
     return this.shopRepository.getAllPhotoUrls();
   }

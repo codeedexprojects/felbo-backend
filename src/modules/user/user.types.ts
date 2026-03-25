@@ -127,6 +127,7 @@ export interface UserDetailDto {
   profileUrl: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason: string | null;
+  deactivationReason: string | null;
   felboCoinBalance: number;
   cancellationCount: number;
   registeredAt: Date;

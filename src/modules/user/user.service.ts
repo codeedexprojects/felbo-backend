@@ -249,20 +249,23 @@ export default class UserService {
   }
 
   async logout(userId: string): Promise<void> {
-    await this.userRepository.updateRefreshToken(userId, null);
+    await Promise.all([
+      this.userRepository.updateRefreshToken(userId, null),
+      this.userRepository.clearFcmTokens(userId),
+    ]);
     this.logger.info('User logged out', { userId });
   }
 
-  async deactivateAccount(userId: string): Promise<void> {
+  async deactivateAccount(userId: string, reason?: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
     if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
 
-    const updated = await this.userRepository.deactivateById(userId);
+    const updated = await this.userRepository.deactivateById(userId, reason);
     if (!updated) throw new AppError('Failed to deactivate account. Please try again.', 500);
 
     await getRedisClient().set(`user:deleted:${userId}`, '1', { EX: config.jwt.expirySeconds });
 
-    this.logger.info({ action: 'USER_SELF_DEACTIVATED', module: 'user', userId });
+    this.logger.info({ action: 'USER_SELF_DEACTIVATED', module: 'user', userId, reason });
   }
 
   async getProfile(userId: string): Promise<UserProfileDto> {
@@ -414,6 +417,7 @@ export default class UserService {
       profileUrl: user.profileUrl ?? null,
       status: user.status,
       blockReason: user.blockReason ?? null,
+      deactivationReason: user.deactivationReason ?? null,
       felboCoinBalance: user.felboCoinBalance,
       cancellationCount: user.cancellationCount,
       registeredAt: user.createdAt,

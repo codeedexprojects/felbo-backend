@@ -616,7 +616,10 @@ export class BarberService {
   }
 
   async logout(barberId: string): Promise<void> {
-    await this.barberRepository.updateRefreshToken(barberId, null);
+    await Promise.all([
+      this.barberRepository.updateRefreshToken(barberId, null),
+      this.barberRepository.clearFcmTokens(barberId),
+    ]);
     this.logger.info({ action: 'BARBER_LOGOUT', module: 'barber', barberId });
   }
 

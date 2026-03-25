@@ -10,6 +10,7 @@ import {
   blockUserSchema,
   userIdParamSchema,
   userBookingsPaginationSchema,
+  deactivateAccountSchema,
 } from './user.validators';
 
 export default class UserController {
@@ -74,7 +75,8 @@ export default class UserController {
   };
 
   deactivateAccount = async (req: Request, res: Response): Promise<void> => {
-    await this.userService.deactivateAccount(req.user!.sub);
+    const { reason } = deactivateAccountSchema.parse(req.body);
+    await this.userService.deactivateAccount(req.user!.sub, reason);
     res.status(200).json({ success: true, message: 'Account deactivated successfully.' });
   };
 

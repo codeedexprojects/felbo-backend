@@ -49,10 +49,13 @@ import {
   NotFoundError,
   ConflictError,
   ValidationError,
+  AppError,
 } from '../../shared/errors/index';
 import { withTransaction } from '../../shared/database/transaction';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { getRedisClient } from '../../shared/redis/redis';
+import { config } from '../../shared/config/config.service';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -153,6 +156,22 @@ export default class VendorService {
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
+    const existingVendor = await this.vendorRepository.findByPhone(phone);
+    if (existingVendor?.status === 'DELETED') {
+      const GRACE_DAYS = 10;
+      const deactivatedAt = existingVendor.deactivatedAt;
+      if (!deactivatedAt) {
+        throw new ForbiddenError('This account no longer exists.');
+      }
+      const daysSince = Math.floor((Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = GRACE_DAYS - daysSince;
+      if (daysRemaining > 0) {
+        throw new ForbiddenError(
+          `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+        );
+      }
+    }
+
     const phoneWithCode = `91${phone}`;
     const result = await this.otpService.sendOtp(phoneWithCode);
 
@@ -180,7 +199,7 @@ export default class VendorService {
 
     await this.otpSessionService.deleteSession(input.sessionId);
 
-    const vendor = await this.vendorRepository.findByPhone(input.phone);
+    let vendor = await this.vendorRepository.findByPhone(input.phone);
 
     if (!vendor) {
       throw new NotFoundError('No vendor account found. Please register.');
@@ -201,7 +220,26 @@ export default class VendorService {
     }
 
     if (vendor.status === 'DELETED') {
-      throw new ForbiddenError('This account no longer exists.');
+      const GRACE_DAYS = 10;
+      const deactivatedAt = vendor.deactivatedAt;
+
+      if (!deactivatedAt) {
+        throw new ForbiddenError('This account no longer exists.');
+      }
+
+      const daysSince = Math.floor((Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = GRACE_DAYS - daysSince;
+
+      if (daysRemaining > 0) {
+        throw new ForbiddenError(
+          `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+        );
+      }
+
+      await this.vendorRepository.reactivateById(vendor._id.toString());
+      await getRedisClient().del(`vendor:deleted:${vendor._id.toString()}`);
+      await this.shopService.setAvailabilityByVendorId(vendor._id.toString(), true);
+      vendor = (await this.vendorRepository.findByPhone(input.phone))!;
     }
 
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
@@ -289,8 +327,30 @@ export default class VendorService {
   }
 
   async logout(vendorId: string): Promise<void> {
-    await this.vendorRepository.updateRefreshToken(vendorId, null);
+    await Promise.all([
+      this.vendorRepository.updateRefreshToken(vendorId, null),
+      this.vendorRepository.clearFcmTokens(vendorId),
+    ]);
     this.logger.info('Vendor logged out', { vendorId });
+  }
+
+  async deactivateAccount(vendorId: string, reason?: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+
+    if (!vendor || vendor.status === 'DELETED') {
+      throw new NotFoundError('Vendor not found.');
+    }
+    if (vendor.status !== 'ACTIVE') {
+      throw new ForbiddenError('Only active vendor accounts can be deactivated.');
+    }
+
+    const updated = await this.vendorRepository.deactivateById(vendorId, reason);
+    if (!updated) throw new AppError('Failed to deactivate account. Please try again.', 500);
+
+    await this.shopService.setAvailabilityByVendorId(vendorId, false);
+    await getRedisClient().set(`vendor:deleted:${vendorId}`, '1', { EX: config.jwt.expirySeconds });
+
+    this.logger.info({ action: 'VENDOR_SELF_DEACTIVATED', module: 'vendor', vendorId, reason });
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -697,6 +757,7 @@ export default class VendorService {
       status: vendor.status,
       isBlocked: vendor.isBlocked,
       isFlagged: vendor.isFlagged,
+      deactivationReason: vendor.deactivationReason ?? undefined,
       documents: vendor.documents,
       associationMemberId: vendor.associationMemberId,
       associationIdProofUrl: vendor.associationIdProofUrl,

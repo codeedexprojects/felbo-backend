@@ -91,8 +91,18 @@ export type RefundStatus = 'NONE' | 'PENDING' | 'ISSUED' | 'COMPLETED' | 'FAILED
 // Lean document shape returned by findByUserIdPaginated
 export interface UserIssueListItem {
   _id: { toString(): string };
-  shopId: { _id: unknown; name: string } | null;
-  bookingId: { _id: unknown; bookingNumber: string } | null;
+  shopId: {
+    _id: unknown;
+    name: string;
+    address: { area: string; city: string };
+    location: { type: string; coordinates: number[] };
+  } | null;
+  bookingId: {
+    _id: unknown;
+    bookingNumber: string;
+    advancePaid: number;
+    paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
+  } | null;
   type: IssueType;
   status: IssueStatus;
   description: string;
@@ -106,26 +116,12 @@ export interface UserIssueListItemDTO {
   status: IssueStatus;
   description: string;
   shopName: string | null;
+  shopAddress: { area: string; city: string } | null;
+  shopLocation: { lat: number; lng: number } | null;
   bookingNumber: string | null;
   refundStatus: RefundStatus;
+  refundAmount: number | null;
   createdAt: Date;
-}
-
-export interface UserIssueDetailDTO {
-  id: string;
-  type: IssueType;
-  status: IssueStatus;
-  description: string;
-  shop: { id: string; name: string; address: { area: string; city: string } } | null;
-  bookingNumber: string | null;
-  refund: {
-    status: RefundStatus;
-    method: 'RAZORPAY' | 'FELBO_COINS' | null;
-    amount: number | null;
-  };
-  adminNote: string | null;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface UserIssueListResponse {

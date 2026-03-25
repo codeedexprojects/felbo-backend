@@ -9,7 +9,6 @@ import {
   UpdateIssueStatusInput,
   CreateIssueInput,
   UserIssueListResponse,
-  UserIssueDetailDTO,
   UserIssueListItemDTO,
   UserIssueListItem,
 } from './issue.types';
@@ -284,6 +283,7 @@ export class IssueService {
     userId: string,
     page: number,
     limit: number,
+    status?: string,
     startDate?: Date,
     endDate?: Date,
   ): Promise<UserIssueListResponse> {
@@ -291,59 +291,34 @@ export class IssueService {
       userId,
       page,
       limit,
+      status,
       startDate,
       endDate,
     );
 
     return {
-      issues: issues.map(
-        (i: UserIssueListItem): UserIssueListItemDTO => ({
+      issues: issues.map((i: UserIssueListItem): UserIssueListItemDTO => {
+        const coords = i.shopId?.location?.coordinates;
+        return {
           id: i._id.toString(),
           type: i.type,
           status: i.status,
           description: i.description,
           shopName: i.shopId?.name ?? null,
+          shopAddress: i.shopId
+            ? { area: i.shopId.address.area, city: i.shopId.address.city }
+            : null,
+          shopLocation: coords ? { lat: coords[1], lng: coords[0] } : null,
           bookingNumber: i.bookingId?.bookingNumber ?? null,
           refundStatus: i.refundStatus,
+          refundAmount: i.bookingId?.advancePaid ?? null,
           createdAt: i.createdAt,
-        }),
-      ),
+        };
+      }),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async getUserIssueDetail(id: string, userId: string): Promise<UserIssueDetailDTO> {
-    const issue = await this.issueRepository.findById(id);
-    if (!issue) throw new NotFoundError('Issue not found.');
-    if (issue.userId?._id.toString() !== userId) throw new NotFoundError('Issue not found.');
-
-    const booking = issue.bookingId;
-    const paymentMethod = booking?.paymentMethod ?? null;
-
-    return {
-      id: issue._id.toString(),
-      type: issue.type,
-      status: issue.status,
-      description: issue.description,
-      shop: issue.shopId
-        ? {
-            id: issue.shopId._id.toString(),
-            name: issue.shopId.name,
-            address: { area: issue.shopId.address.area, city: issue.shopId.address.city },
-          }
-        : null,
-      bookingNumber: booking?.bookingNumber ?? null,
-      refund: {
-        status: issue.refundStatus,
-        method: paymentMethod,
-        amount: booking?.advancePaid ?? null,
-      },
-      adminNote: issue.adminNote ?? null,
-      createdAt: issue.createdAt,
-      updatedAt: issue.updatedAt,
     };
   }
 

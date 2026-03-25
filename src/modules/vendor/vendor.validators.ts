@@ -148,3 +148,7 @@ export const vendorBookingsQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
     .optional(),
 });
+
+export const deactivateAccountSchema = z.object({
+  reason: z.string().max(500, 'Reason too long').optional(),
+});

@@ -120,13 +120,14 @@ export default class UserRepository {
     ).exec();
   }
 
-  deactivateById(id: string): Promise<IUser | null> {
+  deactivateById(id: string, reason?: string): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(
       id,
       {
         $set: {
           status: 'DELETED',
           deactivatedAt: new Date(),
+          deactivationReason: reason ?? null,
           refreshTokenHash: null,
           fcmTokens: [],
         },
@@ -149,6 +150,10 @@ export default class UserRepository {
 
   removeFcmToken(userId: string, token: string): Promise<unknown> {
     return UserModel.updateOne({ _id: userId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  clearFcmTokens(userId: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $set: { fcmTokens: [] } }).exec();
   }
 
   async getFcmTokens(userId: string): Promise<string[]> {
