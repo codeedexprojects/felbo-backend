@@ -124,6 +124,8 @@ export interface SelfBarberDto {
   isAvailable: boolean;
   isVendorBarber: boolean;
   onboardingStatus?: OnboardingStatus;
+  barberToken?: string;
+  barberRefreshToken?: string;
 }
 
 export interface AssignServiceItemInput {
