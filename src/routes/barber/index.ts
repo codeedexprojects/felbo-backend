@@ -9,6 +9,7 @@ import dashboardRoutes from './dashboard.routes';
 import profileRoutes from './profile.routes';
 import fcmRoutes from './fcm.routes';
 import avatarRoutes from './avatar.routes';
+import notificationRoutes from './notification.routes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/', slotBlockRoutes);
 router.use('/bookings', bookingRoutes);
 router.use('/', dashboardRoutes);
 router.use('/fcm', fcmRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;
