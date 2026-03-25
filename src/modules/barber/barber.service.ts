@@ -975,11 +975,11 @@ export class BarberService {
     }
 
     const barberId = barber._id.toString();
-    const tokenPayload = { sub: barberId, role: 'BARBER' as const };
+    const tokenPayload: TokenPayload = { sub: vendorId, role: 'VENDOR_BARBER', barberId };
     const barberToken = this.jwtService.signToken(tokenPayload);
     const barberRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
     const refreshTokenHash = this.jwtService.hashToken(barberRefreshToken);
-    await this.barberRepository.updateRefreshToken(barberId, refreshTokenHash);
+    await this.vendorRepository.updateRefreshToken(vendorId, refreshTokenHash);
 
     this.logger.info({
       action: 'VENDOR_ADDED_SELF_AS_BARBER',
