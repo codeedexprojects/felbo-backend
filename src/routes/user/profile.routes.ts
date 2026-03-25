@@ -6,6 +6,7 @@ const router = Router();
 
 router.get('/', userController.getProfile);
 router.patch('/', userController.updateProfile);
+router.delete('/deactivate', userController.deactivateAccount);
 
 router.post('/upload-url', uploadController.generateUploadUrl('users/', true, 'profile'));
 router.post('/verify-upload', uploadController.verifyUpload('users/', true, 'profile'));

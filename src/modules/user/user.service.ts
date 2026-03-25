@@ -91,6 +91,29 @@ export default class UserService {
   }
 
   async sendOtp(input: SendOtpInput): Promise<SendOtpResponse> {
+    const existingUser = await this.userRepository.findByPhone(input.phone);
+    if (existingUser) {
+      if (existingUser.status === 'BLOCKED') {
+        throw new ForbiddenError('Your account has been suspended. Contact support.');
+      }
+      if (existingUser.status === 'DELETED') {
+        const GRACE_DAYS = 10;
+        const deactivatedAt = existingUser.deactivatedAt;
+        if (!deactivatedAt) {
+          throw new ForbiddenError('This account no longer exists.');
+        }
+        const daysSince = Math.floor(
+          (Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const daysRemaining = GRACE_DAYS - daysSince;
+        if (daysRemaining > 0) {
+          throw new ForbiddenError(
+            `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+          );
+        }
+      }
+    }
+
     const phoneWithCode = `91${input.phone}`;
     const result = await this.otpService.sendOtp(phoneWithCode, 'USER');
 
@@ -127,7 +150,28 @@ export default class UserService {
         throw new ForbiddenError('Your account has been suspended. Contact support.');
       }
       if (user.status === 'DELETED') {
-        throw new ForbiddenError('This account no longer exists.');
+        const GRACE_DAYS = 10;
+        const deactivatedAt = user.deactivatedAt;
+
+        if (!deactivatedAt) {
+          throw new ForbiddenError('This account no longer exists.');
+        }
+
+        const daysSince = Math.floor(
+          (Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const daysRemaining = GRACE_DAYS - daysSince;
+
+        if (daysRemaining > 0) {
+          throw new ForbiddenError(
+            `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+          );
+        }
+
+        // Grace period over — reactivate account
+        await this.userRepository.reactivateById(user._id.toString());
+        await getRedisClient().del(`user:deleted:${user._id.toString()}`);
+        user = (await this.userRepository.findByPhone(input.phone))!;
       }
     } else {
       user = await this.userRepository.create({ phone: input.phone });
@@ -207,6 +251,18 @@ export default class UserService {
   async logout(userId: string): Promise<void> {
     await this.userRepository.updateRefreshToken(userId, null);
     this.logger.info('User logged out', { userId });
+  }
+
+  async deactivateAccount(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    const updated = await this.userRepository.deactivateById(userId);
+    if (!updated) throw new AppError('Failed to deactivate account. Please try again.', 500);
+
+    await getRedisClient().set(`user:deleted:${userId}`, '1', { EX: config.jwt.expirySeconds });
+
+    this.logger.info({ action: 'USER_SELF_DEACTIVATED', module: 'user', userId });
   }
 
   async getProfile(userId: string): Promise<UserProfileDto> {

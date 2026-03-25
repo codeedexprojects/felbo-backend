@@ -8,6 +8,10 @@ import {
   IssueDetailDTO,
   UpdateIssueStatusInput,
   CreateIssueInput,
+  UserIssueListResponse,
+  UserIssueDetailDTO,
+  UserIssueListItemDTO,
+  UserIssueListItem,
 } from './issue.types';
 import { NotFoundError, ConflictError, ValidationError } from '../../shared/errors';
 import VendorService from '../vendor/vendor.service';
@@ -274,6 +278,73 @@ export class IssueService {
       status: issue.status,
       createdAt: issue.createdAt,
     }));
+  }
+
+  async getUserIssues(
+    userId: string,
+    page: number,
+    limit: number,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<UserIssueListResponse> {
+    const { issues, total } = await this.issueRepository.findByUserIdPaginated(
+      userId,
+      page,
+      limit,
+      startDate,
+      endDate,
+    );
+
+    return {
+      issues: issues.map(
+        (i: UserIssueListItem): UserIssueListItemDTO => ({
+          id: i._id.toString(),
+          type: i.type,
+          status: i.status,
+          description: i.description,
+          shopName: i.shopId?.name ?? null,
+          bookingNumber: i.bookingId?.bookingNumber ?? null,
+          refundStatus: i.refundStatus,
+          createdAt: i.createdAt,
+        }),
+      ),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getUserIssueDetail(id: string, userId: string): Promise<UserIssueDetailDTO> {
+    const issue = await this.issueRepository.findById(id);
+    if (!issue) throw new NotFoundError('Issue not found.');
+    if (issue.userId?._id.toString() !== userId) throw new NotFoundError('Issue not found.');
+
+    const booking = issue.bookingId;
+    const paymentMethod = booking?.paymentMethod ?? null;
+
+    return {
+      id: issue._id.toString(),
+      type: issue.type,
+      status: issue.status,
+      description: issue.description,
+      shop: issue.shopId
+        ? {
+            id: issue.shopId._id.toString(),
+            name: issue.shopId.name,
+            address: { area: issue.shopId.address.area, city: issue.shopId.address.city },
+          }
+        : null,
+      bookingNumber: booking?.bookingNumber ?? null,
+      refund: {
+        status: issue.refundStatus,
+        method: paymentMethod,
+        amount: booking?.advancePaid ?? null,
+      },
+      adminNote: issue.adminNote ?? null,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+    };
   }
 
   existsByBookingId(bookingId: string): Promise<boolean> {
