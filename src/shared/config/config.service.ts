@@ -60,8 +60,8 @@ export const config = {
   otp: {
     twoFactorApiKey: getEnv('TWO_FACTOR_API_KEY', ''),
     devFixedOtp: getEnv('DEV_FIXED_OTP', '123456'),
-    dailyLimitUser: getEnvInt('OTP_DAILY_LIMIT_USER', 8),
-    dailyLimitVendor: getEnvInt('OTP_DAILY_LIMIT_VENDOR', 10),
+    dailyLimitUser: getEnvInt('OTP_DAILY_LIMIT_USER', 1000),
+    dailyLimitVendor: getEnvInt('OTP_DAILY_LIMIT_VENDOR', 1000),
   },
 
   razorpay: {

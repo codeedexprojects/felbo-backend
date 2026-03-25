@@ -974,16 +974,23 @@ export class BarberService {
       onboardingStatus = 'PENDING_BARBER_SERVICES';
     }
 
+    const barberId = barber._id.toString();
+    const tokenPayload = { sub: barberId, role: 'BARBER' as const };
+    const barberToken = this.jwtService.signToken(tokenPayload);
+    const barberRefreshToken = this.jwtService.signRefreshToken(tokenPayload);
+    const refreshTokenHash = this.jwtService.hashToken(barberRefreshToken);
+    await this.barberRepository.updateRefreshToken(barberId, refreshTokenHash);
+
     this.logger.info({
       action: 'VENDOR_ADDED_SELF_AS_BARBER',
       module: 'barber',
       shopId,
-      barberId: barber._id.toString(),
+      barberId,
       vendorId,
     });
 
     return {
-      id: barber._id.toString(),
+      id: barberId,
       shopId: barber.shopId.toString(),
       name: barber.name,
       phone: barber.phone,
@@ -991,6 +998,8 @@ export class BarberService {
       isAvailable: barber.isAvailable,
       isVendorBarber: barber.isVendorBarber,
       onboardingStatus,
+      barberToken,
+      barberRefreshToken,
     };
   }
 
