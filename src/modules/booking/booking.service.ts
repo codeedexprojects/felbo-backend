@@ -1783,8 +1783,10 @@ export class BookingService {
   }
 
   async getUserHomeBookingData(userId: string): Promise<UserHomeBookingDto> {
+    const nowMinutes = getCurrentIstMinutes();
+    const currentTimeStr = `${String(Math.floor(nowMinutes / 60)).padStart(2, '0')}:${String(nowMinutes % 60).padStart(2, '0')}`;
     const { lastConfirmedBooking, totalConfirmedCount } =
-      await this.bookingRepository.getUserHomeBooking(userId, getTodayInIst());
+      await this.bookingRepository.getUserHomeBooking(userId, getTodayInIst(), currentTimeStr);
 
     return {
       lastConfirmedBooking: lastConfirmedBooking
