@@ -35,6 +35,7 @@ import {
   AdminCancellationDetailDto,
   UserHomeBookingDto,
   AdminVendorBookingListResponse,
+  AdminBookingStatsResult,
 } from './booking.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
 import {
@@ -54,6 +55,7 @@ import VendorService from '../vendor/vendor.service';
 import { IWorkingHours } from '../shop/shop.model';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { config as staticConfig } from '../../shared/config/config.service';
 import { FelboCoinService } from '../felbocoin/felbocoin.service';
 import { withTransaction } from '../../shared/database/transaction';
 import { IssueService } from '../issue/issue.service';
@@ -419,7 +421,10 @@ export class BookingService {
     todaysBookings: number;
     todaysRevenue: number;
   }> {
-    return this.bookingRepository.getGlobalDashboardStats();
+    const charge = staticConfig.razorpay.chargePercentage;
+    const tax = staticConfig.razorpay.taxPercentage;
+    const razorpayFeeRate = (charge + (charge * tax) / 100) / 100;
+    return this.bookingRepository.getGlobalDashboardStats(razorpayFeeRate);
   }
 
   async getStatsByShopIds(shopIds: string[]): Promise<{
@@ -894,8 +899,8 @@ export class BookingService {
         bookingNumber: confirmed.bookingNumber,
         status: confirmed.status,
         paymentId: input.razorpayPaymentId,
-        paidAmount: confirmed.advancePaid,
-        remainingBalance: confirmed.remainingAmount,
+        advancePaid: confirmed.advancePaid,
+        remainingAmount: confirmed.remainingAmount,
       },
     };
   }
@@ -1508,6 +1513,10 @@ export class BookingService {
   ): Promise<AdminVendorBookingListResponse> {
     const shopIds = await this.shopService.getShopIdsByVendorIds([vendorId]);
 
+    if (shopIds.length === 0) {
+      return { bookings: [], total: 0, page: params.page, limit: params.limit, totalPages: 0 };
+    }
+
     const { bookings, total } = await this.bookingRepository.adminGetBookings({
       page: params.page,
       limit: params.limit,
@@ -1682,6 +1691,12 @@ export class BookingService {
       cancelled: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
     };
 
+    const sortMap: Record<UserBookingTab, Record<string, 1 | -1>> = {
+      upcoming: { date: 1, startTime: 1 },
+      completed: { completedAt: -1, date: -1 },
+      cancelled: { updatedAt: -1 },
+    };
+
     const { bookings, total } = await this.bookingRepository.findUserBookingsList(
       userId,
       statusMap[tab],
@@ -1689,6 +1704,7 @@ export class BookingService {
       limit,
       startDate,
       endDate,
+      sortMap[tab],
     );
 
     return {
@@ -1806,13 +1822,13 @@ export class BookingService {
         paymentMethod: b.paymentMethod,
         advancePaid: b.advancePaid,
         status: b.status,
-        cancelledBy: b.cancellation.cancelledBy,
-        cancelledAt: b.cancellation.cancelledAt,
-        reason: b.cancellation.reason,
-        refundType: b.cancellation.refundType,
-        refundStatus: b.cancellation.refundStatus,
-        refundAmount: b.cancellation.refundAmount,
-        refundCoins: b.cancellation.refundCoins,
+        cancelledBy: b.cancellation?.cancelledBy,
+        cancelledAt: b.cancellation?.cancelledAt,
+        reason: b.cancellation?.reason,
+        refundType: b.cancellation?.refundType,
+        refundStatus: b.cancellation?.refundStatus,
+        refundAmount: b.cancellation?.refundAmount,
+        refundCoins: b.cancellation?.refundCoins,
         createdAt: b.createdAt,
       })),
       total,
@@ -1891,6 +1907,51 @@ export class BookingService {
           }
         : { id: '', name: '', phone: '' },
       createdAt: booking.createdAt,
+    };
+  }
+
+  async adminGetBookingStats(
+    period: 'day' | 'week' | 'month' | 'year' | 'custom',
+    startDate?: string,
+    endDate?: string,
+  ): Promise<AdminBookingStatsResult> {
+    const today = getTodayInIst();
+    const y = today.getUTCFullYear();
+    const mo = today.getUTCMonth();
+    const d = today.getUTCDate();
+
+    let start: Date;
+    let end: Date;
+
+    if (period === 'custom') {
+      start = parseDateAsIst(startDate!);
+      end = new Date(parseDateAsIst(endDate!).getTime() + 24 * 60 * 60 * 1000);
+    } else if (period === 'day') {
+      start = new Date(Date.UTC(y, mo, d));
+      end = new Date(Date.UTC(y, mo, d + 1));
+    } else if (period === 'week') {
+      const dow = today.getUTCDay(); // 0=Sun
+      const diffToMon = dow === 0 ? -6 : 1 - dow;
+      start = new Date(Date.UTC(y, mo, d + diffToMon));
+      end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'month') {
+      start = new Date(Date.UTC(y, mo, 1));
+      end = new Date(Date.UTC(y, mo + 1, 1));
+    } else {
+      // year
+      start = new Date(Date.UTC(y, 0, 1));
+      end = new Date(Date.UTC(y + 1, 0, 1));
+    }
+
+    const stats = await this.bookingRepository.getAdminBookingStats(start, end);
+
+    const toDateStr = (dt: Date) => dt.toISOString().slice(0, 10);
+
+    return {
+      period,
+      startDate: toDateStr(start),
+      endDate: toDateStr(new Date(end.getTime() - 86400000)),
+      ...stats,
     };
   }
 }

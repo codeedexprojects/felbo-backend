@@ -8,6 +8,11 @@ router.get('/stats', authorize('SUPER_ADMIN'), financeController.getFinanceSumma
 router.get('/chart', authorize('SUPER_ADMIN'), financeController.getRevenueChart);
 router.get('/vendors', authorize('SUPER_ADMIN'), financeController.getVendorRevenueTable);
 router.get('/refunds', authorize('SUPER_ADMIN'), financeController.getRefundHistory);
+router.get(
+  '/registrations',
+  authorize('SUPER_ADMIN'),
+  financeController.getIndependentRegistrationList,
+);
 
 router.get(
   '/assoc/stats',

@@ -6,7 +6,10 @@ import {
   VendorRevenueTableResponse,
   RefundHistoryParams,
   RefundHistoryResponse,
+  CoinRefundHistoryResponse,
   AssocFinanceSummaryDto,
+  IndependentRegistrationListParams,
+  IndependentRegistrationListResponse,
 } from './finance.types';
 import VendorService from '../vendor/vendor.service';
 import ShopService from '../shop/shop.service';
@@ -37,10 +40,11 @@ export class FinanceService {
   async getSummary(): Promise<FinanceSummaryDto> {
     const razorpayFeeRate = this.getRazorpayFeeRate();
 
-    const [stats, vendorIds, refundStats] = await Promise.all([
+    const [stats, vendorIds, refundStats, registrationRevenue] = await Promise.all([
       this.financeRepository.getSummaryStats(razorpayFeeRate),
       this.vendorService.getAssociationVendorIds(),
       this.financeRepository.getRefundStats(),
+      this.financeRepository.getRegistrationRevenueStats(razorpayFeeRate),
     ]);
 
     const shopIds = await this.shopService.getShopIdsByVendorIds(
@@ -50,10 +54,32 @@ export class FinanceService {
     const assocBookingCount = await this.financeRepository.getAssocBookingCount(shopIds);
 
     return {
-      ...stats,
+      today: {
+        revenue: Number((stats.today.revenue + registrationRevenue.today).toFixed(2)),
+        bookingCount: stats.today.bookingCount,
+      },
+      thisWeek: {
+        revenue: Number((stats.thisWeek.revenue + registrationRevenue.thisWeek).toFixed(2)),
+        bookingCount: stats.thisWeek.bookingCount,
+      },
+      thisMonth: {
+        revenue: Number((stats.thisMonth.revenue + registrationRevenue.thisMonth).toFixed(2)),
+        bookingCount: stats.thisMonth.bookingCount,
+      },
+      total: {
+        revenue: Number((stats.total.revenue + registrationRevenue.total).toFixed(2)),
+        bookingCount: stats.total.bookingCount,
+      },
       associationCommission: assocBookingCount * 2,
       refundStats,
+      registrationRevenue,
     };
+  }
+
+  async getTodayRegistrationRevenue(): Promise<number> {
+    const razorpayFeeRate = this.getRazorpayFeeRate();
+    const stats = await this.financeRepository.getRegistrationRevenueStats(razorpayFeeRate);
+    return stats.today;
   }
 
   async getRevenueChart(from: Date, to: Date): Promise<RevenueChartPointDto[]> {
@@ -122,7 +148,37 @@ export class FinanceService {
     };
   }
 
-  async getRefundHistory(params: RefundHistoryParams): Promise<RefundHistoryResponse> {
+  async getIndependentRegistrationList(
+    params: IndependentRegistrationListParams,
+  ): Promise<IndependentRegistrationListResponse> {
+    const razorpayFeeRate = this.getRazorpayFeeRate();
+    const { registrations, total } = await this.financeRepository.getIndependentRegistrationList(
+      params,
+      razorpayFeeRate,
+    );
+    return {
+      registrations,
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async getRefundHistory(
+    params: RefundHistoryParams,
+  ): Promise<RefundHistoryResponse | CoinRefundHistoryResponse> {
+    if (params.type === 'COIN') {
+      const { refunds, total } = await this.financeRepository.getCoinRefundHistory(params);
+      return {
+        refunds,
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.ceil(total / params.limit),
+      };
+    }
+
     if (params.type === 'ISSUE') {
       const { refunds, total } = await this.financeRepository.getIssueRefundHistory(params);
       return {
@@ -145,7 +201,7 @@ export class FinanceService {
       };
     }
 
-    // Combined: fetch both (no DB-level pagination), merge, sort, then paginate in memory
+    // Combined cash refunds: merge ISSUE + CANCELLATION, sort, paginate in memory
     const [issueResult, cancelResult] = await Promise.all([
       this.financeRepository.getIssueRefundHistory({ ...params, page: 1, limit: 10_000 }),
       this.financeRepository.getCancellationRefundHistory({ ...params, page: 1, limit: 10_000 }),

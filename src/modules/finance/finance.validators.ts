@@ -61,7 +61,7 @@ const basePeriodSchema = z.object({
 export const financeChartSchema = basePeriodSchema;
 
 export const refundHistorySchema = z.object({
-  type: z.enum(['ISSUE', 'CANCELLATION']).optional(),
+  type: z.enum(['ISSUE', 'CANCELLATION', 'COIN']).optional(),
   page: z
     .string()
     .optional()
@@ -74,6 +74,23 @@ export const refundHistorySchema = z.object({
     .pipe(z.number().int().min(1).max(100)),
   from: z.string().optional(),
   to: z.string().optional(),
+});
+
+export const independentRegListSchema = z.object({
+  page: z
+    .string()
+    .optional()
+    .transform((v) => (v ? parseInt(v, 10) : 1))
+    .pipe(z.number().int().min(1)),
+  limit: z
+    .string()
+    .optional()
+    .transform((v) => (v ? parseInt(v, 10) : 10))
+    .pipe(z.number().int().min(1).max(100)),
+  search: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  verificationStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PAYMENT_PENDING']).optional(),
 });
 
 export const financeVendorTableSchema = basePeriodSchema.extend({

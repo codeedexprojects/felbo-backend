@@ -100,8 +100,8 @@ export interface ConfirmBookingResponse {
     bookingNumber: string;
     status: string;
     paymentId: string;
-    paidAmount: number;
-    remainingBalance: number;
+    advancePaid: number;
+    remainingAmount: number;
   };
 }
 
@@ -536,6 +536,17 @@ export interface UserHomeBookingDto {
     shopCoordinates: { longitude: number; latitude: number } | null;
   } | null;
   totalConfirmedCount: number;
+}
+
+export interface AdminBookingStatsResult {
+  period: string;
+  startDate: string;
+  endDate: string;
+  total: number;
+  confirmed: number;
+  completed: number;
+  cancelled: number;
+  noShow: number;
 }
 
 export interface AdminBookingDetailDto {

@@ -10,6 +10,7 @@ import { issueService } from '../issue/issue.container';
 import { bookingService } from '../booking/booking.container';
 import { shopService } from '../shop/shop.container';
 import { userService } from '../user/user.container';
+import { financeService } from '../finance/finance.container';
 
 const adminRepository = new AdminRepository();
 
@@ -29,6 +30,7 @@ const adminService = new AdminService(
   logger,
   bookingService,
   shopService,
+  financeService,
 );
 
 const adminController = new AdminController(adminService);
