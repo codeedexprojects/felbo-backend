@@ -8,6 +8,20 @@ import {
   SetAvailabilityInput,
 } from './barberAvailability.types';
 import { IBarberAvailability, IPresetItem } from './barberAvailability.model';
+
+export interface BarberTimingSummary {
+  presets: {
+    id: string;
+    name: string;
+    workingHours: { start: string; end: string };
+    breaks: Array<{ start: string; end: string; reason?: string }>;
+  }[];
+  todaySchedule: {
+    isWorking: boolean;
+    workingHours: { start: string; end: string } | null;
+    breaks: Array<{ start: string; end: string; reason?: string }>;
+  } | null;
+}
 import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors';
 import { withTransaction } from '../../shared/database/transaction';
 import { BarberService } from '../barber/barber.service';
@@ -304,6 +318,39 @@ export class BarberAvailabilityService {
     const todayDate = this.getTodayDate();
     const nextDay = new Date(todayDate.getTime() + 24 * 60 * 60 * 1000);
     return this.availabilityRepository.findWorkingBarberIdsByShopIds(shopIds, todayDate, nextDay);
+  }
+
+  async getTimingByBarberIds(barberIds: string[]): Promise<Map<string, BarberTimingSummary>> {
+    const records = await this.availabilityRepository.findByBarberIds(barberIds);
+    const todayDate = this.getTodayDate();
+    const map = new Map<string, BarberTimingSummary>();
+
+    for (const record of records) {
+      const barberId = record.barberId.toString();
+      const presets = record.presets.map((p) => ({
+        id: p._id.toString(),
+        name: p.name,
+        workingHours: p.workingHours,
+        breaks: p.breaks,
+      }));
+
+      const isTodayRecord =
+        record.date &&
+        record.date.getTime() === todayDate.getTime() &&
+        record.isWorking !== undefined;
+
+      const todaySchedule = isTodayRecord
+        ? {
+            isWorking: record.isWorking ?? false,
+            workingHours: record.workingHours ?? null,
+            breaks: record.breaks,
+          }
+        : null;
+
+      map.set(barberId, { presets, todaySchedule });
+    }
+
+    return map;
   }
 
   async getAvailableBarberIdsForToday(shopId: string): Promise<string[]> {

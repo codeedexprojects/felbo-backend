@@ -131,6 +131,22 @@ export const adminBookingListQuerySchema = z.object({
     .optional(),
 });
 
+export const adminBookingStatsQuerySchema = z
+  .object({
+    period: z.enum(['day', 'week', 'month', 'year', 'custom']).default('day'),
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+      .optional(),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+      .optional(),
+  })
+  .refine((data) => data.period !== 'custom' || (!!data.startDate && !!data.endDate), {
+    message: 'startDate and endDate are required when period is custom.',
+  });
+
 export const vendorIdParamSchema = z.object({
   id: mongoIdSchema,
 });

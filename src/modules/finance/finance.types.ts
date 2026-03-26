@@ -19,10 +19,10 @@ export interface RefundStatsDto {
   thisMonth: number;
 }
 
-export type RefundType = 'ISSUE' | 'CANCELLATION';
+export type RefundType = 'ISSUE' | 'CANCELLATION' | 'COIN';
 
 export interface RefundHistoryItemDto {
-  type: RefundType;
+  type: 'ISSUE' | 'CANCELLATION';
   amount: number;
   refundStatus: string;
   bookingId: string;
@@ -34,8 +34,27 @@ export interface RefundHistoryItemDto {
   issueType?: string;
 }
 
+export interface CoinRefundHistoryItemDto {
+  type: 'COIN_REVERSAL' | 'COIN_REFUND';
+  coins: number;
+  bookingId?: string;
+  bookingNumber?: string;
+  userName: string;
+  userPhone: string;
+  refundedAt: Date;
+  description: string;
+}
+
 export interface RefundHistoryResponse {
   refunds: RefundHistoryItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface CoinRefundHistoryResponse {
+  refunds: CoinRefundHistoryItemDto[];
   total: number;
   page: number;
   limit: number;
@@ -50,6 +69,13 @@ export interface RefundHistoryParams {
   to?: Date;
 }
 
+export interface RegistrationRevenueSummaryDto {
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+  total: number;
+}
+
 export interface FinanceSummaryDto {
   today: FinanceSummaryPeriodDto;
   thisWeek: FinanceSummaryPeriodDto;
@@ -57,12 +83,14 @@ export interface FinanceSummaryDto {
   total: FinanceSummaryPeriodDto;
   associationCommission: number;
   refundStats: RefundStatsDto;
+  registrationRevenue: RegistrationRevenueSummaryDto;
 }
 
 export interface RevenueChartPointDto {
   date: string;
   revenue: number;
   bookingCount: number;
+  registrationRevenue: number;
 }
 
 export interface VendorRevenueTableParams {
@@ -84,6 +112,7 @@ export interface VendorRevenueRowDto {
   shopCount: number;
   bookingCount: number;
   revenue: number;
+  registrationAmount: number | null;
 }
 
 export interface VendorRevenueTableResponse {
@@ -100,4 +129,31 @@ export interface AssocFinanceSummaryDto {
   thisWeek: FinanceSummaryPeriodDto;
   thisMonth: FinanceSummaryPeriodDto;
   total: FinanceSummaryPeriodDto;
+}
+
+export interface IndependentRegistrationRowDto {
+  vendorId: string;
+  vendorName: string;
+  vendorPhone: string;
+  verificationStatus: string;
+  registrationAmount: number;
+  netRevenue: number;
+  paidAt: Date;
+}
+
+export interface IndependentRegistrationListParams {
+  page: number;
+  limit: number;
+  search?: string;
+  from?: Date;
+  to?: Date;
+  verificationStatus?: string;
+}
+
+export interface IndependentRegistrationListResponse {
+  registrations: IndependentRegistrationRowDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

@@ -32,6 +32,10 @@ export class NotificationService {
     return this.listForRecipient(barberId, 'barber', limit, cursor);
   }
 
+  async getUnreadCountForUser(userId: string): Promise<number> {
+    return this.repo.countUnread(userId, 'user');
+  }
+
   async markAllReadForUser(userId: string): Promise<void> {
     await this.repo.markAllRead(userId, 'user');
   }

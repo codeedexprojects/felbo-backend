@@ -1,6 +1,16 @@
 import mongoose, { ClientSession } from 'mongoose';
+import { toZonedTime } from 'date-fns-tz';
 import { BookingModel, IBooking, SlotLockModel, ISlotLock } from './booking.model';
 import { VendorBookingListParams } from './booking.types';
+
+const IST_TIMEZONE = 'Asia/Kolkata';
+const DASHBOARD_PAID_STATUSES = [
+  'CONFIRMED',
+  'COMPLETED',
+  'CANCELLED_BY_USER',
+  'CANCELLED_BY_VENDOR',
+  'NO_SHOW',
+] as const;
 
 export class BookingRepository {
   private utcDayRange(date: Date): { start: Date; end: Date } {
@@ -11,24 +21,46 @@ export class BookingRepository {
     return { start, end };
   }
 
-  async getGlobalDashboardStats(): Promise<{
+  private getIstTodayStart(): Date {
+    const ist = toZonedTime(new Date(), IST_TIMEZONE);
+    return new Date(Date.UTC(ist.getFullYear(), ist.getMonth(), ist.getDate()));
+  }
+
+  async getGlobalDashboardStats(razorpayFeeRate: number): Promise<{
     totalBookings: number;
     todaysBookings: number;
     todaysRevenue: number;
   }> {
-    const { start, end } = this.utcDayRange(new Date());
+    const todayStart = this.getIstTodayStart();
+    const { start: utcStart, end: utcEnd } = this.utcDayRange(new Date());
+
+    const netProfitExpr = {
+      $cond: {
+        if: { $eq: ['$status', 'CANCELLED_BY_VENDOR'] },
+        then: 0,
+        else: {
+          $subtract: ['$advancePaid', { $multiply: ['$advancePaid', razorpayFeeRate] }],
+        },
+      },
+    };
 
     const [result] = await BookingModel.aggregate([
       {
         $facet: {
           totalBookings: [{ $count: 'count' }],
           todaysBookings: [
-            { $match: { createdAt: { $gte: start, $lt: end } } },
+            { $match: { createdAt: { $gte: utcStart, $lt: utcEnd } } },
             { $count: 'count' },
           ],
           todaysRevenue: [
-            { $match: { createdAt: { $gte: start, $lt: end } } },
-            { $group: { _id: null, total: { $sum: '$advancePaid' } } },
+            {
+              $match: {
+                status: { $in: [...DASHBOARD_PAID_STATUSES] },
+                paymentMethod: 'RAZORPAY',
+                createdAt: { $gte: todayStart },
+              },
+            },
+            { $group: { _id: null, total: { $sum: netProfitExpr } } },
           ],
         },
       },
@@ -37,7 +69,7 @@ export class BookingRepository {
     return {
       totalBookings: result.totalBookings[0]?.count ?? 0,
       todaysBookings: result.todaysBookings[0]?.count ?? 0,
-      todaysRevenue: result.todaysRevenue[0]?.total ?? 0,
+      todaysRevenue: Number((result.todaysRevenue[0]?.total ?? 0).toFixed(2)),
     };
   }
 
@@ -81,6 +113,41 @@ export class BookingRepository {
       todaysBookings: data.todaysBookings[0]?.count ?? 0,
       yesterdaysBookings: data.yesterdaysBookings[0]?.count ?? 0,
       totalRevenue: data.totalRevenue[0]?.total ?? 0,
+    };
+  }
+
+  async getAdminBookingStats(
+    start: Date,
+    end: Date,
+  ): Promise<{
+    total: number;
+    confirmed: number;
+    completed: number;
+    cancelled: number;
+    noShow: number;
+  }> {
+    const [result] = await BookingModel.aggregate([
+      { $match: { date: { $gte: start, $lt: end }, status: { $ne: 'PENDING_PAYMENT' } } },
+      {
+        $facet: {
+          total: [{ $count: 'count' }],
+          confirmed: [{ $match: { status: 'CONFIRMED' } }, { $count: 'count' }],
+          completed: [{ $match: { status: 'COMPLETED' } }, { $count: 'count' }],
+          cancelled: [
+            { $match: { status: { $in: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR'] } } },
+            { $count: 'count' },
+          ],
+          noShow: [{ $match: { status: 'NO_SHOW' } }, { $count: 'count' }],
+        },
+      },
+    ]).exec();
+
+    return {
+      total: result.total[0]?.count ?? 0,
+      confirmed: result.confirmed[0]?.count ?? 0,
+      completed: result.completed[0]?.count ?? 0,
+      cancelled: result.cancelled[0]?.count ?? 0,
+      noShow: result.noShow[0]?.count ?? 0,
     };
   }
 
@@ -483,6 +550,7 @@ export class BookingRepository {
     limit: number,
     startDate?: Date,
     endDate?: Date,
+    sort?: Record<string, 1 | -1>,
   ): Promise<{
     bookings: Array<{
       _id: mongoose.Types.ObjectId;
@@ -517,7 +585,7 @@ export class BookingRepository {
       {
         $facet: {
           bookings: [
-            { $sort: { date: -1, startTime: -1 } },
+            { $sort: sort ?? { date: -1, startTime: -1 } },
             { $skip: skip },
             { $limit: limit },
             {
@@ -784,6 +852,7 @@ export class BookingRepository {
           ? 'CANCELLED_BY_USER'
           : 'CANCELLED_BY_VENDOR'
         : { $in: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR'] },
+      cancellation: { $exists: true },
     };
 
     if (params.search) {
@@ -844,6 +913,7 @@ export class BookingRepository {
   async getUserHomeBooking(
     userId: string,
     todayDate: Date,
+    currentTimeStr: string,
   ): Promise<{
     lastConfirmedBooking: {
       _id: mongoose.Types.ObjectId;
@@ -866,7 +936,8 @@ export class BookingRepository {
       {
         $facet: {
           lastConfirmedBooking: [
-            { $sort: { createdAt: -1 } },
+            { $match: { startTime: { $gte: currentTimeStr } } },
+            { $sort: { startTime: 1 } },
             { $limit: 1 },
             {
               $lookup: {

@@ -3,6 +3,7 @@ import { FinanceService } from './finance.service';
 import {
   financeChartSchema,
   financeVendorTableSchema,
+  independentRegListSchema,
   refundHistorySchema,
   resolveDateRange,
 } from './finance.validators';
@@ -55,6 +56,26 @@ export class FinanceController {
       maxRevenue: validated.maxRevenue,
       page: validated.page,
       limit: validated.limit,
+    });
+    res.status(200).json({ success: true, data: result });
+  };
+
+  getIndependentRegistrationList = async (req: Request, res: Response): Promise<void> => {
+    const validated = independentRegListSchema.parse(req.query);
+    let from: Date | undefined;
+    let to: Date | undefined;
+    if (validated.from || validated.to) {
+      const range = resolveDateRange('custom', validated.from, validated.to);
+      from = range.from;
+      to = range.to;
+    }
+    const result = await this.financeService.getIndependentRegistrationList({
+      page: validated.page,
+      limit: validated.limit,
+      search: validated.search,
+      from,
+      to,
+      verificationStatus: validated.verificationStatus,
     });
     res.status(200).json({ success: true, data: result });
   };

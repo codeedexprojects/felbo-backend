@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { BookingModel } from '../modules/booking/booking.model';
 import { SlotBlockModel } from '../modules/barber/barber.model';
+import { PaymentModel } from '../modules/payment/payment.model';
 import { logger } from '../shared/logger/logger';
 import { getIstDayRangeUtc, getCurrentIstDate } from '../shared/utils/time';
 
@@ -49,11 +50,46 @@ async function healStatuses(): Promise<void> {
       { $set: { status: 'RELEASED', releasedAt: now } },
     );
 
+    // --- Stale PENDING_PAYMENT cleanup ---
+    const staleThreshold = new Date(now.getTime() - 10 * 60 * 1000);
+
+    const staleBookings = await BookingModel.find(
+      { status: 'PENDING_PAYMENT', createdAt: { $lt: staleThreshold } },
+      { _id: 1, razorpayOrderId: 1 },
+    ).lean();
+
+    let stalePendingCancelled = 0;
+
+    if (staleBookings.length > 0) {
+      const staleIds = staleBookings.map((b) => b._id);
+      const staleOrderIds = staleBookings
+        .map((b) => b.razorpayOrderId)
+        .filter((id): id is string => !!id);
+
+      if (staleOrderIds.length > 0) {
+        await PaymentModel.updateMany(
+          { razorpayOrderId: { $in: staleOrderIds }, status: 'CREATED' },
+          { $set: { status: 'FAILED' } },
+        );
+      }
+      const stalePendingResult = await BookingModel.updateMany(
+        { _id: { $in: staleIds }, status: 'PENDING_PAYMENT' },
+        { $set: { status: 'CANCELLED_BY_USER' } },
+      );
+
+      stalePendingCancelled = stalePendingResult.modifiedCount;
+    }
+
     const bookingsHealed = bookingPast.modifiedCount + bookingToday.modifiedCount;
     const slotBlocksHealed = slotPast.modifiedCount + slotToday.modifiedCount;
 
-    if (bookingsHealed > 0 || slotBlocksHealed > 0) {
-      logger.info({ action: 'STATUS_HEALER_RUN', bookingsHealed, slotBlocksHealed });
+    if (bookingsHealed > 0 || slotBlocksHealed > 0 || stalePendingCancelled > 0) {
+      logger.info({
+        action: 'STATUS_HEALER_RUN',
+        bookingsHealed,
+        slotBlocksHealed,
+        stalePendingCancelled,
+      });
     }
   } catch (err) {
     logger.error({ action: 'STATUS_HEALER_ERROR', err });

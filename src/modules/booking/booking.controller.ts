@@ -10,6 +10,7 @@ import {
   bookingIdParamSchema,
   confirmBookingBodySchema,
   adminBookingListQuerySchema,
+  adminBookingStatsQuerySchema,
   adminCancellationListQuerySchema,
   cancelBookingByBarberBodySchema,
   cancelBookingByUserBodySchema,
@@ -84,6 +85,16 @@ export class BookingController {
     const result = await this.bookingService.confirmBooking(bookingId, body, userId);
 
     res.json({ success: true, data: result });
+  };
+
+  adminGetBookingStats = async (req: Request, res: Response): Promise<void> => {
+    const query = adminBookingStatsQuerySchema.parse(req.query);
+    const result = await this.bookingService.adminGetBookingStats(
+      query.period,
+      query.startDate,
+      query.endDate,
+    );
+    res.status(200).json({ success: true, data: result });
   };
 
   adminGetBookings = async (req: Request, res: Response): Promise<void> => {
