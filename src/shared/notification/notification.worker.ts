@@ -7,299 +7,417 @@ import { logger } from '../logger/logger';
 import { UserModel } from '../../modules/user/user.model';
 import { VendorModel } from '../../modules/vendor/vendor.model';
 import { BarberModel } from '../../modules/barber/barber.model';
+import { NotificationModel } from '../../modules/notification/notification.model';
+import type {
+  NotificationRecipientRole,
+  NotificationType,
+} from '../../modules/notification/notification.model';
 
-// Bootstraping worker
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
+
 async function bootstrap(): Promise<void> {
   await connectMongo();
   initFirebase();
   logger.info('Notification worker started');
 }
 
-// DB queries for getting tokens for worker
-export async function getUserTokens(userId: string): Promise<string[]> {
-  const user = await UserModel.findById(userId, { fcmTokens: 1 }).lean();
+// ─── Token helpers (select:false requires explicit +field projection) ─────────
+
+async function getUserTokens(userId: string): Promise<string[]> {
+  const user = await UserModel.findById(userId)
+    .select('+fcmTokens')
+    .lean<{ fcmTokens?: string[] }>();
   return user?.fcmTokens ?? [];
 }
 
 async function getVendorTokens(vendorId: string): Promise<string[]> {
-  const vendor = await VendorModel.findById(vendorId, { fcmTokens: 1 }).lean();
+  const vendor = await VendorModel.findById(vendorId)
+    .select('+fcmTokens')
+    .lean<{ fcmTokens?: string[] }>();
   return vendor?.fcmTokens ?? [];
 }
 
-export async function getBarberTokens(barberId: string): Promise<string[]> {
-  const barber = await BarberModel.findById(barberId, { fcmTokens: 1 }).lean();
+async function getBarberTokens(barberId: string): Promise<string[]> {
+  const barber = await BarberModel.findById(barberId)
+    .select('+fcmTokens')
+    .lean<{ fcmTokens?: string[] }>();
   return barber?.fcmTokens ?? [];
 }
 
-// Pruning invalid tokens from database
-async function pruneUserTokens(invalidTokens: string[]): Promise<void> {
-  if (!invalidTokens.length) return;
+// ─── Token prune helpers ──────────────────────────────────────────────────────
+
+async function pruneUserTokens(tokens: string[], jobName: string): Promise<void> {
+  if (!tokens.length) return;
   await UserModel.updateMany(
-    { fcmTokens: { $in: invalidTokens } },
-    { $pull: { fcmTokens: { $in: invalidTokens } } },
+    { fcmTokens: { $in: tokens } },
+    { $pull: { fcmTokens: { $in: tokens } } },
   );
+  logger.warn('Pruned invalid user FCM tokens', { jobName, pruned: tokens.length });
 }
 
-async function pruneVendorTokens(invalidTokens: string[]): Promise<void> {
-  if (!invalidTokens.length) return;
+async function pruneVendorTokens(tokens: string[], jobName: string): Promise<void> {
+  if (!tokens.length) return;
   await VendorModel.updateMany(
-    { fcmTokens: { $in: invalidTokens } },
-    { $pull: { fcmTokens: { $in: invalidTokens } } },
+    { fcmTokens: { $in: tokens } },
+    { $pull: { fcmTokens: { $in: tokens } } },
   );
+  logger.warn('Pruned invalid vendor FCM tokens', { jobName, pruned: tokens.length });
 }
 
-async function pruneBarberTokens(invalidTokens: string[]): Promise<void> {
-  if (!invalidTokens.length) return;
+async function pruneBarberTokens(tokens: string[], jobName: string): Promise<void> {
+  if (!tokens.length) return;
   await BarberModel.updateMany(
-    { fcmTokens: { $in: invalidTokens } },
-    { $pull: { fcmTokens: { $in: invalidTokens } } },
+    { fcmTokens: { $in: tokens } },
+    { $pull: { fcmTokens: { $in: tokens } } },
   );
+  logger.warn('Pruned invalid barber FCM tokens', { jobName, pruned: tokens.length });
 }
 
-// Job processor
+// ─── Persistence helper ───────────────────────────────────────────────────────
+
+async function persist(
+  recipientId: string,
+  recipientRole: NotificationRecipientRole,
+  type: NotificationType,
+  title: string,
+  body: string,
+  jobName: string,
+  data?: Record<string, string>,
+): Promise<void> {
+  await NotificationModel.create({
+    recipientId,
+    recipientRole,
+    type,
+    title,
+    body,
+    data: data ?? {},
+  });
+  logger.info('Notification persisted', { jobName, recipientId, recipientRole, type });
+}
+
+// ─── Job processor ────────────────────────────────────────────────────────────
+
 async function processJob(job: Job<NotificationJobData>): Promise<void> {
   const { data } = job;
 
   logger.info('Processing notification job', { jobName: data.jobName, jobId: job.id });
 
   switch (data.jobName) {
-    // User: booking confirmed
+    // ── User: booking confirmed ────────────────────────────────────────────────
     case 'BOOKING_CONFIRMED_USER': {
       const tokens = await getUserTokens(data.userId);
-      if (!tokens.length) return;
 
-      const result = await sendFcmNotification({
-        tokens,
-        channel: 'felbo_general',
-        title: 'Booking Confirmed! this is the new data',
-        body: `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
-        data: {
-          type: 'BOOKING_CONFIRMED',
-          bookingId: data.bookingId,
-          shopName: data.shopName,
-        },
-      });
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for user — skipping push', {
+          jobName: data.jobName,
+          userId: data.userId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.BOOKING,
+          title: 'Booking Confirmed!',
+          body: `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
+          data: { type: 'BOOKING_CONFIRMED', bookingId: data.bookingId, shopName: data.shopName },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          userId: data.userId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens, data.jobName);
+      }
 
-      if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens);
-      logger.info('BOOKING_CONFIRMED_USER sent', result);
+      await persist(
+        data.userId,
+        'user',
+        'BOOKING_CONFIRMED',
+        'Booking Confirmed!',
+        `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
+        data.jobName,
+        { bookingId: data.bookingId, shopName: data.shopName },
+      );
       break;
     }
 
-    // User: booking cancelled by vendor
-    case 'BOOKING_CANCELLED_BY_VENDOR': {
+    // ── Barber: new booking arrived ────────────────────────────────────────────
+    case 'NEW_BOOKING_BARBER': {
+      const tokens = await getBarberTokens(data.barberId);
+
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for barber — skipping push', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.BOOKING,
+          title: `New Booking from ${data.customerName}`,
+          body: `${data.serviceName} at ${data.appointmentTime}`,
+          data: {
+            type: 'NEW_BOOKING',
+            customerName: data.customerName,
+            serviceName: data.serviceName,
+            appointmentTime: data.appointmentTime,
+          },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneBarberTokens(result.invalidTokens, data.jobName);
+      }
+
+      await persist(
+        data.barberId,
+        'barber',
+        'NEW_BOOKING',
+        `New Booking from ${data.customerName}`,
+        `${data.serviceName} at ${data.appointmentTime}`,
+        data.jobName,
+        {
+          customerName: data.customerName,
+          serviceName: data.serviceName,
+          appointmentTime: data.appointmentTime,
+        },
+      );
+      break;
+    }
+
+    // ── User: barber cancelled ─────────────────────────────────────────────────
+    case 'BOOKING_CANCELLED_BY_BARBER': {
       const tokens = await getUserTokens(data.userId);
-      if (!tokens.length) return;
 
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Booking Cancelled',
-        body: `Your booking at ${data.shopName} was cancelled. ₹${data.refundAmount} refunded.`,
-        data: {
-          type: 'BOOKING_CANCELLED_BY_VENDOR',
-          shopName: data.shopName,
-          refundAmount: String(data.refundAmount),
-        },
-      });
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for user — skipping push', {
+          jobName: data.jobName,
+          userId: data.userId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Booking Cancelled',
+          body: `Your booking at ${data.shopName} has been cancelled by the barber.`,
+          data: { type: 'BOOKING_CANCELLED_BY_BARBER', shopName: data.shopName },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          userId: data.userId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens, data.jobName);
+      }
 
-      if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens);
-      logger.info('BOOKING_CANCELLED_BY_VENDOR sent', result);
+      await persist(
+        data.userId,
+        'user',
+        'BOOKING_CANCELLED_BY_BARBER',
+        'Booking Cancelled',
+        `Your booking at ${data.shopName} has been cancelled by the barber.`,
+        data.jobName,
+        { shopName: data.shopName },
+      );
       break;
     }
 
-    // User: booking cancelled by user (their own cancellation confirmation)
+    // ── Barber: user cancelled ─────────────────────────────────────────────────
     case 'BOOKING_CANCELLED_BY_USER': {
-      const tokens = await getUserTokens(data.userId);
-      if (!tokens.length) return;
+      const tokens = await getBarberTokens(data.barberId);
 
-      const refundMsg =
-        data.refundAmount > 0
-          ? `₹${data.refundAmount} has been refunded to your wallet.`
-          : 'No refund was issued.';
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for barber — skipping push', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Booking Cancelled',
+          body: `${data.customerName} cancelled their ${data.appointmentTime} booking.`,
+          data: {
+            type: 'BOOKING_CANCELLED_BY_USER',
+            customerName: data.customerName,
+            appointmentTime: data.appointmentTime,
+          },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneBarberTokens(result.invalidTokens, data.jobName);
+      }
 
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Booking Cancelled',
-        body: `Your booking was cancelled. ${refundMsg}`,
-        data: {
-          type: 'BOOKING_CANCELLED_BY_USER',
-          refundAmount: String(data.refundAmount),
-        },
-      });
-
-      if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens);
-      logger.info('BOOKING_CANCELLED_BY_USER sent', result);
+      await persist(
+        data.barberId,
+        'barber',
+        'BOOKING_CANCELLED_BY_USER',
+        'Booking Cancelled',
+        `${data.customerName} cancelled their ${data.appointmentTime} booking.`,
+        data.jobName,
+        { customerName: data.customerName, appointmentTime: data.appointmentTime },
+      );
       break;
     }
 
-    // 15-min reminder: sent to both user and barber
-    case 'REMINDER_15MIN': {
+    // ── User + Barber: 10-min reminder ─────────────────────────────────────────
+    case 'REMINDER_10MIN': {
       const [userTokens, barberTokens] = await Promise.all([
         getUserTokens(data.userId),
         getBarberTokens(data.barberId),
       ]);
 
-      const reminderPayload = {
-        channel: FCM_CHANNELS.REMINDER,
-        title: 'Appointment in 15 minutes',
-        body: `Your appointment at ${data.shopName} starts in 15 minutes`,
-        data: { type: 'REMINDER', shopName: data.shopName, minutesBefore: '15' },
-      };
+      if (!userTokens.length) {
+        logger.warn('No FCM tokens for user — skipping reminder push', {
+          jobName: data.jobName,
+          userId: data.userId,
+          bookingId: data.bookingId,
+        });
+      }
+      if (!barberTokens.length) {
+        logger.warn('No FCM tokens for barber — skipping reminder push', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+          bookingId: data.bookingId,
+        });
+      }
+
+      const reminderTitle = 'Appointment in 10 minutes';
+      const reminderBody = `Your appointment at ${data.shopName} starts in 10 minutes`;
+      const reminderData = { type: 'REMINDER', shopName: data.shopName, bookingId: data.bookingId };
 
       const [userResult, barberResult] = await Promise.all([
-        userTokens.length ? sendFcmNotification({ tokens: userTokens, ...reminderPayload }) : null,
+        userTokens.length
+          ? sendFcmNotification({
+              tokens: userTokens,
+              channel: FCM_CHANNELS.REMINDER,
+              title: reminderTitle,
+              body: reminderBody,
+              data: reminderData,
+            })
+          : null,
         barberTokens.length
-          ? sendFcmNotification({ tokens: barberTokens, ...reminderPayload })
+          ? sendFcmNotification({
+              tokens: barberTokens,
+              channel: FCM_CHANNELS.REMINDER,
+              title: reminderTitle,
+              body: reminderBody,
+              data: reminderData,
+            })
           : null,
       ]);
 
-      if (userResult?.invalidTokens.length) await pruneUserTokens(userResult.invalidTokens);
-      if (barberResult?.invalidTokens.length) await pruneBarberTokens(barberResult.invalidTokens);
-
-      logger.info('REMINDER_15MIN sent', {
-        user: userResult ?? 'no tokens',
-        barber: barberResult ?? 'no tokens',
-      });
-      break;
-    }
-
-    // User: review prompt
-    case 'REVIEW_PROMPT': {
-      const tokens = await getUserTokens(data.userId);
-      if (!tokens.length) return;
-
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'How was your experience?',
-        body: `Rate your visit to ${data.shopName}`,
-        data: {
-          type: 'REVIEW_PROMPT',
+      if (userResult) {
+        logger.info('FCM reminder push sent to user', {
+          jobName: data.jobName,
+          userId: data.userId,
           bookingId: data.bookingId,
-          shopName: data.shopName,
-        },
-      });
-
-      if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens);
-      logger.info('REVIEW_PROMPT sent', result);
-      break;
-    }
-
-    // Barber: new booking alert (booking.caf plays via felbo_booking channel)
-    case 'NEW_BOOKING_VENDOR': {
-      const tokens = await getBarberTokens(data.barberId);
-      if (!tokens.length) {
-        logger.error('No tokens found for barber', { barberId: data.barberId });
-        return;
+          successCount: userResult.successCount,
+          failureCount: userResult.failureCount,
+          invalidTokenCount: userResult.invalidTokens.length,
+        });
+        if (userResult.invalidTokens.length)
+          await pruneUserTokens(userResult.invalidTokens, data.jobName);
       }
 
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.BOOKING,
-        title: `New Booking from ${data.customerName}`,
-        body: `${data.serviceName} at ${data.appointmentTime}`,
-        data: {
-          type: 'NEW_BOOKING',
-          customerName: data.customerName,
-          serviceName: data.serviceName,
-          appointmentTime: data.appointmentTime,
-        },
-      });
+      if (barberResult) {
+        logger.info('FCM reminder push sent to barber', {
+          jobName: data.jobName,
+          barberId: data.barberId,
+          bookingId: data.bookingId,
+          successCount: barberResult.successCount,
+          failureCount: barberResult.failureCount,
+          invalidTokenCount: barberResult.invalidTokens.length,
+        });
+        if (barberResult.invalidTokens.length)
+          await pruneBarberTokens(barberResult.invalidTokens, data.jobName);
+      }
 
-      if (result.invalidTokens.length) await pruneBarberTokens(result.invalidTokens);
-      logger.info('NEW_BOOKING_VENDOR sent', { ...result });
+      await Promise.all([
+        persist(
+          data.userId,
+          'user',
+          'REMINDER',
+          reminderTitle,
+          reminderBody,
+          data.jobName,
+          reminderData,
+        ),
+        persist(
+          data.barberId,
+          'barber',
+          'REMINDER',
+          reminderTitle,
+          reminderBody,
+          data.jobName,
+          reminderData,
+        ),
+      ]);
       break;
     }
 
-    // Vendor: customer cancelled
-    case 'BOOKING_CANCELLED_VENDOR': {
+    // ── Vendor: account approved ───────────────────────────────────────────────
+    case 'VENDOR_APPROVED': {
       const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
 
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Booking Cancelled',
-        body: `${data.customerName} cancelled their ${data.appointmentTime} booking`,
-        data: {
-          type: 'BOOKING_CANCELLED_BY_CUSTOMER',
-          customerName: data.customerName,
-          appointmentTime: data.appointmentTime,
-        },
-      });
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for vendor — skipping push', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Account Approved',
+          body: 'Your Felbo vendor account has been approved. You can now accept bookings.',
+          data: { type: 'VENDOR_APPROVED' },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneVendorTokens(result.invalidTokens, data.jobName);
+      }
 
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
-      logger.info('BOOKING_CANCELLED_VENDOR sent', result);
-      break;
-    }
-
-    // Vendor: cancellation warning
-    case 'VENDOR_WARNING': {
-      const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
-
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Cancellation Warning',
-        body: `You have ${data.cancellationCount} cancellations this week. Limit is 5.`,
-        data: {
-          type: 'VENDOR_WARNING',
-          cancellationCount: String(data.cancellationCount),
-        },
-      });
-
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
-      logger.info('VENDOR_WARNING sent', result);
-      break;
-    }
-
-    // Vendor: account suspended
-    case 'VENDOR_SUSPENDED': {
-      const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
-
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Account Suspended',
-        body: `Your account has been suspended. Reason: ${data.suspendReason}`,
-        data: { type: 'VENDOR_SUSPENDED', suspendReason: data.suspendReason },
-      });
-
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
-      logger.info('VENDOR_SUSPENDED sent', result);
-      break;
-    }
-
-    // Vendor: account reactivated
-    case 'VENDOR_REACTIVATED': {
-      const tokens = await getVendorTokens(data.vendorId);
-      if (!tokens.length) return;
-
-      const result = await sendFcmNotification({
-        tokens,
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Account Reactivated',
-        body: 'Your account has been reactivated. Welcome back!',
-        data: { type: 'VENDOR_REACTIVATED' },
-      });
-
-      if (result.invalidTokens.length) await pruneVendorTokens(result.invalidTokens);
-      logger.info('VENDOR_REACTIVATED sent', result);
+      await persist(
+        data.vendorId,
+        'vendor',
+        'VENDOR_APPROVED',
+        'Account Approved',
+        'Your Felbo vendor account has been approved. You can now accept bookings.',
+        data.jobName,
+      );
       break;
     }
 
     default: {
-      // TypeScript exhaustiveness — this should never be reached
       const exhaustiveCheck: never = data;
-      logger.warn('Unknown notification job name', { data: exhaustiveCheck });
+      logger.warn('Unknown notification job', { data: exhaustiveCheck });
     }
   }
 }
 
-// Worker startup
+// ─── Worker startup ───────────────────────────────────────────────────────────
+
 bootstrap()
   .then(() => {
     const worker = new Worker<NotificationJobData>(QUEUE_NAMES.NOTIFICATIONS, processJob, {
@@ -316,7 +434,12 @@ bootstrap()
         jobId: job?.id,
         jobName: job?.data?.jobName,
         error: err.message,
+        stack: err.stack,
       });
+    });
+
+    worker.on('error', (err) => {
+      logger.error('Notification worker error', { error: err.message, stack: err.stack });
     });
 
     process.on('SIGTERM', () => {

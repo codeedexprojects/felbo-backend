@@ -1,110 +1,74 @@
 import { Queue } from 'bullmq';
 import { createQueue, QUEUE_NAMES } from '../queue/bull';
 
-// ─── Job name union ──────────────────────────────────────────────────────────
-// Each job name maps 1:1 to one notification event. Keeping them distinct
-// makes the worker switch exhaustive and easy to trace in Bull dashboard.
+// ─── Job type union ───────────────────────────────────────────────────────────
 
 export type NotificationJobName =
   // User-facing
-  | 'BOOKING_CONFIRMED_USER'
-  | 'BOOKING_CANCELLED_BY_VENDOR' // always 100% refund
-  | 'BOOKING_CANCELLED_BY_USER' // refund amount varies
-  | 'REMINDER_15MIN' // 15-min reminder for both user and barber
-  | 'REVIEW_PROMPT'
+  | 'BOOKING_CONFIRMED_USER' // booking confirmed → notify user
+  | 'BOOKING_CANCELLED_BY_BARBER' // barber cancelled → notify user
   // Barber-facing
-  | 'NEW_BOOKING_VENDOR' // loud alert + optional TTS voice
-  | 'BOOKING_CANCELLED_VENDOR' // customer cancelled their booking
-  | 'VENDOR_WARNING' // approaching cancellation limit
-  | 'VENDOR_SUSPENDED'
-  | 'VENDOR_REACTIVATED';
+  | 'NEW_BOOKING_BARBER' // new booking arrived → notify barber
+  | 'BOOKING_CANCELLED_BY_USER' // user cancelled → notify barber
+  // Both
+  | 'REMINDER_10MIN' // 10-min reminder → notify user + barber
+  // Vendor-facing
+  | 'VENDOR_APPROVED'; // admin approved vendor → notify vendor
 
-// ─── Job payloads ────────────────────────────────────────────────────────────
-// Each job carries only what its handler needs — nothing more.
-// The worker never queries the DB for notification content; everything is
-// denormalised at enqueue time to keep the worker fast and DB-load low.
+// ─── Job interfaces ───────────────────────────────────────────────────────────
 
 export interface BookingConfirmedUserJob {
   jobName: 'BOOKING_CONFIRMED_USER';
   userId: string;
   shopName: string;
-  appointmentTime: string; // "10:30 AM"
+  appointmentTime: string;
   bookingId: string;
 }
 
-export interface BookingCancelledByVendorJob {
-  jobName: 'BOOKING_CANCELLED_BY_VENDOR';
+export interface BookingCancelledByBarberJob {
+  jobName: 'BOOKING_CANCELLED_BY_BARBER';
   userId: string;
   shopName: string;
-  refundAmount: number;
+}
+
+export interface NewBookingBarberJob {
+  jobName: 'NEW_BOOKING_BARBER';
+  barberId: string;
+  customerName: string;
+  serviceName: string;
+  appointmentTime: string;
 }
 
 export interface BookingCancelledByUserJob {
   jobName: 'BOOKING_CANCELLED_BY_USER';
-  userId: string;
-  refundAmount: number;
+  barberId: string;
+  customerName: string;
+  appointmentTime: string;
 }
 
-export interface Reminder15MinJob {
-  jobName: 'REMINDER_15MIN';
+export interface Reminder10MinJob {
+  jobName: 'REMINDER_10MIN';
   userId: string;
   barberId: string;
   shopName: string;
   appointmentTime: string;
-}
-
-export interface ReviewPromptJob {
-  jobName: 'REVIEW_PROMPT';
-  userId: string;
-  shopName: string;
   bookingId: string;
 }
 
-export interface NewBookingVendorJob {
-  jobName: 'NEW_BOOKING_VENDOR';
-  barberId: string;
-  customerName: string;
-  serviceName: string; // comma-joined if multiple: "Haircut, Beard Trim"
-  appointmentTime: string; // "10:30 AM"
-}
-
-export interface BookingCancelledVendorJob {
-  jobName: 'BOOKING_CANCELLED_VENDOR';
-  vendorId: string;
-  customerName: string;
-  appointmentTime: string;
-}
-
-export interface VendorWarningJob {
-  jobName: 'VENDOR_WARNING';
-  vendorId: string;
-  cancellationCount: number;
-}
-
-export interface VendorSuspendedJob {
-  jobName: 'VENDOR_SUSPENDED';
-  vendorId: string;
-  suspendReason: string;
-}
-
-export interface VendorReactivatedJob {
-  jobName: 'VENDOR_REACTIVATED';
+export interface VendorApprovedJob {
+  jobName: 'VENDOR_APPROVED';
   vendorId: string;
 }
 
 export type NotificationJobData =
   | BookingConfirmedUserJob
-  | BookingCancelledByVendorJob
+  | BookingCancelledByBarberJob
+  | NewBookingBarberJob
   | BookingCancelledByUserJob
-  | Reminder15MinJob
-  | ReviewPromptJob
-  | NewBookingVendorJob
-  | BookingCancelledVendorJob
-  | VendorWarningJob
-  | VendorSuspendedJob
-  | VendorReactivatedJob;
+  | Reminder10MinJob
+  | VendorApprovedJob;
 
-// ─── Queue singleton ─────────────────────────────────────────────────────────
+// ─── Queue singleton ──────────────────────────────────────────────────────────
 
 let notificationQueue: Queue<NotificationJobData>;
 
@@ -115,9 +79,7 @@ function getQueue(): Queue<NotificationJobData> {
   return notificationQueue;
 }
 
-// ─── Enqueue helpers ─────────────────────────────────────────────────────────
-// These are the only functions booking.service (and others) should call.
-// They never return values — fire-and-forget from the caller's perspective.
+// ─── Enqueue helpers ──────────────────────────────────────────────────────────
 
 export async function enqueueBookingConfirmedUser(data: {
   userId: string;
@@ -127,14 +89,23 @@ export async function enqueueBookingConfirmedUser(data: {
 }): Promise<void> {
   await getQueue().add('BOOKING_CONFIRMED_USER', {
     jobName: 'BOOKING_CONFIRMED_USER',
-    userId: data.userId,
-    shopName: data.shopName,
-    appointmentTime: data.appointmentTime,
-    bookingId: data.bookingId,
+    ...data,
   });
 }
 
-export async function enqueueReminder15Min(data: {
+export async function enqueueNewBookingBarber(data: {
+  barberId: string;
+  customerName: string;
+  serviceName: string;
+  appointmentTime: string;
+}): Promise<void> {
+  await getQueue().add('NEW_BOOKING_BARBER', {
+    jobName: 'NEW_BOOKING_BARBER',
+    ...data,
+  });
+}
+
+export async function enqueueReminder10Min(data: {
   userId: string;
   barberId: string;
   shopName: string;
@@ -142,125 +113,50 @@ export async function enqueueReminder15Min(data: {
   appointmentAt: Date;
   bookingId: string;
 }): Promise<void> {
-  const delay = data.appointmentAt.getTime() - 15 * 60 * 1000 - Date.now();
-  if (delay <= 0) return; // appointment is too soon or already past
+  const delay = data.appointmentAt.getTime() - 10 * 60 * 1000 - Date.now();
+  if (delay <= 0) return; // appointment too soon or already past
 
   await getQueue().add(
-    'REMINDER_15MIN',
+    'REMINDER_10MIN',
     {
-      jobName: 'REMINDER_15MIN',
+      jobName: 'REMINDER_10MIN',
       userId: data.userId,
       barberId: data.barberId,
       shopName: data.shopName,
       appointmentTime: data.appointmentTime,
+      bookingId: data.bookingId,
     },
     {
       delay,
-      jobId: `reminder-15m-${data.bookingId}`, // dedup by bookingId
+      jobId: `reminder-10m-${data.bookingId}`,
     },
   );
 }
 
-export async function enqueueNewBookingVendor(data: {
-  barberId: string;
-  customerName: string;
-  serviceName: string;
-  appointmentTime: string;
-}): Promise<void> {
-  await getQueue().add('NEW_BOOKING_VENDOR', {
-    jobName: 'NEW_BOOKING_VENDOR',
-    barberId: data.barberId,
-    customerName: data.customerName,
-    serviceName: data.serviceName,
-    appointmentTime: data.appointmentTime,
-  });
-}
-
-export async function enqueueBookingCancelledByVendor(data: {
+export async function enqueueBookingCancelledByBarber(data: {
   userId: string;
   shopName: string;
-  refundAmount: number;
 }): Promise<void> {
-  await getQueue().add('BOOKING_CANCELLED_BY_VENDOR', {
-    jobName: 'BOOKING_CANCELLED_BY_VENDOR',
-    userId: data.userId,
-    shopName: data.shopName,
-    refundAmount: data.refundAmount,
+  await getQueue().add('BOOKING_CANCELLED_BY_BARBER', {
+    jobName: 'BOOKING_CANCELLED_BY_BARBER',
+    ...data,
   });
 }
 
 export async function enqueueBookingCancelledByUser(data: {
-  userId: string;
-  vendorId: string;
+  barberId: string;
   customerName: string;
   appointmentTime: string;
-  refundAmount: number;
 }): Promise<void> {
-  const queue = getQueue();
-
-  // User gets their refund confirmation
-  await queue.add('BOOKING_CANCELLED_BY_USER', {
+  await getQueue().add('BOOKING_CANCELLED_BY_USER', {
     jobName: 'BOOKING_CANCELLED_BY_USER',
-    userId: data.userId,
-    refundAmount: data.refundAmount,
-  });
-
-  // Vendor gets customer-cancelled alert (no refund context needed on vendor side)
-  await queue.add('BOOKING_CANCELLED_VENDOR', {
-    jobName: 'BOOKING_CANCELLED_VENDOR',
-    vendorId: data.vendorId,
-    customerName: data.customerName,
-    appointmentTime: data.appointmentTime,
+    ...data,
   });
 }
 
-export async function enqueueReviewPrompt(data: {
-  userId: string;
-  shopName: string;
-  bookingId: string;
-}): Promise<void> {
-  // Sent 15 minutes after appointment end time. The caller (booking completion
-  // flow) should calculate the delay and pass it, or we use a fixed 15min delay.
-  await getQueue().add(
-    'REVIEW_PROMPT',
-    {
-      jobName: 'REVIEW_PROMPT',
-      userId: data.userId,
-      shopName: data.shopName,
-      bookingId: data.bookingId,
-    },
-    {
-      delay: 15 * 60 * 1000,
-      jobId: `review-${data.bookingId}`, // dedup
-    },
-  );
-}
-
-export async function enqueueVendorWarning(data: {
-  vendorId: string;
-  cancellationCount: number;
-}): Promise<void> {
-  await getQueue().add('VENDOR_WARNING', {
-    jobName: 'VENDOR_WARNING',
-    vendorId: data.vendorId,
-    cancellationCount: data.cancellationCount,
-  });
-}
-
-export async function enqueueVendorSuspended(data: {
-  vendorId: string;
-  suspendReason: string;
-}): Promise<void> {
-  await getQueue().add('VENDOR_SUSPENDED', {
-    jobName: 'VENDOR_SUSPENDED',
-    vendorId: data.vendorId,
-    suspendReason: data.suspendReason,
-  });
-}
-
-export async function enqueueVendorReactivated(data: { vendorId: string }): Promise<void> {
-  await getQueue().add('VENDOR_REACTIVATED', {
-    jobName: 'VENDOR_REACTIVATED',
+export async function enqueueVendorApproved(data: { vendorId: string }): Promise<void> {
+  await getQueue().add('VENDOR_APPROVED', {
+    jobName: 'VENDOR_APPROVED',
     vendorId: data.vendorId,
   });
 }

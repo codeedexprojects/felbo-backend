@@ -12,9 +12,7 @@ import { vendorService } from '../vendor/vendor.container';
 import { felboCoinService } from '../felbocoin/felbocoin.container';
 import { issueService } from '../issue/issue.container';
 import type { IssueService } from '../issue/issue.service';
-
 import { logger } from '../../shared/logger/logger';
-import { notificationService } from '@modules/notification/notification.container';
 
 const bookingRepository = new BookingRepository();
 
@@ -31,7 +29,6 @@ const bookingService: BookingService = new BookingService(
   logger,
   () => felboCoinService,
   (): IssueService => issueService,
-  () => notificationService,
 );
 
 const bookingController = new BookingController(bookingService);

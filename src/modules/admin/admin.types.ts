@@ -69,6 +69,17 @@ export interface UserIssueDto {
   createdAt: Date;
 }
 
+// ─── Broadcast Notification ─────────────────────────────────────────────────
+
+export type BroadcastAudience = 'users' | 'barbers' | 'vendors' | 'all';
+
+export interface BroadcastNotificationInput {
+  audience: BroadcastAudience;
+  title: string;
+  body: string;
+  imageUrl?: string;
+}
+
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
 export interface DashboardRecentIssueDto {

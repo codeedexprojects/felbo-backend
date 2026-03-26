@@ -1,18 +1,14 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type NotificationRecipientRole = 'user' | 'barber';
+export type NotificationRecipientRole = 'user' | 'barber' | 'vendor';
 
 export type NotificationType =
-  | 'BOOKING_CONFIRMED'
-  | 'BOOKING_CANCELLED_BY_VENDOR'
-  | 'BOOKING_CANCELLED_BY_USER'
-  | 'BOOKING_CANCELLED_BY_CUSTOMER'
-  | 'NEW_BOOKING'
-  | 'REMINDER'
-  | 'REVIEW_PROMPT'
-  | 'VENDOR_WARNING'
-  | 'VENDOR_SUSPENDED'
-  | 'VENDOR_REACTIVATED';
+  | 'BOOKING_CONFIRMED' // user receives: booking confirmed
+  | 'NEW_BOOKING' // barber receives: new booking arrived
+  | 'REMINDER' // user + barber receive: 10 min before appointment
+  | 'BOOKING_CANCELLED_BY_BARBER' // user receives: barber cancelled
+  | 'BOOKING_CANCELLED_BY_USER' // barber receives: user cancelled
+  | 'VENDOR_APPROVED'; // vendor receives: account approved by admin
 
 export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;

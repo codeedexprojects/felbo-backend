@@ -5,11 +5,7 @@ import {
   SaveNotificationInput,
 } from './notification.types';
 import { INotification, NotificationRecipientRole } from './notification.model';
-import { NotFoundError } from '@shared/errors';
-import {
-  enqueueBookingConfirmedUser,
-  enqueueNewBookingVendor,
-} from '@shared/notification/notification.queue';
+import { NotFoundError } from '../../shared/errors';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -18,48 +14,6 @@ export class NotificationService {
 
   async save(input: SaveNotificationInput): Promise<void> {
     await this.repo.create(input);
-  }
-
-  async sendTestNotification(userId: string, barberId: string): Promise<void> {
-    const now = new Date();
-    const appointmentTime = now.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-    const testBookingId = 'test-booking-id';
-    const testShopName = 'Test Shop';
-
-    await Promise.all([
-      enqueueBookingConfirmedUser({
-        userId,
-        shopName: testShopName,
-        appointmentTime,
-        bookingId: testBookingId,
-      }),
-      enqueueNewBookingVendor({
-        barberId,
-        customerName: 'Test User',
-        serviceName: 'Test Service',
-        appointmentTime,
-      }),
-      this.repo.create({
-        recipientId: userId,
-        recipientRole: 'user',
-        type: 'BOOKING_CONFIRMED',
-        title: 'Booking Confirmed!',
-        body: `Your booking at ${testShopName} is confirmed for ${appointmentTime}`,
-        data: { bookingId: testBookingId, shopName: testShopName },
-      }),
-      this.repo.create({
-        recipientId: barberId,
-        recipientRole: 'barber',
-        type: 'NEW_BOOKING',
-        title: 'New Booking from Test User',
-        body: `Test Service at ${appointmentTime}`,
-        data: { customerName: 'Test User', serviceName: 'Test Service', appointmentTime },
-      }),
-    ]);
   }
 
   async listForUser(
@@ -90,12 +44,28 @@ export class NotificationService {
     await this.repo.markAllRead(barberId, 'barber');
   }
 
+  async listForVendor(
+    vendorId: string,
+    limit = DEFAULT_PAGE_SIZE,
+    cursor?: string,
+  ): Promise<ListNotificationsResponse> {
+    return this.listForRecipient(vendorId, 'vendor', limit, cursor);
+  }
+
+  async markAllReadForVendor(vendorId: string): Promise<void> {
+    await this.repo.markAllRead(vendorId, 'vendor');
+  }
+
   async markOneReadForUser(id: string, userId: string): Promise<NotificationDto> {
     return this.markOneRead(id, userId);
   }
 
   async markOneReadForBarber(id: string, barberId: string): Promise<NotificationDto> {
     return this.markOneRead(id, barberId);
+  }
+
+  async markOneReadForVendor(id: string, vendorId: string): Promise<NotificationDto> {
+    return this.markOneRead(id, vendorId);
   }
 
   private async listForRecipient(

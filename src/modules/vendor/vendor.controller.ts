@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import VendorService from './vendor.service';
+import { KERALA_DISTRICTS } from '../../shared/constants';
 import {
   sendOtpSchema,
   loginVerifyOtpSchema,
@@ -206,6 +207,12 @@ export default class VendorController {
     res.status(200).json({
       success: true,
       data: result,
+    });
+  };
+  getKeralaDistricts = (_req: Request, res: Response): void => {
+    res.status(200).json({
+      success: true,
+      data: KERALA_DISTRICTS,
     });
   };
 }

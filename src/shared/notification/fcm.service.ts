@@ -123,6 +123,7 @@ export interface FcmTopicPayload {
   title: string;
   body: string;
   channel: FcmChannel;
+  imageUrl?: string;
   data?: Record<string, string>;
 }
 
@@ -137,6 +138,7 @@ export async function sendTopicNotification(
     notification: {
       title: payload.title,
       body: payload.body,
+      ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
     },
     android: {
       notification: {

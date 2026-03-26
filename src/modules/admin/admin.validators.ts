@@ -33,3 +33,10 @@ export const refreshTokenSchema = z.object({
 export const vendorIdParamSchema = z.object({
   id: z.string().min(1),
 });
+
+export const broadcastNotificationSchema = z.object({
+  audience: z.enum(['users', 'barbers', 'vendors', 'all']),
+  title: z.string().min(1, 'Title is required').max(100),
+  body: z.string().min(1, 'Body is required').max(500),
+  imageUrl: z.string().url('Must be a valid URL').optional(),
+});

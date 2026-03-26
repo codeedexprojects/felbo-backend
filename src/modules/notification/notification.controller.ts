@@ -1,17 +1,10 @@
 import { Request, Response } from 'express';
-import { z } from 'zod';
 import { NotificationService } from './notification.service';
 import { listNotificationsSchema, notificationIdParamSchema } from './notification.validators';
-
-const testNotifyBodySchema = z.object({
-  userId: z.string().min(1, 'userId is required'),
-  barberId: z.string().min(1, 'barberId is required'),
-});
 
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
 
-  // Used by both user + barber routes; role is derived from req.user
   listForUser = async (req: Request, res: Response): Promise<void> => {
     const { limit, cursor } = listNotificationsSchema.parse(req.query);
     const userId = req.user!.sub;
@@ -26,6 +19,13 @@ export class NotificationController {
     res.json({ success: true, data: result });
   };
 
+  listForVendor = async (req: Request, res: Response): Promise<void> => {
+    const { limit, cursor } = listNotificationsSchema.parse(req.query);
+    const vendorId = req.user!.sub;
+    const result = await this.notificationService.listForVendor(vendorId, limit, cursor);
+    res.json({ success: true, data: result });
+  };
+
   markAllReadForUser = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user!.sub;
     await this.notificationService.markAllReadForUser(userId);
@@ -35,6 +35,12 @@ export class NotificationController {
   markAllReadForBarber = async (req: Request, res: Response): Promise<void> => {
     const barberId = req.user!.sub;
     await this.notificationService.markAllReadForBarber(barberId);
+    res.json({ success: true, message: 'All notifications marked as read.' });
+  };
+
+  markAllReadForVendor = async (req: Request, res: Response): Promise<void> => {
+    const vendorId = req.user!.sub;
+    await this.notificationService.markAllReadForVendor(vendorId);
     res.json({ success: true, message: 'All notifications marked as read.' });
   };
 
@@ -52,9 +58,10 @@ export class NotificationController {
     res.json({ success: true, data: notification });
   };
 
-  sendTestNotification = async (req: Request, res: Response): Promise<void> => {
-    const { userId, barberId } = testNotifyBodySchema.parse(req.body);
-    await this.notificationService.sendTestNotification(userId, barberId);
-    res.json({ success: true, message: 'Test notifications sent and persisted.' });
+  markOneReadForVendor = async (req: Request, res: Response): Promise<void> => {
+    const { id } = notificationIdParamSchema.parse(req.params);
+    const vendorId = req.user!.sub;
+    const notification = await this.notificationService.markOneReadForVendor(id, vendorId);
+    res.json({ success: true, data: notification });
   };
 }
