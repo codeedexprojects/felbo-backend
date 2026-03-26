@@ -41,6 +41,28 @@ export function buildAppointmentDate(date: Date, startTime: string): Date {
   return new Date(date.getTime() - IST_OFFSET_MS + (h * 60 + m) * 60_000);
 }
 
+/**
+ * Formats a Date stored as UTC midnight (IST calendar date) to "YYYY-MM-DD" string.
+ * Use this for all booking `date` fields in API responses.
+ */
+export function formatDateAsIst(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+/** Formats a UTC Date as an IST ISO 8601 string. e.g. "2026-03-26T16:03:27.159+05:30" */
+export function formatTimestampAsIst(date: Date): string {
+  const ist = new Date(date.getTime() + IST_OFFSET_MS);
+  return (
+    `${ist.getUTCFullYear()}-` +
+    `${String(ist.getUTCMonth() + 1).padStart(2, '0')}-` +
+    `${String(ist.getUTCDate()).padStart(2, '0')}T` +
+    `${String(ist.getUTCHours()).padStart(2, '0')}:` +
+    `${String(ist.getUTCMinutes()).padStart(2, '0')}:` +
+    `${String(ist.getUTCSeconds()).padStart(2, '0')}.` +
+    `${String(ist.getUTCMilliseconds()).padStart(3, '0')}+05:30`
+  );
+}
+
 /** Converts "HH:MM" (24-hour IST) to "H:MM AM/PM" display string. */
 export function formatAppointmentTime(hhmm: string): string {
   const [h, m] = hhmm.split(':').map(Number);
