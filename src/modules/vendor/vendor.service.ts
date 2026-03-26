@@ -686,6 +686,9 @@ export default class VendorService {
         this.shopService.getServicesByShopIds(shopIds),
       ]);
 
+      const allBarberIds = allBarbers.map((b) => b.id.toString());
+      const timingByBarberId = await this.availabilityService.getTimingByBarberIds(allBarberIds);
+
       const barbersByShop = new Map<string, typeof allBarbers>();
       const servicesByShop = new Map<string, typeof allServices>();
 
@@ -729,6 +732,7 @@ export default class VendorService {
             isAvailable: b.isAvailable,
             cancellationCount: b.cancellationCount,
             cancellationsThisWeek: b.cancellationsThisWeek,
+            timing: timingByBarberId.get(b.id.toString()) ?? { presets: [], todaySchedule: null },
           })),
           barberCount: barberList.length,
 

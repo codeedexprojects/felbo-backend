@@ -15,6 +15,7 @@ import VendorService from '../vendor/vendor.service';
 import { IssueService } from '../issue/issue.service';
 import { BookingService } from '../booking/booking.service';
 import ShopService from '../shop/shop.service';
+import { FinanceService } from '../finance/finance.service';
 import {
   ListVendorsFilter,
   ListVendorsResponse,
@@ -34,22 +35,25 @@ export class AdminService {
     private readonly logger: Logger,
     private readonly bookingService: BookingService,
     private readonly shopService: ShopService,
+    private readonly financeService: FinanceService,
   ) {}
 
   async getSuperAdminDashboard(): Promise<SuperAdminDashboardDto> {
-    const [userCounts, vendorStats, bookingStats, recentIssues] = await Promise.all([
-      this.userService.getUserStatusCounts(),
-      this.vendorService.getVendorDashboardStats(),
-      this.bookingService.getGlobalDashboardStats(),
-      this.issueService.getRecentIssuesForDashboard(5),
-    ]);
+    const [userCounts, vendorStats, bookingStats, recentIssues, todayRegRevenue] =
+      await Promise.all([
+        this.userService.getUserStatusCounts(),
+        this.vendorService.getVendorDashboardStats(),
+        this.bookingService.getGlobalDashboardStats(),
+        this.issueService.getRecentIssuesForDashboard(5),
+        this.financeService.getTodayRegistrationRevenue(),
+      ]);
 
     return {
       totalUsers: userCounts.total,
       totalVendors: vendorStats.total,
       totalBookings: bookingStats.totalBookings,
       todaysBookings: bookingStats.todaysBookings,
-      todaysRevenue: bookingStats.todaysRevenue,
+      todaysRevenue: Number((bookingStats.todaysRevenue + todayRegRevenue).toFixed(2)),
       pendingVerifications: vendorStats.pendingVerifications,
       recentIssues,
     };

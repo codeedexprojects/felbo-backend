@@ -120,6 +120,14 @@ export class BarberAvailabilityRepository {
     return docs.map((d) => d.barberId.toString());
   }
 
+  async findByBarberIds(barberIds: string[]): Promise<IBarberAvailability[]> {
+    return BarberAvailabilityModel.find({
+      barberId: { $in: barberIds.map((id) => new mongoose.Types.ObjectId(id)) },
+    })
+      .lean<IBarberAvailability[]>()
+      .exec();
+  }
+
   async findBarbersWithWorkingHoursByShopId(
     shopId: string,
     todayStart: Date,
