@@ -913,6 +913,7 @@ export class BookingRepository {
   async getUserHomeBooking(
     userId: string,
     todayDate: Date,
+    currentTimeStr: string,
   ): Promise<{
     lastConfirmedBooking: {
       _id: mongoose.Types.ObjectId;
@@ -935,6 +936,7 @@ export class BookingRepository {
       {
         $facet: {
           lastConfirmedBooking: [
+            { $match: { startTime: { $gte: currentTimeStr } } },
             { $sort: { startTime: 1 } },
             { $limit: 1 },
             {
