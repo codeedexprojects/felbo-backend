@@ -118,7 +118,7 @@ export interface BookingListItemDto {
   bookingNumber: string;
   shopName: string;
   barberName: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   totalServiceAmount: number;
@@ -127,13 +127,13 @@ export interface BookingListItemDto {
   paymentMethod: string;
   status: string;
   cancellation?: {
-    cancelledAt: Date;
+    cancelledAt: string;
     cancelledBy: string;
     reason: string;
     refundCoins: number;
     refundStatus: string;
   };
-  createdAt: Date;
+  createdAt: string;
 }
 
 export interface UserBookingsResponse {
@@ -161,14 +161,14 @@ export interface AdminBookingListItemDto {
   userPhone?: string;
   shopName: string;
   barberName: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   totalServiceAmount: number;
   advancePaid: number;
   remainingAmount: number;
   status: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export interface AdminBookingListResponse {
@@ -200,7 +200,7 @@ export interface CompleteBookingResponse {
     id: string;
     bookingNumber: string;
     status: string;
-    completedAt: Date;
+    completedAt: string;
     coinsEarned: number;
   };
 }
@@ -227,7 +227,7 @@ export interface BarberBookingListItem {
   bookingNumber: string;
   userName: string;
   userImage: string | null;
-  date: Date;
+  date: string;
   startTime: string;
   services: string[];
   status: string;
@@ -244,7 +244,7 @@ export interface BarberBookingListResponse {
 export interface BarberBookingDetailDto {
   id: string;
   bookingNumber: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   status: string;
@@ -288,7 +288,7 @@ export interface VendorBookingListItem {
   userName: string;
   userImage: string | null;
   barberName: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   services: string[];
@@ -306,7 +306,7 @@ export interface VendorBookingListResponse {
 export interface VendorBookingDetailDto {
   id: string;
   bookingNumber: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   barberName: string;
@@ -355,7 +355,7 @@ export interface UserBookingListItemV2 {
   barberName: string;
   services: string[];
   status: string;
-  date: Date;
+  date: string;
   startTime: string;
   otp: string | null;
   isReviewed: boolean;
@@ -372,7 +372,7 @@ export interface UserBookingListResponseV2 {
 export interface UserBookingDetailDto {
   id: string;
   bookingNumber: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   status: string;
@@ -396,7 +396,7 @@ export interface UserBookingDetailDto {
     remainingAmount: number;
   };
   cancellation?: {
-    cancelledAt: Date;
+    cancelledAt: string;
     cancelledBy: string;
     reason: string;
     refundAmount: number;
@@ -413,7 +413,7 @@ export interface AdminVendorBookingListItemDto {
   barberName: string;
   shopName: string;
   userName: string;
-  date: Date;
+  date: string;
   startTime: string;
   status: string;
 }
@@ -442,19 +442,19 @@ export interface AdminCancellationListItemDto {
   bookingNumber: string;
   shopName: string;
   userPhone?: string;
-  date: Date;
+  date: string;
   startTime: string;
   paymentMethod: string;
   advancePaid: number;
   status: string;
   cancelledBy: 'USER' | 'VENDOR';
-  cancelledAt: Date;
+  cancelledAt: string;
   reason: string;
   refundType: string;
   refundStatus: string;
   refundAmount: number;
   refundCoins: number;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export interface AdminCancellationListResponse {
@@ -468,7 +468,7 @@ export interface AdminCancellationListResponse {
 export interface AdminCancellationDetailDto {
   id: string;
   bookingNumber: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   totalDurationMinutes: number;
@@ -480,7 +480,7 @@ export interface AdminCancellationDetailDto {
   paymentMethod: string;
   paymentId?: string;
   cancellation: {
-    cancelledAt: Date;
+    cancelledAt: string;
     cancelledBy: 'USER' | 'VENDOR';
     reason: string;
     refundAmount: number;
@@ -521,7 +521,7 @@ export interface AdminCancellationDetailDto {
     email?: string;
     photo?: string;
   };
-  createdAt: Date;
+  createdAt: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -560,7 +560,7 @@ export interface AdminBookingDetailDto {
   barberId: string;
   barberName: string;
   barberSelectionType: string;
-  date: Date;
+  date: string;
   startTime: string;
   endTime: string;
   totalDurationMinutes: number;
@@ -573,7 +573,7 @@ export interface AdminBookingDetailDto {
   razorpayOrderId?: string;
   status: string;
   cancellation?: {
-    cancelledAt: Date;
+    cancelledAt: string;
     cancelledBy: string;
     reason: string;
     refundAmount: number;
@@ -581,7 +581,7 @@ export interface AdminBookingDetailDto {
     refundType: string;
     refundStatus: string;
   };
-  completedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -44,6 +44,8 @@ import {
   parseDateAsIst,
   getIstDayRangeUtc,
   formatAppointmentTime,
+  formatDateAsIst,
+  formatTimestampAsIst,
   buildAppointmentDate,
 } from '../../shared/utils/time';
 import {
@@ -298,7 +300,7 @@ export class BookingService {
         bookingNumber: b.bookingNumber,
         shopName: b.shopName,
         barberName: b.barberName,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         endTime: b.endTime,
         totalServiceAmount: b.totalServiceAmount,
@@ -308,14 +310,14 @@ export class BookingService {
         status: b.status,
         cancellation: b.cancellation
           ? {
-              cancelledAt: b.cancellation.cancelledAt,
+              cancelledAt: formatTimestampAsIst(b.cancellation.cancelledAt),
               cancelledBy: b.cancellation.cancelledBy,
               reason: b.cancellation.reason,
               refundCoins: b.cancellation.refundCoins ?? 0,
               refundStatus: b.cancellation.refundStatus,
             }
           : undefined,
-        createdAt: b.createdAt,
+        createdAt: b.createdAt.toISOString(),
       })),
       total,
       page,
@@ -1120,7 +1122,7 @@ export class BookingService {
         bookingNumber: cancelled!.bookingNumber,
         status: cancelled!.status,
         cancellation: {
-          cancelledAt: cancelled!.cancellation!.cancelledAt.toISOString(),
+          cancelledAt: formatTimestampAsIst(cancelled!.cancellation!.cancelledAt),
           cancelledBy: cancelled!.cancellation!.cancelledBy,
           reason: cancelled!.cancellation!.reason,
           refundCoins,
@@ -1194,7 +1196,7 @@ export class BookingService {
         id: completed!._id.toString(),
         bookingNumber: completed!.bookingNumber,
         status: completed!.status,
-        completedAt: completed!.completedAt!,
+        completedAt: completed!.completedAt!.toISOString(),
         coinsEarned,
       },
     };
@@ -1222,7 +1224,7 @@ export class BookingService {
         bookingNumber: b.bookingNumber,
         userName: b.userName,
         userImage: b.userImage,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         services: b.services.map((s) => s.serviceName),
         status: b.status,
@@ -1244,7 +1246,7 @@ export class BookingService {
     return {
       id: booking._id.toString(),
       bookingNumber: booking.bookingNumber,
-      date: booking.date,
+      date: formatDateAsIst(booking.date),
       startTime: booking.startTime,
       endTime: booking.endTime,
       status: booking.status,
@@ -1419,14 +1421,14 @@ export class BookingService {
         ...(params.role !== 'ASSOCIATION_ADMIN' && { userPhone: b.userPhone }),
         shopName: b.shopName,
         barberName: b.barberName,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         endTime: b.endTime,
         totalServiceAmount: b.totalServiceAmount,
         advancePaid: b.advancePaid,
         remainingAmount: b.remainingAmount,
         status: b.status,
-        createdAt: b.createdAt,
+        createdAt: b.createdAt.toISOString(),
       })),
       total,
       page: params.page,
@@ -1461,7 +1463,7 @@ export class BookingService {
         barberName: b.barberName,
         shopName: b.shopName,
         userName: b.userName,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         status: b.status,
       })),
@@ -1508,7 +1510,7 @@ export class BookingService {
       barberId: booking.barberId.toString(),
       barberName: booking.barberName,
       barberSelectionType: booking.barberSelectionType,
-      date: booking.date,
+      date: formatDateAsIst(booking.date),
       startTime: booking.startTime,
       endTime: booking.endTime,
       totalDurationMinutes: booking.totalDurationMinutes,
@@ -1527,7 +1529,7 @@ export class BookingService {
       status: booking.status,
       cancellation: booking.cancellation
         ? {
-            cancelledAt: booking.cancellation.cancelledAt,
+            cancelledAt: booking.cancellation.cancelledAt.toISOString(),
             cancelledBy: booking.cancellation.cancelledBy,
             reason: booking.cancellation.reason,
             refundAmount: booking.cancellation.refundAmount,
@@ -1536,9 +1538,9 @@ export class BookingService {
             refundStatus: booking.cancellation.refundStatus,
           }
         : undefined,
-      completedAt: booking.completedAt,
-      createdAt: booking.createdAt,
-      updatedAt: booking.updatedAt,
+      completedAt: booking.completedAt?.toISOString(),
+      createdAt: booking.createdAt.toISOString(),
+      updatedAt: booking.updatedAt.toISOString(),
     };
   }
 
@@ -1554,7 +1556,7 @@ export class BookingService {
     return {
       id: booking._id.toString(),
       bookingNumber: booking.bookingNumber,
-      date: booking.date,
+      date: formatDateAsIst(booking.date),
       startTime: booking.startTime,
       endTime: booking.endTime,
       barberName: booking.barberName,
@@ -1586,7 +1588,7 @@ export class BookingService {
         userName: b.userName,
         userImage: b.userImage,
         barberName: b.barberName,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         endTime: b.endTime,
         services: b.services.map((s) => s.serviceName),
@@ -1644,7 +1646,7 @@ export class BookingService {
         barberName: b.barberName,
         services: b.services.map((s) => s.serviceName),
         status: b.status,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         otp: b.verificationCode,
         isReviewed: b.isReviewed,
@@ -1672,7 +1674,7 @@ export class BookingService {
     return {
       id: booking._id.toString(),
       bookingNumber: booking.bookingNumber,
-      date: booking.date,
+      date: formatDateAsIst(booking.date),
       startTime: booking.startTime,
       endTime: booking.endTime,
       status: booking.status,
@@ -1697,7 +1699,7 @@ export class BookingService {
       },
       cancellation: booking.cancellation
         ? {
-            cancelledAt: booking.cancellation.cancelledAt,
+            cancelledAt: formatTimestampAsIst(booking.cancellation.cancelledAt),
             cancelledBy: booking.cancellation.cancelledBy,
             reason: booking.cancellation.reason,
             refundAmount: booking.cancellation.refundAmount,
@@ -1747,19 +1749,19 @@ export class BookingService {
         bookingNumber: b.bookingNumber,
         shopName: b.shopName,
         userPhone: b.userPhone,
-        date: b.date,
+        date: formatDateAsIst(b.date),
         startTime: b.startTime,
         paymentMethod: b.paymentMethod,
         advancePaid: b.advancePaid,
         status: b.status,
         cancelledBy: b.cancellation?.cancelledBy,
-        cancelledAt: b.cancellation?.cancelledAt,
+        cancelledAt: b.cancellation!.cancelledAt.toISOString(),
         reason: b.cancellation?.reason,
         refundType: b.cancellation?.refundType,
         refundStatus: b.cancellation?.refundStatus,
         refundAmount: b.cancellation?.refundAmount,
         refundCoins: b.cancellation?.refundCoins,
-        createdAt: b.createdAt,
+        createdAt: b.createdAt.toISOString(),
       })),
       total,
       page: params.page,
@@ -1780,7 +1782,7 @@ export class BookingService {
     return {
       id: booking._id.toString(),
       bookingNumber: booking.bookingNumber,
-      date: booking.date,
+      date: formatDateAsIst(booking.date),
       startTime: booking.startTime,
       endTime: booking.endTime,
       totalDurationMinutes: booking.totalDurationMinutes,
@@ -1797,7 +1799,7 @@ export class BookingService {
       paymentMethod: booking.paymentMethod,
       paymentId: booking.paymentId,
       cancellation: {
-        cancelledAt: booking.cancellation.cancelledAt,
+        cancelledAt: booking.cancellation.cancelledAt.toISOString(),
         cancelledBy: booking.cancellation.cancelledBy,
         reason: booking.cancellation.reason,
         refundAmount: booking.cancellation.refundAmount,
@@ -1836,7 +1838,7 @@ export class BookingService {
             photo: booking.barber.photo,
           }
         : { id: '', name: '', phone: '' },
-      createdAt: booking.createdAt,
+      createdAt: booking.createdAt.toISOString(),
     };
   }
 
@@ -1875,7 +1877,7 @@ export class BookingService {
 
     const stats = await this.bookingRepository.getAdminBookingStats(start, end);
 
-    const toDateStr = (dt: Date) => dt.toISOString().slice(0, 10);
+    const toDateStr = (dt: Date): string => dt.toISOString().slice(0, 10);
 
     return {
       period,
