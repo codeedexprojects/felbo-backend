@@ -56,6 +56,7 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { getRedisClient } from '../../shared/redis/redis';
 import { config } from '../../shared/config/config.service';
+import { enqueueVendorApproved } from '../../shared/notification/notification.queue';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -620,8 +621,7 @@ export default class VendorService {
       approvedBy,
     });
 
-    // TODO: Queue FCM push notification via Bull queue
-    // "Your Felbo vendor account has been approved. You can now log in."
+    await enqueueVendorApproved({ vendorId });
   }
 
   async rejectVendor(vendorId: string, rejectedBy: string, reason: string): Promise<void> {

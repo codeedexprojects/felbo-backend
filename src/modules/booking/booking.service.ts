@@ -43,8 +43,15 @@ import {
   parseDateAsIst,
   getIstDayRangeUtc,
   formatAppointmentTime,
+  buildAppointmentDate,
 } from '../../shared/utils/time';
-import { sendFcmNotification, FCM_CHANNELS } from '../../shared/notification/fcm.service';
+import {
+  enqueueBookingConfirmedUser,
+  enqueueNewBookingBarber,
+  enqueueReminder10Min,
+  enqueueBookingCancelledByBarber,
+  enqueueBookingCancelledByUser,
+} from '../../shared/notification/notification.queue';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
 import ShopService from '../shop/shop.service';
@@ -57,12 +64,11 @@ import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { FelboCoinService } from '../felbocoin/felbocoin.service';
 import { withTransaction } from '../../shared/database/transaction';
 import { IssueService } from '../issue/issue.service';
-import { NotificationService } from '@modules/notification/notification.service';
 
 // const SLOT_INTERVAL_MINUTES = 15;
 const MIN_BUFFER_MINUTES = 30;
 const APPOINTMENT_BUFFER_MINUTES = 5;
-const SLOT_LOCK_MINUTES = 5;
+const SLOT_LOCK_MINUTES = 2;
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -80,7 +86,6 @@ export class BookingService {
     private readonly logger: Logger,
     private readonly getFelboCoinService: () => FelboCoinService,
     private readonly getIssueService: () => IssueService,
-    private readonly notificationService: NotificationService,
   ) {}
 
   private get barberService(): BarberService {
@@ -673,6 +678,7 @@ export class BookingService {
 
       this.logger.info({
         action: 'BOOKING_CONFIRMED_VIA_FELBOCOIN',
+
         module: 'booking',
         bookingId: booking!._id.toString(),
         bookingNumber,
@@ -681,44 +687,33 @@ export class BookingService {
       });
 
       const coinAppointmentTime = formatAppointmentTime(booking!.startTime);
+      const coinAppointmentAt = buildAppointmentDate(booking!.date, booking!.startTime);
       const coinBarberId = booking!.barberId.toString();
+      const coinBookingId = booking!._id.toString();
       const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
 
-      void this.notifyUser(userId, {
-        channel: FCM_CHANNELS.GENERAL,
-        title: 'Booking Confirmed!',
-        body: `Your booking at ${shop.name} is confirmed for ${coinAppointmentTime}`,
-        data: {
-          type: 'BOOKING_CONFIRMED',
-          bookingId: booking!._id.toString(),
+      await Promise.all([
+        enqueueBookingConfirmedUser({
+          userId,
           shopName: shop.name,
-        },
-      });
-
-      void this.notifyBarber(coinBarberId, {
-        channel: FCM_CHANNELS.BOOKING,
-        title: 'New Booking!',
-        body: `${user.name ?? 'A customer'} booked ${coinServiceName} at ${coinAppointmentTime}`,
-        data: { type: 'NEW_BOOKING', shopName: shop.name },
-      });
-
-      void this.notificationService.save({
-        recipientId: userId,
-        recipientRole: 'user',
-        type: 'BOOKING_CONFIRMED',
-        title: 'Booking Confirmed!',
-        body: `Your booking at ${shop.name} is confirmed for ${coinAppointmentTime}`,
-        data: { bookingId: booking!._id.toString(), shopName: shop.name },
-      });
-
-      void this.notificationService.save({
-        recipientId: coinBarberId,
-        recipientRole: 'barber',
-        type: 'NEW_BOOKING',
-        title: 'New Booking!',
-        body: `${user.name ?? 'A customer'} booked ${coinServiceName} at ${coinAppointmentTime}`,
-        data: { shopName: shop.name },
-      });
+          appointmentTime: coinAppointmentTime,
+          bookingId: coinBookingId,
+        }),
+        enqueueNewBookingBarber({
+          barberId: coinBarberId,
+          customerName: user.name ?? 'A customer',
+          serviceName: coinServiceName,
+          appointmentTime: coinAppointmentTime,
+        }),
+        enqueueReminder10Min({
+          userId,
+          barberId: coinBarberId,
+          shopName: shop.name,
+          appointmentTime: coinAppointmentTime,
+          appointmentAt: coinAppointmentAt,
+          bookingId: coinBookingId,
+        }),
+      ]);
 
       return {
         booking: {
@@ -849,40 +844,32 @@ export class BookingService {
     });
 
     const appointmentTime = formatAppointmentTime(confirmed.startTime);
+    const appointmentAt = buildAppointmentDate(confirmed.date, confirmed.startTime);
     const confirmedBarberId = confirmed.barberId.toString();
     const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
 
-    void this.notifyUser(userId, {
-      channel: FCM_CHANNELS.GENERAL,
-      title: 'Booking Confirmed!',
-      body: `Your booking at ${confirmed.shopName} is confirmed for ${appointmentTime}`,
-      data: { type: 'BOOKING_CONFIRMED', bookingId, shopName: confirmed.shopName },
-    });
-
-    void this.notifyBarber(confirmedBarberId, {
-      channel: FCM_CHANNELS.BOOKING,
-      title: 'New Booking!',
-      body: `${confirmed.userName} booked ${confirmedServiceName} at ${appointmentTime}`,
-      data: { type: 'NEW_BOOKING', shopName: confirmed.shopName },
-    });
-
-    void this.notificationService.save({
-      recipientId: userId,
-      recipientRole: 'user',
-      type: 'BOOKING_CONFIRMED',
-      title: 'Booking Confirmed!',
-      body: `Your booking at ${confirmed.shopName} is confirmed for ${appointmentTime}`,
-      data: { bookingId, shopName: confirmed.shopName },
-    });
-
-    void this.notificationService.save({
-      recipientId: confirmedBarberId,
-      recipientRole: 'barber',
-      type: 'NEW_BOOKING',
-      title: 'New Booking!',
-      body: `${confirmed.userName} booked ${confirmedServiceName} at ${appointmentTime}`,
-      data: { shopName: confirmed.shopName },
-    });
+    await Promise.all([
+      enqueueBookingConfirmedUser({
+        userId,
+        shopName: confirmed.shopName,
+        appointmentTime,
+        bookingId,
+      }),
+      enqueueNewBookingBarber({
+        barberId: confirmedBarberId,
+        customerName: confirmed.userName,
+        serviceName: confirmedServiceName,
+        appointmentTime,
+      }),
+      enqueueReminder10Min({
+        userId,
+        barberId: confirmedBarberId,
+        shopName: confirmed.shopName,
+        appointmentTime,
+        appointmentAt,
+        bookingId,
+      }),
+    ]);
 
     return {
       booking: {
@@ -1005,20 +992,9 @@ export class BookingService {
       flagged,
     });
 
-    void this.notifyUser(booking.userId.toString(), {
-      channel: FCM_CHANNELS.GENERAL,
-      title: 'Booking Cancelled',
-      body: `Your booking at ${booking.shopName} has been cancelled by the barber.`,
-      data: { type: 'BOOKING_CANCELLED', bookingId },
-    });
-
-    void this.notificationService.save({
-      recipientId: booking.userId.toString(),
-      recipientRole: 'user',
-      type: 'BOOKING_CANCELLED_BY_VENDOR',
-      title: 'Booking Cancelled',
-      body: `Your booking at ${booking.shopName} has been cancelled by the barber.`,
-      data: { bookingId, shopName: booking.shopName },
+    await enqueueBookingCancelledByBarber({
+      userId: booking.userId.toString(),
+      shopName: booking.shopName,
     });
 
     return {
@@ -1127,20 +1103,10 @@ export class BookingService {
       refundCoins,
     });
 
-    void this.notifyBarber(booking.barberId.toString(), {
-      channel: FCM_CHANNELS.GENERAL,
-      title: 'Booking Cancelled',
-      body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
-      data: { type: 'BOOKING_CANCELLED', bookingId },
-    });
-
-    void this.notificationService.save({
-      recipientId: booking.barberId.toString(),
-      recipientRole: 'barber',
-      type: 'BOOKING_CANCELLED_BY_CUSTOMER',
-      title: 'Booking Cancelled',
-      body: `${booking.userName} cancelled their ${formatAppointmentTime(booking.startTime)} booking.`,
-      data: { bookingId, customerName: booking.userName },
+    await enqueueBookingCancelledByUser({
+      barberId: booking.barberId.toString(),
+      customerName: booking.userName,
+      appointmentTime: formatAppointmentTime(booking.startTime),
     });
 
     return {
@@ -1424,40 +1390,6 @@ export class BookingService {
       workingHours: { start: '00:00', end: '00:00' },
       slots: [],
     };
-  }
-
-  private async notifyUser(
-    userId: string,
-    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
-  ): Promise<void> {
-    const tokens = await this.userService.getFcmTokens(userId);
-    if (!tokens.length) return;
-    const result = await sendFcmNotification({ tokens, ...payload });
-    if (result.failureCount > 0) {
-      this.logger.warn('FCM user notification had failures', {
-        userId,
-        failureCount: result.failureCount,
-      });
-    }
-    if (result.invalidTokens.length)
-      void this.userService.pruneInvalidFcmTokens(result.invalidTokens);
-  }
-
-  private async notifyBarber(
-    barberId: string,
-    payload: Omit<Parameters<typeof sendFcmNotification>[0], 'tokens'>,
-  ): Promise<void> {
-    const tokens = await this.barberService.getFcmTokens(barberId);
-    if (!tokens.length) return;
-    const result = await sendFcmNotification({ tokens, ...payload });
-    if (result.failureCount > 0) {
-      this.logger.warn('FCM barber notification had failures', {
-        barberId,
-        failureCount: result.failureCount,
-      });
-    }
-    if (result.invalidTokens.length)
-      void this.barberService.pruneInvalidFcmTokens(result.invalidTokens);
   }
 
   private toMinutes(time: string): number {

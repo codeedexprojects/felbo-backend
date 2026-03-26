@@ -41,6 +41,7 @@ import {
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
 import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { enqueueVendorApproved } from '../../shared/notification/notification.queue';
 
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
@@ -806,6 +807,8 @@ export default class ShopService {
       shopId,
       vendorId: shop.vendorId.toString(),
     });
+
+    await enqueueVendorApproved({ vendorId: shop.vendorId.toString() });
   }
 
   async rejectShop(shopId: string, reason: string): Promise<void> {

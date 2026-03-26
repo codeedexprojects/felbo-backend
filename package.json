@@ -18,7 +18,7 @@
     "prepare": "husky",
     "dump": "ts-node scripts/dump-folder.ts",
     "worker:notifications": "node dist/shared/notification/notification.worker.js",
-    "worker:notifications:dev": "npx tsx src/shared/notification/notification.worker.ts"
+    "worker:notifications:dev": "npx ts-node src/shared/notification/notification.worker.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
