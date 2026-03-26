@@ -22,6 +22,6 @@
       "@modules/*": ["./src/modules/*"]
     }
   },
-  "include": ["src/**/*", "scripts/clear-db.ts"],
+  "include": ["src/**/*", "/scripts/clear-db.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
