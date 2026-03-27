@@ -209,6 +209,12 @@ export default class VendorService {
       throw new NotFoundError('No vendor account found. Please register.');
     }
 
+    if (vendor.verificationStatus === 'PAYMENT_PENDING') {
+      throw new ForbiddenError(
+        'Your registration payment is incomplete. Please complete the payment to continue.',
+      );
+    }
+
     if (vendor.verificationStatus === 'PENDING') {
       throw new ForbiddenError('Your account is awaiting verification.');
     }
