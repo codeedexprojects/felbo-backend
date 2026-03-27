@@ -26,6 +26,10 @@ export const rejectVendorSchema = z.object({
   reason: z.string().min(1, 'Rejection reason is required').max(500, 'Reason too long'),
 });
 
+export const blockVendorSchema = z.object({
+  reason: z.string().min(1, 'Block reason is required').max(500, 'Reason too long'),
+});
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });

@@ -336,6 +336,7 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      isVendorBarber: barber.isVendorBarber,
       serviceCount: await this.getServiceCountForBarber(barber._id.toString()),
     };
   }
@@ -905,6 +906,7 @@ export class BarberService {
       },
       status: barber.status,
       isAvailable: barber.isAvailable,
+      isVendorBarber: barber.isVendorBarber,
       cancellationCount: barber.cancellationCount ?? 0,
       cancellationsThisWeek: barber.cancellationsThisWeek ?? 0,
       serviceCount,
@@ -1117,6 +1119,7 @@ export class BarberService {
         count: b.rating.count,
       },
       isAvailable: b.isAvailable,
+      isVendorBarber: b.isVendorBarber,
     }));
   }
 

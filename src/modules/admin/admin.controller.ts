@@ -4,6 +4,7 @@ import {
   adminLoginSchema,
   listVendorsSchema,
   rejectVendorSchema,
+  blockVendorSchema,
   vendorIdParamSchema,
 } from './admin.validators';
 import { AdminLoginInput } from './admin.types';
@@ -152,5 +153,19 @@ export class AdminController {
   getAssociationAdminDashboard = async (_req: Request, res: Response): Promise<void> => {
     const result = await this.adminService.getAssociationAdminDashboard();
     res.status(200).json({ success: true, data: result });
+  };
+
+  blockVendor = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+    const { reason } = blockVendorSchema.parse(req.body);
+    const adminId = req.user!.sub;
+    await this.adminService.blockVendor(id, reason, adminId);
+    res.status(200).json({ success: true, message: 'Vendor blocked successfully.' });
+  };
+
+  unblockVendor = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+    await this.adminService.unblockVendor(id);
+    res.status(200).json({ success: true, message: 'Vendor unblocked successfully.' });
   };
 }

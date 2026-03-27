@@ -28,6 +28,8 @@ router.get(
 );
 router.post('/:id/verify', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.verifyVendor);
 router.post('/:id/reject', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.rejectVendor);
+router.post('/:id/block', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.blockVendor);
+router.post('/:id/unblock', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.unblockVendor);
 
 router.get(
   '/:id/bookings',

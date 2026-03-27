@@ -31,6 +31,7 @@ export interface BarberManagementDto {
   rating: { average: number; count: number };
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  isVendorBarber: boolean;
   cancellationCount: number;
   cancellationsThisWeek: number;
   serviceCount: number;
@@ -72,6 +73,7 @@ export interface OnboardBarberDto {
   rating: { average: number; count: number };
   status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  isVendorBarber: boolean;
   serviceCount: number;
 }
 
@@ -258,4 +260,5 @@ export interface PublicBarberDto {
   photo?: string;
   rating: { average: number; count: number };
   isAvailable: boolean;
+  isVendorBarber: boolean;
 }
