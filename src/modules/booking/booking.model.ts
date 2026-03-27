@@ -49,6 +49,8 @@ export interface IBooking extends Document {
   verificationCode: string;
   cancellation?: IBookingCancellation;
   completedAt?: Date;
+  completedBy?: 'BARBER' | 'SYSTEM';
+  noShowAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -122,6 +124,8 @@ const bookingSchema = new Schema<IBooking>(
     verificationCode: { type: String, required: true },
     cancellation: { type: cancellationSubSchema },
     completedAt: { type: Date },
+    completedBy: { type: String, enum: ['BARBER', 'SYSTEM'] },
+    noShowAt: { type: Date },
   },
   { timestamps: true },
 );

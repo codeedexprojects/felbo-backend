@@ -33,6 +33,4 @@ const bookingService: BookingService = new BookingService(
 
 const bookingController = new BookingController(bookingService);
 
-barberService.setBookingService(bookingService);
-
 export { bookingController, bookingService };

@@ -11,6 +11,9 @@ import {
 } from '../../shared/services/brevo-email-otp.service';
 import { JwtService } from '../../shared/services/jwt.service';
 import { configService } from '../config/config.container';
+import { availabilityService } from '../barberAvailability/barberAvailability.container';
+import { bookingService } from '../booking/booking.container';
+import type { BookingService } from '../booking/booking.service';
 
 const barberRepository = new BarberRepository();
 const vendorRepository = new VendorRepository();
@@ -34,6 +37,8 @@ const barberService: BarberService = new BarberService(
   emailOtpService,
   jwtService,
   configService,
+  () => availabilityService,
+  (): BookingService => bookingService,
 );
 
 const barberController = new BarberController(barberService);

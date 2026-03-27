@@ -16,6 +16,7 @@ import {
   cancelBookingByUserBodySchema,
   barberBookingListQuerySchema,
   completeBookingBodySchema,
+  markNoShowBodySchema,
   userBookingListQuerySchema,
   vendorIdParamSchema,
   adminVendorBookingListQuerySchema,
@@ -183,6 +184,16 @@ export class BookingController {
     const barberId = this.getBarberId(req);
 
     const result = await this.bookingService.completeBooking(bookingId, barberId, verificationCode);
+
+    res.json({ success: true, data: result });
+  };
+
+  markNoShow = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = bookingIdParamSchema.parse(req.params);
+    markNoShowBodySchema.parse(req.body);
+    const barberId = this.getBarberId(req);
+
+    const result = await this.bookingService.markNoShow(bookingId, barberId);
 
     res.json({ success: true, data: result });
   };

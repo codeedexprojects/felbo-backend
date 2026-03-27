@@ -24,7 +24,7 @@ async function healStatuses(): Promise<void> {
 
     const bookingPast = await BookingModel.updateMany(
       { status: 'CONFIRMED', date: { $lt: todayStart } },
-      { $set: { status: 'COMPLETED', completedAt: now } },
+      { $set: { status: 'COMPLETED', completedAt: now, completedBy: 'SYSTEM' } },
     );
 
     const bookingToday = await BookingModel.updateMany(
@@ -33,7 +33,7 @@ async function healStatuses(): Promise<void> {
         date: { $gte: todayStart, $lt: todayEnd },
         endTime: { $lte: currentTimeIST },
       },
-      { $set: { status: 'COMPLETED', completedAt: now } },
+      { $set: { status: 'COMPLETED', completedAt: now, completedBy: 'SYSTEM' } },
     );
 
     const slotPast = await SlotBlockModel.updateMany(

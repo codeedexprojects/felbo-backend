@@ -89,6 +89,10 @@ export const config = {
     clientEmail: getEnv('FIREBASE_CLIENT_EMAIL', ''),
   },
 
+  booking: {
+    maxServicesPerBooking: getEnvInt('MAX_SERVICES_PER_BOOKING', 3),
+  },
+
   admin: {
     cookie: {
       name: 'adminRefreshToken',

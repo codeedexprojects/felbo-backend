@@ -303,11 +303,22 @@ export class BookingRepository {
     ).exec();
   }
 
-  updateBookingCompleted(id: string, session?: ClientSession): Promise<IBooking | null> {
-    // Conditional: only completes if the booking is still CONFIRMED — prevents double-completion
+  updateBookingCompleted(
+    id: string,
+    completedBy: 'BARBER' | 'SYSTEM',
+    session?: ClientSession,
+  ): Promise<IBooking | null> {
     return BookingModel.findOneAndUpdate(
       { _id: id, status: 'CONFIRMED' },
-      { status: 'COMPLETED', completedAt: new Date() },
+      { status: 'COMPLETED', completedAt: new Date(), completedBy },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  updateBookingNoShow(id: string, session?: ClientSession): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { _id: id, status: { $in: ['CONFIRMED', 'COMPLETED'] } },
+      { $set: { status: 'NO_SHOW', noShowAt: new Date() } },
       { returnDocument: 'after', session },
     ).exec();
   }
@@ -329,6 +340,7 @@ export class BookingRepository {
       startTime: string;
       services: Array<{ serviceName: string }>;
       status: string;
+      completedBy?: string;
     }>;
     total: number;
   }> {
@@ -369,6 +381,7 @@ export class BookingRepository {
             startTime: 1,
             services: 1,
             status: 1,
+            completedBy: 1,
           },
         },
       ]).exec(),
@@ -395,6 +408,7 @@ export class BookingRepository {
     totalServiceAmount: number;
     advancePaid: number;
     remainingAmount: number;
+    completedBy?: string;
   } | null> {
     const [result] = await BookingModel.aggregate([
       {
@@ -427,6 +441,7 @@ export class BookingRepository {
           totalServiceAmount: 1,
           advancePaid: 1,
           remainingAmount: 1,
+          completedBy: 1,
         },
       },
     ]).exec();
@@ -1200,5 +1215,12 @@ export class BookingRepository {
       bookings: result.bookings,
       total: result.total[0]?.count ?? 0,
     };
+  }
+
+  hasActiveBookingsForShop(shopId: string): Promise<boolean> {
+    return BookingModel.exists({
+      shopId: new mongoose.Types.ObjectId(shopId),
+      status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
+    }).then((doc) => doc !== null);
   }
 }
