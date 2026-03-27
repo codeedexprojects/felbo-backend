@@ -50,7 +50,6 @@ import {
   buildAppointmentDate,
 } from '../../shared/utils/time';
 import {
-  enqueueBookingConfirmedUser,
   enqueueNewBookingBarber,
   enqueueReminder10Min,
   enqueueBookingCancelledByBarber,
@@ -872,12 +871,6 @@ export class BookingService {
     const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
 
     await Promise.all([
-      enqueueBookingConfirmedUser({
-        userId,
-        shopName: confirmed.shopName,
-        appointmentTime,
-        bookingId,
-      }),
       enqueueNewBookingBarber({
         barberId: confirmedBarberId,
         customerName: confirmed.userName,
