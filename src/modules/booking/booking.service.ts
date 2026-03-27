@@ -1295,15 +1295,22 @@ export class BookingService {
     barberId: string,
     page: number,
     limit: number,
-    status?: string,
+    status?: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED',
     startDate?: Date,
     endDate?: Date,
   ): Promise<BarberBookingListResponse> {
+    const statuses =
+      status === 'CANCELLED'
+        ? ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW']
+        : status
+          ? [status]
+          : undefined;
+
     const { bookings, total } = await this.bookingRepository.findByBarberId(
       barberId,
       page,
       limit,
-      status,
+      statuses,
       startDate,
       endDate,
     );
