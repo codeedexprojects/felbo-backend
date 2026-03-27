@@ -57,9 +57,7 @@ export const cancelBookingByBarberBodySchema = z.object({
 export const barberBookingListQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(50).default(20),
-  status: z
-    .enum(['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'])
-    .optional(),
+  status: z.enum(['CONFIRMED', 'COMPLETED', 'CANCELLED']).optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')

@@ -327,7 +327,7 @@ export class BookingRepository {
     barberId: string,
     page: number,
     limit: number,
-    status?: string,
+    statuses?: string[],
     startDate?: Date,
     endDate?: Date,
   ): Promise<{
@@ -347,9 +347,11 @@ export class BookingRepository {
     const skip = (page - 1) * limit;
     const match: Record<string, unknown> = {
       barberId: new mongoose.Types.ObjectId(barberId),
-      status: { $in: ['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR'] },
+      status: {
+        $in: ['CONFIRMED', 'COMPLETED', 'CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+      },
     };
-    if (status) match.status = status;
+    if (statuses) match.status = { $in: statuses };
     if (startDate || endDate) {
       const dateFilter: Record<string, Date> = {};
       if (startDate) dateFilter.$gte = startDate;
