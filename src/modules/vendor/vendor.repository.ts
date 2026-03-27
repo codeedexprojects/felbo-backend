@@ -171,6 +171,33 @@ export default class VendorRepository {
     return { vendors, total };
   }
 
+  blockById(id: string, reason: string, adminId: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        isBlocked: true,
+        blockReason: reason,
+        blockedAt: new Date(),
+        blockedBy: adminId,
+        refreshTokenHash: null,
+      },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  unblockById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        isBlocked: false,
+        blockReason: null,
+        blockedAt: null,
+        blockedBy: null,
+      },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
   flagById(id: string): Promise<IVendor | null> {
     return VendorModel.findByIdAndUpdate(
       id,

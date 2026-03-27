@@ -675,6 +675,24 @@ export default class VendorService {
     await this.vendorRepository.flagById(vendorId);
   }
 
+  async blockVendor(vendorId: string, reason: string, adminId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor || vendor.status === 'DELETED') throw new NotFoundError('Vendor not found.');
+    if (vendor.isBlocked) throw new ConflictError('Vendor is already blocked.');
+    await this.vendorRepository.blockById(vendorId, reason, adminId);
+    await getRedisClient().set(`vendor:blocked:${vendorId}`, '1', {
+      EX: config.jwt.expirySeconds,
+    });
+  }
+
+  async unblockVendor(vendorId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor || vendor.status === 'DELETED') throw new NotFoundError('Vendor not found.');
+    if (!vendor.isBlocked) throw new ConflictError('Vendor is not blocked.');
+    await this.vendorRepository.unblockById(vendorId);
+    await getRedisClient().del(`vendor:blocked:${vendorId}`);
+  }
+
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
     const vendor = await this.vendorRepository.findById(vendorId);
 

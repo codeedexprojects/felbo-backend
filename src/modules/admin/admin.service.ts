@@ -117,6 +117,14 @@ export class AdminService {
     await this.vendorService.rejectVendor(vendorId, adminId, reason);
   }
 
+  async blockVendor(vendorId: string, reason: string, adminId: string): Promise<void> {
+    await this.vendorService.blockVendor(vendorId, reason, adminId);
+  }
+
+  async unblockVendor(vendorId: string): Promise<void> {
+    await this.vendorService.unblockVendor(vendorId);
+  }
+
   async login(input: AdminLoginInput): Promise<AdminLoginResponse> {
     const { email, password } = input;
 

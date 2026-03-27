@@ -39,9 +39,15 @@ export async function authenticate(
       throw new UnauthorizedError('Your account has been suspended. Please contact support.');
     }
   } else if (role === 'VENDOR' || role === 'VENDOR_BARBER') {
-    const isDeleted = await getRedisClient().get(`vendor:deleted:${decoded.sub}`);
+    const [isDeleted, isBlocked] = await Promise.all([
+      getRedisClient().get(`vendor:deleted:${decoded.sub}`),
+      getRedisClient().get(`vendor:blocked:${decoded.sub}`),
+    ]);
     if (isDeleted) {
       throw new UnauthorizedError('This account has been deactivated.');
+    }
+    if (isBlocked) {
+      throw new UnauthorizedError('Your account has been suspended. Please contact support.');
     }
   }
 
