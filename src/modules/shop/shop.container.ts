@@ -11,6 +11,8 @@ import UserService from '../user/user.service';
 import { configService } from '../config/config.container';
 import { favoriteService } from '../favorite/favorite.container';
 import { FavoriteService } from '../favorite/favorite.service';
+import { bookingService } from '../booking/booking.container';
+import { BookingService } from '../booking/booking.service';
 
 const shopRepository = new ShopRepository();
 
@@ -22,6 +24,7 @@ const shopService: ShopService = new ShopService(
   (): UserService => userService,
   configService,
   (): FavoriteService => favoriteService,
+  (): BookingService => bookingService,
 );
 
 const shopController = new ShopController(shopService);

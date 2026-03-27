@@ -48,6 +48,7 @@ import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.type
 import { ServiceService } from '../service/service.service';
 import UserService from '../user/user.service';
 import { FavoriteService } from '../favorite/favorite.service';
+import { BookingService } from '../booking/booking.service';
 import { formatRating } from '../../shared/utils/rating';
 
 export default class ShopService {
@@ -59,6 +60,7 @@ export default class ShopService {
     private readonly getUserService: () => UserService,
     private readonly configService: ConfigService,
     private readonly getFavoriteService?: () => FavoriteService,
+    private readonly getBookingService?: () => BookingService,
   ) {}
 
   private get barberService(): BarberService {
@@ -253,6 +255,17 @@ export default class ShopService {
   async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
     this.assertShopActive(shop);
+
+    if (shop.isPrimary) {
+      throw new ForbiddenError('Primary shop cannot be deleted.');
+    }
+
+    if (this.getBookingService) {
+      const hasActive = await this.getBookingService().hasActiveBookingsForShop(shopId);
+      if (hasActive) {
+        throw new ConflictError('Cannot delete shop with active bookings.');
+      }
+    }
 
     const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
     if (!updated) throw new NotFoundError('Shop not found.');

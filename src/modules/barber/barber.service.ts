@@ -62,13 +62,6 @@ interface TodayAvailabilityData {
 }
 
 export class BarberService {
-  private availabilityService?: {
-    getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
-    getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
-  };
-
-  private bookingService?: BookingService;
-
   constructor(
     private readonly barberRepository: BarberRepository,
     private readonly getShopService: () => ShopService,
@@ -77,17 +70,19 @@ export class BarberService {
     private readonly emailOtpService: BarberEmailOtpService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly getAvailabilityService?: () => {
+      getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
+      getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
+    },
+    private readonly getBookingService?: () => BookingService,
   ) {}
 
-  setAvailabilityService(svc: {
-    getTodayAvailability(barberId: string): Promise<TodayAvailabilityData | null>;
-    getAvailableBarberIdsForToday(shopId: string): Promise<string[]>;
-  }): void {
-    this.availabilityService = svc;
+  private get availabilityService() {
+    return this.getAvailabilityService?.();
   }
 
-  setBookingService(svc: BookingService): void {
-    this.bookingService = svc;
+  private get bookingService() {
+    return this.getBookingService?.();
   }
 
   private get shopService(): ShopService {

@@ -14,6 +14,4 @@ const availabilityService = new BarberAvailabilityService(
 );
 const availabilityController = new BarberAvailabilityController(availabilityService);
 
-barberService.setAvailabilityService(availabilityService);
-
 export { availabilityController, availabilityService };
