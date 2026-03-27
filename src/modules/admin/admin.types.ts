@@ -98,6 +98,7 @@ export interface SuperAdminDashboardDto {
   todaysBookings: number;
   todaysRevenue: number;
   pendingVerifications: number;
+  pendingShops: number;
   recentIssues: DashboardRecentIssueDto[];
 }
 

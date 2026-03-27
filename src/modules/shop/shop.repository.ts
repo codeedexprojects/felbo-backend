@@ -92,6 +92,7 @@ export default class ShopRepository {
         },
       },
       { $unwind: '$vendor' },
+      { $match: { 'vendor.verificationStatus': 'APPROVED' } },
       {
         $facet: {
           shops: [{ $sort: { createdAt: 1 } }, { $skip: skip }, { $limit: limit }],
@@ -116,8 +117,15 @@ export default class ShopRepository {
     };
   }
 
-  findPendingApprovalCount(): Promise<number> {
-    return ShopModel.countDocuments({ status: 'PENDING_APPROVAL' }).exec();
+  async findPendingApprovalCount(): Promise<number> {
+    const result = await ShopModel.aggregate([
+      { $match: { status: 'PENDING_APPROVAL' } },
+      { $lookup: { from: 'vendors', localField: 'vendorId', foreignField: '_id', as: 'vendor' } },
+      { $unwind: '$vendor' },
+      { $match: { 'vendor.verificationStatus': 'APPROVED' } },
+      { $count: 'count' },
+    ]).exec();
+    return result[0]?.count ?? 0;
   }
 
   async findPendingById(shopId: string): Promise<

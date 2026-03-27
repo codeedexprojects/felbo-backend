@@ -786,6 +786,10 @@ export default class ShopService {
     };
   }
 
+  async getPendingShopCount(): Promise<number> {
+    return this.shopRepository.findPendingApprovalCount();
+  }
+
   async getPendingApprovalShops(
     page: number,
     limit: number,

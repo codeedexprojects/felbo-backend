@@ -39,13 +39,14 @@ export class AdminService {
   ) {}
 
   async getSuperAdminDashboard(): Promise<SuperAdminDashboardDto> {
-    const [userCounts, vendorStats, bookingStats, recentIssues, todayRegRevenue] =
+    const [userCounts, vendorStats, bookingStats, recentIssues, todayRegRevenue, pendingShops] =
       await Promise.all([
         this.userService.getUserStatusCounts(),
         this.vendorService.getVendorDashboardStats(),
         this.bookingService.getGlobalDashboardStats(),
         this.issueService.getRecentIssuesForDashboard(5),
         this.financeService.getTodayRegistrationRevenue(),
+        this.shopService.getPendingShopCount(),
       ]);
 
     return {
@@ -55,6 +56,7 @@ export class AdminService {
       todaysBookings: bookingStats.todaysBookings,
       todaysRevenue: Number((bookingStats.todaysRevenue + todayRegRevenue).toFixed(2)),
       pendingVerifications: vendorStats.pendingVerifications,
+      pendingShops,
       recentIssues,
     };
   }
@@ -99,6 +101,14 @@ export class AdminService {
         : { ...filter };
 
     return this.vendorService.listVendors(effectiveFilter);
+  }
+
+  async getPendingRequestCounts(): Promise<{
+    total: number;
+    association: number;
+    independent: number;
+  }> {
+    return this.vendorService.getPendingRequestCounts();
   }
 
   async listVerificationRequests(
