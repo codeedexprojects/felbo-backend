@@ -1,8 +1,6 @@
 import { Queue } from 'bullmq';
 import { createQueue, QUEUE_NAMES } from '../queue/bull';
 
-// ─── Job type union ───────────────────────────────────────────────────────────
-
 export type NotificationJobName =
   // User-facing
   | 'BOOKING_CONFIRMED_USER' // booking confirmed → notify user
@@ -13,9 +11,10 @@ export type NotificationJobName =
   // Both
   | 'REMINDER_10MIN' // 10-min reminder → notify user + barber
   // Vendor-facing
-  | 'VENDOR_APPROVED'; // admin approved vendor → notify vendor
-
-// ─── Job interfaces ───────────────────────────────────────────────────────────
+  | 'VENDOR_APPROVED' // admin approved vendor → notify vendor
+  | 'VENDOR_REJECTED' // admin rejected vendor → notify vendor
+  | 'SHOP_APPROVED' // admin approved additional shop → notify vendor
+  | 'SHOP_REJECTED'; // admin rejected additional shop → notify vendor
 
 export interface BookingConfirmedUserJob {
   jobName: 'BOOKING_CONFIRMED_USER';
@@ -60,15 +59,35 @@ export interface VendorApprovedJob {
   vendorId: string;
 }
 
+export interface VendorRejectedJob {
+  jobName: 'VENDOR_REJECTED';
+  vendorId: string;
+  reason: string;
+}
+
+export interface ShopApprovedJob {
+  jobName: 'SHOP_APPROVED';
+  vendorId: string;
+  shopName: string;
+}
+
+export interface ShopRejectedJob {
+  jobName: 'SHOP_REJECTED';
+  vendorId: string;
+  shopName: string;
+  reason: string;
+}
+
 export type NotificationJobData =
   | BookingConfirmedUserJob
   | BookingCancelledByBarberJob
   | NewBookingBarberJob
   | BookingCancelledByUserJob
   | Reminder10MinJob
-  | VendorApprovedJob;
-
-// ─── Queue singleton ──────────────────────────────────────────────────────────
+  | VendorApprovedJob
+  | VendorRejectedJob
+  | ShopApprovedJob
+  | ShopRejectedJob;
 
 let notificationQueue: Queue<NotificationJobData>;
 
@@ -78,8 +97,6 @@ function getQueue(): Queue<NotificationJobData> {
   }
   return notificationQueue;
 }
-
-// ─── Enqueue helpers ──────────────────────────────────────────────────────────
 
 export async function enqueueBookingConfirmedUser(data: {
   userId: string;
@@ -133,6 +150,14 @@ export async function enqueueReminder10Min(data: {
   );
 }
 
+export async function cancelReminder10Min(bookingId: string): Promise<void> {
+  const jobId = `reminder-10m-${bookingId}`;
+  const job = await getQueue().getJob(jobId);
+  if (job) {
+    await job.remove();
+  }
+}
+
 export async function enqueueBookingCancelledByBarber(data: {
   userId: string;
   shopName: string;
@@ -158,5 +183,40 @@ export async function enqueueVendorApproved(data: { vendorId: string }): Promise
   await getQueue().add('VENDOR_APPROVED', {
     jobName: 'VENDOR_APPROVED',
     vendorId: data.vendorId,
+  });
+}
+
+export async function enqueueVendorRejected(data: {
+  vendorId: string;
+  reason: string;
+}): Promise<void> {
+  await getQueue().add('VENDOR_REJECTED', {
+    jobName: 'VENDOR_REJECTED',
+    vendorId: data.vendorId,
+    reason: data.reason,
+  });
+}
+
+export async function enqueueShopApproved(data: {
+  vendorId: string;
+  shopName: string;
+}): Promise<void> {
+  await getQueue().add('SHOP_APPROVED', {
+    jobName: 'SHOP_APPROVED',
+    vendorId: data.vendorId,
+    shopName: data.shopName,
+  });
+}
+
+export async function enqueueShopRejected(data: {
+  vendorId: string;
+  shopName: string;
+  reason: string;
+}): Promise<void> {
+  await getQueue().add('SHOP_REJECTED', {
+    jobName: 'SHOP_REJECTED',
+    vendorId: data.vendorId,
+    shopName: data.shopName,
+    reason: data.reason,
   });
 }

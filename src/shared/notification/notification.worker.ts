@@ -74,8 +74,10 @@ async function pruneBarberTokens(tokens: string[], jobName: string): Promise<voi
 }
 
 // ─── Persistence helper ───────────────────────────────────────────────────────
+// Uses upsert on jobId — retries are idempotent and never create duplicate records.
 
 async function persist(
+  jobId: string,
   recipientId: string,
   recipientRole: NotificationRecipientRole,
   type: NotificationType,
@@ -84,29 +86,48 @@ async function persist(
   jobName: string,
   data?: Record<string, string>,
 ): Promise<void> {
-  await NotificationModel.create({
-    recipientId,
-    recipientRole,
-    type,
-    title,
-    body,
-    data: data ?? {},
-  });
-  logger.info('Notification persisted', { jobName, recipientId, recipientRole, type });
+  await NotificationModel.findOneAndUpdate(
+    { jobId },
+    {
+      $setOnInsert: {
+        jobId,
+        recipientId,
+        recipientRole,
+        type,
+        title,
+        body,
+        data: data ?? {},
+        isRead: false,
+      },
+    },
+    { upsert: true, new: false },
+  );
+  logger.info('Notification persisted', { jobName, jobId, recipientId, recipientRole, type });
 }
 
 // ─── Job processor ────────────────────────────────────────────────────────────
 
 async function processJob(job: Job<NotificationJobData>): Promise<void> {
   const { data } = job;
+  const jobId = job.id!;
 
-  logger.info('Processing notification job', { jobName: data.jobName, jobId: job.id });
+  logger.info('Processing notification job', { jobName: data.jobName, jobId });
 
   switch (data.jobName) {
     // ── User: booking confirmed ────────────────────────────────────────────────
     case 'BOOKING_CONFIRMED_USER': {
-      const tokens = await getUserTokens(data.userId);
+      await persist(
+        `${jobId}:user`,
+        data.userId,
+        'user',
+        'BOOKING_CONFIRMED',
+        'Booking Confirmed!',
+        `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
+        data.jobName,
+        { bookingId: data.bookingId, shopName: data.shopName },
+      );
 
+      const tokens = await getUserTokens(data.userId);
       if (!tokens.length) {
         logger.warn('No FCM tokens for user — skipping push', {
           jobName: data.jobName,
@@ -129,23 +150,27 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         });
         if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens, data.jobName);
       }
-
-      await persist(
-        data.userId,
-        'user',
-        'BOOKING_CONFIRMED',
-        'Booking Confirmed!',
-        `Your booking at ${data.shopName} is confirmed for ${data.appointmentTime}`,
-        data.jobName,
-        { bookingId: data.bookingId, shopName: data.shopName },
-      );
       break;
     }
 
     // ── Barber: new booking arrived ────────────────────────────────────────────
     case 'NEW_BOOKING_BARBER': {
-      const tokens = await getBarberTokens(data.barberId);
+      await persist(
+        `${jobId}:barber`,
+        data.barberId,
+        'barber',
+        'NEW_BOOKING',
+        `New Booking from ${data.customerName}`,
+        `${data.serviceName} at ${data.appointmentTime}`,
+        data.jobName,
+        {
+          customerName: data.customerName,
+          serviceName: data.serviceName,
+          appointmentTime: data.appointmentTime,
+        },
+      );
 
+      const tokens = await getBarberTokens(data.barberId);
       if (!tokens.length) {
         logger.warn('No FCM tokens for barber — skipping push', {
           jobName: data.jobName,
@@ -174,27 +199,23 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         if (result.invalidTokens.length)
           await pruneBarberTokens(result.invalidTokens, data.jobName);
       }
-
-      await persist(
-        data.barberId,
-        'barber',
-        'NEW_BOOKING',
-        `New Booking from ${data.customerName}`,
-        `${data.serviceName} at ${data.appointmentTime}`,
-        data.jobName,
-        {
-          customerName: data.customerName,
-          serviceName: data.serviceName,
-          appointmentTime: data.appointmentTime,
-        },
-      );
       break;
     }
 
     // ── User: barber cancelled ─────────────────────────────────────────────────
     case 'BOOKING_CANCELLED_BY_BARBER': {
-      const tokens = await getUserTokens(data.userId);
+      await persist(
+        `${jobId}:user`,
+        data.userId,
+        'user',
+        'BOOKING_CANCELLED_BY_BARBER',
+        'Booking Cancelled',
+        `Your booking at ${data.shopName} has been cancelled by the barber.`,
+        data.jobName,
+        { shopName: data.shopName },
+      );
 
+      const tokens = await getUserTokens(data.userId);
       if (!tokens.length) {
         logger.warn('No FCM tokens for user — skipping push', {
           jobName: data.jobName,
@@ -217,23 +238,23 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         });
         if (result.invalidTokens.length) await pruneUserTokens(result.invalidTokens, data.jobName);
       }
-
-      await persist(
-        data.userId,
-        'user',
-        'BOOKING_CANCELLED_BY_BARBER',
-        'Booking Cancelled',
-        `Your booking at ${data.shopName} has been cancelled by the barber.`,
-        data.jobName,
-        { shopName: data.shopName },
-      );
       break;
     }
 
     // ── Barber: user cancelled ─────────────────────────────────────────────────
     case 'BOOKING_CANCELLED_BY_USER': {
-      const tokens = await getBarberTokens(data.barberId);
+      await persist(
+        `${jobId}:barber`,
+        data.barberId,
+        'barber',
+        'BOOKING_CANCELLED_BY_USER',
+        'Booking Cancelled',
+        `${data.customerName} cancelled their ${data.appointmentTime} booking.`,
+        data.jobName,
+        { customerName: data.customerName, appointmentTime: data.appointmentTime },
+      );
 
+      const tokens = await getBarberTokens(data.barberId);
       if (!tokens.length) {
         logger.warn('No FCM tokens for barber — skipping push', {
           jobName: data.jobName,
@@ -261,21 +282,38 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         if (result.invalidTokens.length)
           await pruneBarberTokens(result.invalidTokens, data.jobName);
       }
-
-      await persist(
-        data.barberId,
-        'barber',
-        'BOOKING_CANCELLED_BY_USER',
-        'Booking Cancelled',
-        `${data.customerName} cancelled their ${data.appointmentTime} booking.`,
-        data.jobName,
-        { customerName: data.customerName, appointmentTime: data.appointmentTime },
-      );
       break;
     }
 
     // ── User + Barber: 10-min reminder ─────────────────────────────────────────
     case 'REMINDER_10MIN': {
+      const reminderTitle = 'Appointment in 10 minutes';
+      const reminderBody = `Your appointment at ${data.shopName} starts in 10 minutes`;
+      const reminderData = { type: 'REMINDER', shopName: data.shopName, bookingId: data.bookingId };
+
+      await Promise.all([
+        persist(
+          `${jobId}:user`,
+          data.userId,
+          'user',
+          'REMINDER',
+          reminderTitle,
+          reminderBody,
+          data.jobName,
+          reminderData,
+        ),
+        persist(
+          `${jobId}:barber`,
+          data.barberId,
+          'barber',
+          'REMINDER',
+          reminderTitle,
+          reminderBody,
+          data.jobName,
+          reminderData,
+        ),
+      ]);
+
       const [userTokens, barberTokens] = await Promise.all([
         getUserTokens(data.userId),
         getBarberTokens(data.barberId),
@@ -295,10 +333,6 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
           bookingId: data.bookingId,
         });
       }
-
-      const reminderTitle = 'Appointment in 10 minutes';
-      const reminderBody = `Your appointment at ${data.shopName} starts in 10 minutes`;
-      const reminderData = { type: 'REMINDER', shopName: data.shopName, bookingId: data.bookingId };
 
       const [userResult, barberResult] = await Promise.all([
         userTokens.length
@@ -346,34 +380,22 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         if (barberResult.invalidTokens.length)
           await pruneBarberTokens(barberResult.invalidTokens, data.jobName);
       }
-
-      await Promise.all([
-        persist(
-          data.userId,
-          'user',
-          'REMINDER',
-          reminderTitle,
-          reminderBody,
-          data.jobName,
-          reminderData,
-        ),
-        persist(
-          data.barberId,
-          'barber',
-          'REMINDER',
-          reminderTitle,
-          reminderBody,
-          data.jobName,
-          reminderData,
-        ),
-      ]);
       break;
     }
 
     // ── Vendor: account approved ───────────────────────────────────────────────
     case 'VENDOR_APPROVED': {
-      const tokens = await getVendorTokens(data.vendorId);
+      await persist(
+        `${jobId}:vendor`,
+        data.vendorId,
+        'vendor',
+        'VENDOR_APPROVED',
+        'Account Approved',
+        'Your Felbo vendor account has been approved. You can now accept bookings.',
+        data.jobName,
+      );
 
+      const tokens = await getVendorTokens(data.vendorId);
       if (!tokens.length) {
         logger.warn('No FCM tokens for vendor — skipping push', {
           jobName: data.jobName,
@@ -397,15 +419,126 @@ async function processJob(job: Job<NotificationJobData>): Promise<void> {
         if (result.invalidTokens.length)
           await pruneVendorTokens(result.invalidTokens, data.jobName);
       }
+      break;
+    }
 
+    // ── Vendor: account rejected ───────────────────────────────────────────────
+    case 'VENDOR_REJECTED': {
       await persist(
+        `${jobId}:vendor`,
         data.vendorId,
         'vendor',
-        'VENDOR_APPROVED',
-        'Account Approved',
-        'Your Felbo vendor account has been approved. You can now accept bookings.',
+        'VENDOR_REJECTED',
+        'Application Not Approved',
+        `Your Felbo vendor application was not approved. Reason: ${data.reason}`,
         data.jobName,
+        { reason: data.reason },
       );
+
+      const tokens = await getVendorTokens(data.vendorId);
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for vendor — skipping push', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Application Not Approved',
+          body: `Your Felbo vendor application was not approved. Reason: ${data.reason}`,
+          data: { type: 'VENDOR_REJECTED', reason: data.reason },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneVendorTokens(result.invalidTokens, data.jobName);
+      }
+      break;
+    }
+
+    // ── Vendor: shop approved ──────────────────────────────────────────────────
+    case 'SHOP_APPROVED': {
+      await persist(
+        `${jobId}:vendor`,
+        data.vendorId,
+        'vendor',
+        'SHOP_APPROVED',
+        'Shop Approved!',
+        `Your shop "${data.shopName}" has been approved and is now live.`,
+        data.jobName,
+        { shopName: data.shopName },
+      );
+
+      const tokens = await getVendorTokens(data.vendorId);
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for vendor — skipping push', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Shop Approved!',
+          body: `Your shop "${data.shopName}" has been approved and is now live.`,
+          data: { type: 'SHOP_APPROVED', shopName: data.shopName },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneVendorTokens(result.invalidTokens, data.jobName);
+      }
+      break;
+    }
+
+    // ── Vendor: shop rejected ──────────────────────────────────────────────────
+    case 'SHOP_REJECTED': {
+      await persist(
+        `${jobId}:vendor`,
+        data.vendorId,
+        'vendor',
+        'SHOP_REJECTED',
+        'Shop Application Rejected',
+        `Your shop "${data.shopName}" application was rejected. Reason: ${data.reason}`,
+        data.jobName,
+        { shopName: data.shopName, reason: data.reason },
+      );
+
+      const tokens = await getVendorTokens(data.vendorId);
+      if (!tokens.length) {
+        logger.warn('No FCM tokens for vendor — skipping push', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+        });
+      } else {
+        const result = await sendFcmNotification({
+          tokens,
+          channel: FCM_CHANNELS.GENERAL,
+          title: 'Shop Application Rejected',
+          body: `Your shop "${data.shopName}" application was rejected. Reason: ${data.reason}`,
+          data: { type: 'SHOP_REJECTED', shopName: data.shopName, reason: data.reason },
+        });
+        logger.info('FCM push sent', {
+          jobName: data.jobName,
+          vendorId: data.vendorId,
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          invalidTokenCount: result.invalidTokens.length,
+        });
+        if (result.invalidTokens.length)
+          await pruneVendorTokens(result.invalidTokens, data.jobName);
+      }
       break;
     }
 

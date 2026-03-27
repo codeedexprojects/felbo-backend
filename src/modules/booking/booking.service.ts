@@ -54,6 +54,7 @@ import {
   enqueueReminder10Min,
   enqueueBookingCancelledByBarber,
   enqueueBookingCancelledByUser,
+  cancelReminder10Min,
 } from '../../shared/notification/notification.queue';
 import { BarberService } from '../barber/barber.service';
 import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
@@ -700,12 +701,6 @@ export class BookingService {
       const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
 
       await Promise.all([
-        enqueueBookingConfirmedUser({
-          userId,
-          shopName: shop.name,
-          appointmentTime: coinAppointmentTime,
-          bookingId: coinBookingId,
-        }),
         enqueueNewBookingBarber({
           barberId: coinBarberId,
           customerName: user.name ?? 'A customer',
@@ -999,10 +994,13 @@ export class BookingService {
       flagged,
     });
 
-    await enqueueBookingCancelledByBarber({
-      userId: booking.userId.toString(),
-      shopName: booking.shopName,
-    });
+    await Promise.all([
+      cancelReminder10Min(bookingId),
+      enqueueBookingCancelledByBarber({
+        userId: booking.userId.toString(),
+        shopName: booking.shopName,
+      }),
+    ]);
 
     return {
       booking: {
@@ -1110,11 +1108,14 @@ export class BookingService {
       refundCoins,
     });
 
-    await enqueueBookingCancelledByUser({
-      barberId: booking.barberId.toString(),
-      customerName: booking.userName,
-      appointmentTime: formatAppointmentTime(booking.startTime),
-    });
+    await Promise.all([
+      cancelReminder10Min(bookingId),
+      enqueueBookingCancelledByUser({
+        barberId: booking.barberId.toString(),
+        customerName: booking.userName,
+        appointmentTime: formatAppointmentTime(booking.startTime),
+      }),
+    ]);
 
     return {
       booking: {
