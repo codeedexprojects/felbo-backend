@@ -8,7 +8,10 @@ export type NotificationType =
   | 'REMINDER' // user + barber receive: 10 min before appointment
   | 'BOOKING_CANCELLED_BY_BARBER' // user receives: barber cancelled
   | 'BOOKING_CANCELLED_BY_USER' // barber receives: user cancelled
-  | 'VENDOR_APPROVED'; // vendor receives: account approved by admin
+  | 'VENDOR_APPROVED' // vendor receives: account approved by admin
+  | 'VENDOR_REJECTED' // vendor receives: account rejected by admin
+  | 'SHOP_APPROVED' // vendor receives: additional shop approved
+  | 'SHOP_REJECTED'; // vendor receives: additional shop rejected
 
 export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;
@@ -18,6 +21,7 @@ export interface INotification extends Document {
   body: string;
   data: Record<string, string>;
   isRead: boolean;
+  jobId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,12 +29,18 @@ export interface INotification extends Document {
 const notificationSchema = new Schema<INotification>(
   {
     recipientId: { type: Schema.Types.ObjectId, required: true, index: true },
-    recipientRole: { type: String, enum: ['user', 'barber'], required: true, index: true },
+    recipientRole: {
+      type: String,
+      enum: ['user', 'barber', 'vendor'],
+      required: true,
+      index: true,
+    },
     type: { type: String, required: true },
     title: { type: String, required: true },
     body: { type: String, required: true },
     data: { type: Map, of: String, default: {} },
     isRead: { type: Boolean, default: false, index: true },
+    jobId: { type: String, index: true, sparse: true, unique: true },
   },
   { timestamps: true },
 );

@@ -56,7 +56,10 @@ import { ConfigService } from '../config/config.service';
 import { CONFIG_KEYS } from '../../shared/config/config.keys';
 import { getRedisClient } from '../../shared/redis/redis';
 import { config } from '../../shared/config/config.service';
-import { enqueueVendorApproved } from '../../shared/notification/notification.queue';
+import {
+  enqueueVendorApproved,
+  enqueueVendorRejected,
+} from '../../shared/notification/notification.queue';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -656,6 +659,8 @@ export default class VendorService {
       rejectedBy,
       reason,
     });
+
+    await enqueueVendorRejected({ vendorId, reason });
   }
 
   async flagVendor(vendorId: string): Promise<void> {
