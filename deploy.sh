@@ -2,10 +2,10 @@
 set -e    # exit immediately if any command fails
 
 echo "→ Pulling latest code..."
-git pull origin main
+git pull origin dev
 
 echo "→ Installing dependencies..."
-npm ci --omit=dev
+npm install
 
 echo "→ Building..."
 npm run build
