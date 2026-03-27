@@ -135,6 +135,13 @@ export class BookingService {
     serviceIds: string[],
     userId: string,
   ): Promise<GetBarbersForServicesResponse> {
+    const { maxServicesPerBooking } = staticConfig.booking;
+    if (serviceIds.length > maxServicesPerBooking) {
+      throw new ValidationError(
+        `You can select at most ${maxServicesPerBooking} services per booking.`,
+      );
+    }
+
     const [barbers, bookingAmount, coinRedeemThreshold, user] = await Promise.all([
       this.barberService.getBarbersForServices(shopId, serviceIds),
       this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
@@ -147,7 +154,7 @@ export class BookingService {
       bookingAmount,
       userCoinBalance: user.felboCoinBalance,
       coinRedeemThreshold,
-      maxServicesPerBooking: staticConfig.booking.maxServicesPerBooking,
+      maxServicesPerBooking,
     };
   }
 
@@ -185,12 +192,6 @@ export class BookingService {
     );
 
     const uniqueServiceIds = [...new Set(input.serviceIds)];
-    const { maxServicesPerBooking } = staticConfig.booking;
-    if (uniqueServiceIds.length > maxServicesPerBooking) {
-      throw new ValidationError(
-        `You can select at most ${maxServicesPerBooking} services per booking.`,
-      );
-    }
     let totalDurationMinutes = 0;
     for (const serviceId of uniqueServiceIds) {
       const duration = barberServiceMap.get(serviceId);
