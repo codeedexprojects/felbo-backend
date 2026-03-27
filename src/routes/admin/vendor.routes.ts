@@ -6,6 +6,11 @@ import { authorize } from '../../shared/middleware/authorize';
 const router = Router();
 
 router.get(
+  '/requests/counts',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.getPendingRequestCounts,
+);
+router.get(
   '/requests',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),
   adminController.listVerificationRequests,

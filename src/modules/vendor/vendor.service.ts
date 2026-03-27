@@ -988,6 +988,19 @@ export default class VendorService {
     return counts.pending;
   }
 
+  async getPendingRequestCounts(): Promise<{
+    total: number;
+    association: number;
+    independent: number;
+  }> {
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+    return {
+      total: counts.pending,
+      association: counts.association,
+      independent: counts.independent,
+    };
+  }
+
   async getVendorDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
     return this.vendorRepository.getDashboardStats();
   }

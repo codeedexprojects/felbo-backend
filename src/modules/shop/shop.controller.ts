@@ -181,6 +181,11 @@ export default class ShopController {
     });
   };
 
+  getPendingShopCount = async (_req: Request, res: Response): Promise<void> => {
+    const count = await this.shopService.getPendingShopCount();
+    res.status(200).json({ success: true, data: { count } });
+  };
+
   listPendingShops = async (req: Request, res: Response): Promise<void> => {
     const { page, limit } = pendingShopsQuerySchema.parse(req.query);
     const result = await this.shopService.getPendingApprovalShops(page, limit);

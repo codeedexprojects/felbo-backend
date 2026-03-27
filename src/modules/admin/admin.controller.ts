@@ -82,6 +82,11 @@ export class AdminController {
     });
   };
 
+  getPendingRequestCounts = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getPendingRequestCounts();
+    res.status(200).json({ success: true, data: result });
+  };
+
   listVerificationRequests = async (req: Request, res: Response): Promise<void> => {
     const validated = listVendorsSchema.parse(req.query);
 
