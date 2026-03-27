@@ -19,6 +19,7 @@ import {
   CancelBookingByBarberResponse,
   CancelBookingByUserResponse,
   CompleteBookingResponse,
+  MarkNoShowResponse,
   BarberBookingListResponse,
   BarberBookingDetailDto,
   GetBarbersForServicesResponse,
@@ -133,13 +134,20 @@ export class BookingService {
     serviceIds: string[],
     userId: string,
   ): Promise<GetBarbersForServicesResponse> {
-    const [barbers, bookingAmount, user] = await Promise.all([
+    const [barbers, bookingAmount, coinRedeemThreshold, user] = await Promise.all([
       this.barberService.getBarbersForServices(shopId, serviceIds),
       this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_REDEEM_THRESHOLD),
       this.userService.getUserById(userId),
     ]);
 
-    return { barbers, bookingAmount, userCoinBalance: user.felboCoinBalance };
+    return {
+      barbers,
+      bookingAmount,
+      userCoinBalance: user.felboCoinBalance,
+      coinRedeemThreshold,
+      maxServicesPerBooking: staticConfig.booking.maxServicesPerBooking,
+    };
   }
 
   async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
@@ -176,6 +184,12 @@ export class BookingService {
     );
 
     const uniqueServiceIds = [...new Set(input.serviceIds)];
+    const { maxServicesPerBooking } = staticConfig.booking;
+    if (uniqueServiceIds.length > maxServicesPerBooking) {
+      throw new ValidationError(
+        `You can select at most ${maxServicesPerBooking} services per booking.`,
+      );
+    }
     let totalDurationMinutes = 0;
     for (const serviceId of uniqueServiceIds) {
       const duration = barberServiceMap.get(serviceId);
@@ -480,6 +494,12 @@ export class BookingService {
     }
 
     // 5. Validate services and compute total duration
+    const { maxServicesPerBooking } = staticConfig.booking;
+    if (input.serviceIds.length > maxServicesPerBooking) {
+      throw new ValidationError(
+        `You can select at most ${maxServicesPerBooking} services per booking.`,
+      );
+    }
     const barberServiceLinks = await this.barberService.getBarberServicesByBarberId(input.barberId);
     const barberServiceMap = new Map(
       barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
@@ -1151,6 +1171,13 @@ export class BookingService {
       );
     }
 
+    const bookingStartUtc = buildAppointmentDate(booking.date, booking.startTime);
+    if (new Date() < bookingStartUtc) {
+      throw new ConflictError(
+        `Booking cannot be completed before its scheduled start time (${formatAppointmentTime(booking.startTime)}).`,
+      );
+    }
+
     if (booking.verificationCode !== verificationCode) {
       throw new ValidationError('Invalid verification code.');
     }
@@ -1164,7 +1191,7 @@ export class BookingService {
     let completed: Awaited<ReturnType<BookingRepository['updateBookingCompleted']>>;
 
     await withTransaction(async (session) => {
-      completed = await this.bookingRepository.updateBookingCompleted(bookingId, session);
+      completed = await this.bookingRepository.updateBookingCompleted(bookingId, 'BARBER', session);
       if (!completed) throw new ConflictError('Booking has already been completed.');
 
       if (isRazorpay && coinsEarned > 0) {
@@ -1202,6 +1229,73 @@ export class BookingService {
     };
   }
 
+  async markNoShow(bookingId: string, barberId: string): Promise<MarkNoShowResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
+      throw new ConflictError('Only confirmed or completed bookings can be marked as no-show.');
+    }
+
+    if (booking.status === 'COMPLETED' && booking.completedBy === 'BARBER') {
+      throw new ConflictError(
+        'This booking was completed with a verification code — the user was present.',
+      );
+    }
+
+    // Barber must wait at least 10 minutes after startTime before marking no-show
+    const [startH, startM] = booking.startTime.split(':').map(Number);
+    const thresholdMinutes = startH * 60 + startM + 10;
+    const nowMinutes = getCurrentIstMinutes();
+
+    if (nowMinutes < thresholdMinutes) {
+      const thresholdH = Math.floor(thresholdMinutes / 60) % 24;
+      const thresholdMm = thresholdMinutes % 60;
+      const thresholdStr = `${String(thresholdH).padStart(2, '0')}:${String(thresholdMm).padStart(2, '0')}`;
+      throw new ValidationError(
+        `Cannot mark no-show before ${formatAppointmentTime(thresholdStr)}. Please wait 10 minutes after the booking start time.`,
+      );
+    }
+
+    const updated = await this.bookingRepository.updateBookingNoShow(bookingId);
+    if (!updated) {
+      throw new ConflictError('Booking status has already changed. Please refresh and try again.');
+    }
+
+    this.logger.info({
+      action: 'BOOKING_NO_SHOW',
+      module: 'booking',
+      bookingId,
+      barberId,
+      userId: booking.userId.toString(),
+    });
+
+    return {
+      booking: {
+        id: updated._id.toString(),
+        bookingNumber: updated.bookingNumber,
+        status: updated.status,
+        noShowAt: updated.noShowAt!.toISOString(),
+      },
+    };
+  }
+
+  private computeCanMarkNoShow(
+    status: string,
+    completedBy: string | undefined,
+    startTime: string,
+    nowMinutes: number,
+  ): boolean {
+    if (status !== 'CONFIRMED' && status !== 'COMPLETED') return false;
+    if (status === 'COMPLETED' && completedBy !== 'SYSTEM') return false;
+    const [h, m] = startTime.split(':').map(Number);
+    return nowMinutes >= h * 60 + m + 10;
+  }
+
   async getBarberBookings(
     barberId: string,
     page: number,
@@ -1218,6 +1312,7 @@ export class BookingService {
       startDate,
       endDate,
     );
+    const nowMinutes = getCurrentIstMinutes();
     return {
       bookings: bookings.map((b) => ({
         id: b._id.toString(),
@@ -1228,6 +1323,7 @@ export class BookingService {
         startTime: b.startTime,
         services: b.services.map((s) => s.serviceName),
         status: b.status,
+        canMarkNoShow: this.computeCanMarkNoShow(b.status, b.completedBy, b.startTime, nowMinutes),
       })),
       total,
       page,
@@ -1265,6 +1361,12 @@ export class BookingService {
         advancePaid: booking.advancePaid,
         remainingToCollect: booking.remainingAmount,
       },
+      canMarkNoShow: this.computeCanMarkNoShow(
+        booking.status,
+        booking.completedBy,
+        booking.startTime,
+        getCurrentIstMinutes(),
+      ),
     };
   }
 
@@ -1885,5 +1987,9 @@ export class BookingService {
       endDate: toDateStr(new Date(end.getTime() - 86400000)),
       ...stats,
     };
+  }
+
+  hasActiveBookingsForShop(shopId: string): Promise<boolean> {
+    return this.bookingRepository.hasActiveBookingsForShop(shopId);
   }
 }

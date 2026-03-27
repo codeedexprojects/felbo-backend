@@ -34,7 +34,7 @@ export const initiateBookingBodySchema = z.object({
   serviceIds: z
     .array(mongoIdSchema)
     .min(1, 'At least one service is required')
-    .max(10, 'Cannot book more than 10 services at once'),
+    .max(10, 'Too many services selected'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, 'startTime must be in HH:mm format'),
   paymentMethod: z.enum(['RAZORPAY', 'FELBO_COINS']),
@@ -77,6 +77,8 @@ export const cancelBookingByUserBodySchema = z.object({
 export const completeBookingBodySchema = z.object({
   verificationCode: z.string().regex(/^\d{4}$/, 'verificationCode must be a 4-digit number'),
 });
+
+export const markNoShowBodySchema = z.object({});
 
 export const userBookingListQuerySchema = z.object({
   tab: z.enum(['upcoming', 'completed', 'cancelled']).default('upcoming'),

@@ -8,6 +8,8 @@ export interface GetBarbersForServicesResponse {
   }[];
   bookingAmount: number;
   userCoinBalance: number;
+  coinRedeemThreshold: number;
+  maxServicesPerBooking: number;
 }
 
 export interface GetSlotsInput {
@@ -205,6 +207,15 @@ export interface CompleteBookingResponse {
   };
 }
 
+export interface MarkNoShowResponse {
+  booking: {
+    id: string;
+    bookingNumber: string;
+    status: string;
+    noShowAt: string;
+  };
+}
+
 export interface CancelBookingByBarberResponse {
   booking: {
     id: string;
@@ -231,6 +242,7 @@ export interface BarberBookingListItem {
   startTime: string;
   services: string[];
   status: string;
+  canMarkNoShow: boolean;
 }
 
 export interface BarberBookingListResponse {
@@ -263,6 +275,7 @@ export interface BarberBookingDetailDto {
     advancePaid: number;
     remainingToCollect: number;
   };
+  canMarkNoShow: boolean;
 }
 
 export type VendorBookingStatus =

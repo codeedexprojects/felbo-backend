@@ -26,7 +26,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../shared/erro
 import { withTransaction } from '../../shared/database/transaction';
 import { BarberService } from '../barber/barber.service';
 import ShopService from '../shop/shop.service';
-import { getTodayInIst, getCurrentIstDate } from '../../shared/utils/time';
+import { getTodayInIst, getCurrentIstDate, formatAppointmentTime } from '../../shared/utils/time';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -67,11 +67,13 @@ export class BarberAvailabilityService {
       const breakEnd = this.toMinutes(brk.end);
 
       if (breakStart >= breakEnd) {
-        throw new ValidationError(`Break start (${brk.start}) must be before end (${brk.end}).`);
+        throw new ValidationError(
+          `Break start (${formatAppointmentTime(brk.start)}) must be before end (${formatAppointmentTime(brk.end)}).`,
+        );
       }
       if (breakStart < workStart || breakEnd > workEnd) {
         throw new ValidationError(
-          `Break ${brk.start}–${brk.end} falls outside working hours ${workingHours.start}–${workingHours.end}.`,
+          `Break ${formatAppointmentTime(brk.start)}–${formatAppointmentTime(brk.end)} falls outside working hours ${formatAppointmentTime(workingHours.start)}–${formatAppointmentTime(workingHours.end)}.`,
         );
       }
     }
@@ -91,10 +93,20 @@ export class BarberAvailabilityService {
     }
   }
 
+  private validateWorkingHoursOrder(workingHours: { start: string; end: string }): void {
+    if (this.toMinutes(workingHours.start) >= this.toMinutes(workingHours.end)) {
+      throw new ValidationError(
+        `Working hours start (${formatAppointmentTime(workingHours.start)}) must be before end (${formatAppointmentTime(workingHours.end)}).`,
+      );
+    }
+  }
+
   private async validateWithinShopHours(
     shopId: string,
     workingHours: { start: string; end: string },
   ): Promise<void> {
+    this.validateWorkingHoursOrder(workingHours);
+
     const shop = await this.shopService.getShopById(shopId);
     const today = getCurrentIstDate();
     const dayName = DAY_NAMES[today.getDay()] as keyof NonNullable<typeof shop.workingHours>;
@@ -113,12 +125,12 @@ export class BarberAvailabilityService {
 
     if (barberStart < shopOpen) {
       throw new ValidationError(
-        `Working start time ${workingHours.start} is before shop opening time ${dayHours.open}.`,
+        `Working start time ${formatAppointmentTime(workingHours.start)} is before shop opening time ${formatAppointmentTime(dayHours.open)}.`,
       );
     }
     if (barberEnd > shopClose) {
       throw new ValidationError(
-        `Working end time ${workingHours.end} is after shop closing time ${dayHours.close}.`,
+        `Working end time ${formatAppointmentTime(workingHours.end)} is after shop closing time ${formatAppointmentTime(dayHours.close)}.`,
       );
     }
   }
