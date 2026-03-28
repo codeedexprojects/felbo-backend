@@ -21,6 +21,16 @@ function getEnvInt(key: string, fallback: number): number {
   return parsed;
 }
 
+function getEnvFloat(key: string, fallback: number): number {
+  const value = process.env[key];
+  if (value === undefined) return fallback;
+  const parsed = parseFloat(value);
+  if (isNaN(parsed)) {
+    throw new Error(`Environment variable ${key} must be a number, got: ${value}`);
+  }
+  return parsed;
+}
+
 const isProduction = getEnv('NODE_ENV', 'development') === 'production';
 
 export const config = {
@@ -41,7 +51,7 @@ export const config = {
   jwt: {
     secret: getEnv('JWT_SECRET', 'development_secret_key_change_in_production'),
     refreshSecret: getEnv('JWT_REFRESH_SECRET', 'development_refresh_secret_change_in_production'),
-    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 15 * 60), // 15 minutes
+    expirySeconds: getEnvInt('JWT_EXPIRY_SECONDS', 30 * 24 * 60 * 60), // 15 minutes
     adminExpirySeconds: getEnvInt('JWT_ADMIN_EXPIRY_SECONDS', 8 * 60 * 60), // 8 hours
     refreshExpiry: getEnv('JWT_REFRESH_EXPIRY', '30d'),
     adminRefreshExpiry: getEnv('JWT_ADMIN_REFRESH_EXPIRY', '7d'),
@@ -50,23 +60,37 @@ export const config = {
   otp: {
     twoFactorApiKey: getEnv('TWO_FACTOR_API_KEY', ''),
     devFixedOtp: getEnv('DEV_FIXED_OTP', '123456'),
-    dailyLimitUser: getEnvInt('OTP_DAILY_LIMIT_USER', 8),
-    dailyLimitVendor: getEnvInt('OTP_DAILY_LIMIT_VENDOR', 10),
+    dailyLimitUser: getEnvInt('OTP_DAILY_LIMIT_USER', 1000),
+    dailyLimitVendor: getEnvInt('OTP_DAILY_LIMIT_VENDOR', 1000),
   },
 
   razorpay: {
     keyId: getEnv('RAZORPAY_KEY_ID', '') || 'rzp_test_087135',
     keySecret: getEnv('RAZORPAY_KEY_SECRET', '') || 'rzp_test_087135',
     webhookSecret: getEnv('RAZORPAY_WEBHOOK_SECRET', '') || 'rzp_test_087135',
+    chargePercentage: getEnvFloat('RAZORPAY_CHARGE_PERCENTAGE', 2),
+    taxPercentage: getEnvFloat('RAZORPAY_TAX_PERCENTAGE', 18),
   },
 
-  vendor: {
-    registrationFee: getEnvInt('VENDOR_REGISTRATION_FEE', 499),
+  brevo: {
+    apiKey: getEnv('BREVO_API_KEY', ''),
+    fromEmail: getEnv('BREVO_FROM_EMAIL', 'noreply@felbo.in'),
+    fromName: getEnv('BREVO_FROM_NAME', 'Felbo'),
   },
 
   aws: {
     region: getEnv('AWS_REGION', 'ap-south-1'),
     bucket: getEnv('AWS_S3_BUCKET', ''),
+  },
+
+  firebase: {
+    projectId: getEnv('FIREBASE_PROJECT_ID', ''),
+    privateKey: getEnv('FIREBASE_PRIVATE_KEY', ''),
+    clientEmail: getEnv('FIREBASE_CLIENT_EMAIL', ''),
+  },
+
+  booking: {
+    maxServicesPerBooking: getEnvInt('MAX_SERVICES_PER_BOOKING', 3),
   },
 
   admin: {

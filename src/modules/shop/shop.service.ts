@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import ShopRepository from './shop.repository';
 import { IShop } from './shop.model';
@@ -7,32 +7,52 @@ import {
   CreateShopInput,
   UpdateShopInput,
   UpdateWorkingHoursInput,
+  ToggleShopAvailableInput,
   CompleteProfileInput,
   NearbyShopsInput,
+  RecommendedShopsInput,
   SearchShopsInput,
   SearchShopsResponse,
   ShopSearchResultDto,
   ShopDto,
-  NearbyShopDto,
+  NearbyShopCardDto,
+  NearbyShopsResponse,
   ServiceDto,
   BarberDto,
   BarberServiceDto,
   AdminBarberSummaryDto,
   AdminServiceSummaryDto,
-  PublicServiceDto,
   PublicBarberDto,
   ShopDetailsDto,
-  GetShopDetailsOptions,
   OnboardingStatus,
+  AdminShopSearchInput,
+  AdminShopSearchResponse,
+  ShopServicesResponse,
+  ShopServicesInput,
+  VendorShopListDto,
+  ShopAddress,
+  AddAdditionalShopInput,
+  PendingApprovalShopsResponse,
+  PendingApprovalShopDto,
+  PendingShopDetailsDto,
+  PendingShopDetailsBarberDto,
+  PendingShopDetailsServiceDto,
 } from './shop.types';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../shared/errors/index';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import {
+  enqueueShopApproved,
+  enqueueShopRejected,
+} from '../../shared/notification/notification.queue';
 
 import { BarberService } from '../barber/barber.service';
 import { BarberManagementDto, BarberServiceLinkDto } from '../barber/barber.types';
 import { ServiceService } from '../service/service.service';
-
-const DEFAULT_MAX_DISTANCE = 10000; // 10 km
-const DEFAULT_PAGE_LIMIT = 20;
+import UserService from '../user/user.service';
+import { FavoriteService } from '../favorite/favorite.service';
+import { BookingService } from '../booking/booking.service';
+import { formatRating } from '../../shared/utils/rating';
 
 export default class ShopService {
   constructor(
@@ -40,6 +60,10 @@ export default class ShopService {
     private readonly logger: Logger,
     private readonly getBarberService: () => BarberService,
     private readonly getServiceService: () => ServiceService,
+    private readonly getUserService: () => UserService,
+    private readonly configService: ConfigService,
+    private readonly getFavoriteService?: () => FavoriteService,
+    private readonly getBookingService?: () => BookingService,
   ) {}
 
   private get barberService(): BarberService {
@@ -48,6 +72,15 @@ export default class ShopService {
 
   private get serviceService(): ServiceService {
     return this.getServiceService();
+  }
+
+  private get userService(): UserService {
+    return this.getUserService();
+  }
+
+  private async getFavoriteShopIds(userId?: string): Promise<Set<string>> {
+    if (!userId || !this.getFavoriteService) return new Set();
+    return this.getFavoriteService().getFavoriteShopIds(userId);
   }
 
   private toShopDto(shop: IShop): ShopDto {
@@ -62,17 +95,14 @@ export default class ShopService {
       location: shop.location,
       workingHours: shop.workingHours,
       photos: shop.photos,
-      rating: shop.rating,
-      isActive: shop.isActive,
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
+      isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
+      isPrimary: shop.isPrimary,
       status: shop.status,
       onboardingStatus: shop.onboardingStatus,
-    };
-  }
-
-  private toNearbyShopDto(shop: IShop, distance: number): NearbyShopDto {
-    return {
-      ...this.toShopDto(shop),
-      distance: Math.round(distance),
     };
   }
 
@@ -95,7 +125,10 @@ export default class ShopService {
       name: barber.name,
       phone: barber.phone,
       photo: barber.photo,
-      rating: barber.rating,
+      rating: {
+        average: formatRating(barber.rating.average),
+        count: barber.rating.count,
+      },
       status: barber.status,
       isAvailable: barber.isAvailable,
       services: barberServices.map((bs) => this.toBarberServiceDto(bs)),
@@ -115,6 +148,12 @@ export default class ShopService {
     return shop;
   }
 
+  private assertShopActive(shop: IShop): void {
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
+  }
+
   async createShopForVendor(input: CreateShopInput, session?: ClientSession): Promise<ShopDto> {
     const shop = await this.shopRepository.create(input, session);
 
@@ -128,9 +167,76 @@ export default class ShopService {
     return this.toShopDto(shop);
   }
 
+  async addAdditionalShop(vendorId: string, input: AddAdditionalShopInput): Promise<ShopDto> {
+    const existingShops = await this.shopRepository.findAllByVendorId(vendorId);
+
+    const primaryShop = existingShops.find((s) => s.isPrimary && s.status !== 'DELETED');
+    if (!primaryShop || primaryShop.onboardingStatus !== 'COMPLETED') {
+      throw new ConflictError('Complete setup of your primary shop before adding another.');
+    }
+
+    const hasPendingApproval = existingShops.some((s) => s.status === 'PENDING_APPROVAL');
+    if (hasPendingApproval) {
+      throw new ConflictError(
+        'You have a shop pending admin approval. Please wait for it to be approved before adding another.',
+      );
+    }
+
+    const shop = await this.shopRepository.createCompleted({
+      vendorId,
+      name: input.name,
+      shopType: input.shopType,
+      phone: input.phone,
+      address: input.address,
+      location: input.location,
+      description: input.description,
+      workingHours: input.workingHours,
+      photos: input.photos,
+    });
+
+    this.logger.info({
+      action: 'SHOP_ADDED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+    });
+
+    return this.toShopDto(shop);
+  }
+
   async getMyShops(vendorId: string): Promise<ShopDto[]> {
     const shops = await this.shopRepository.findAllByVendorId(vendorId);
     return shops.map((shop) => this.toShopDto(shop));
+  }
+
+  async getMyShopsWithBarberProfile(vendorId: string): Promise<VendorShopListDto[]> {
+    const shops = await this.shopRepository.findAllByVendorId(vendorId);
+    if (shops.length === 0) return [];
+
+    const shopIds = shops.map((s) => s._id.toString());
+    const [barberCounts, serviceCounts] = await Promise.all([
+      this.barberService.countBarbersByShopIds(shopIds),
+      this.serviceService.countServicesByShopIds(shopIds),
+    ]);
+
+    return shops.map((shop) => {
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        name: shop.name,
+        imageUrl: shop.photos?.[0] || null,
+        address: this.formatAddress(shop.address),
+        serviceCount: serviceCounts.get(shopId) || 0,
+        barberCount: barberCounts.get(shopId) || 0,
+        onboardingStatus: shop.onboardingStatus,
+        status: shop.status,
+      };
+    });
+  }
+
+  private formatAddress(address: ShopAddress): string {
+    const parts = [address.line1, address.line2, address.area, address.city].filter(Boolean);
+    return parts.join(', ');
   }
 
   async getShop(shopId: string, vendorId: string): Promise<ShopDto> {
@@ -144,8 +250,67 @@ export default class ShopService {
     return this.toShopDto(shop);
   }
 
+  async getShopsByIds(shopIds: string[]): Promise<ShopDto[]> {
+    const shops = await this.shopRepository.findByIds(shopIds);
+    return shops.map((s) => this.toShopDto(s));
+  }
+
+  async deleteShop(shopId: string, vendorId: string): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
+
+    if (shop.isPrimary) {
+      throw new ForbiddenError('Primary shop cannot be deleted.');
+    }
+
+    if (this.getBookingService) {
+      const hasActive = await this.getBookingService().hasActiveBookingsForShop(shopId);
+      if (hasActive) {
+        throw new ConflictError('Cannot delete shop with active bookings.');
+      }
+    }
+
+    const updated = await this.shopRepository.updateStatus(shop._id.toString(), 'DELETED');
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_DELETED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+    });
+
+    return this.toShopDto(updated);
+  }
+
+  async toggleShopAvailable(
+    shopId: string,
+    vendorId: string,
+    input: ToggleShopAvailableInput,
+  ): Promise<ShopDto> {
+    const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
+
+    const updated = await this.shopRepository.updateIsAvailable(
+      shop._id.toString(),
+      input.isAvailable,
+    );
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    this.logger.info({
+      action: 'SHOP_AVAILABILITY_TOGGLED',
+      module: 'shop',
+      shopId: shop._id.toString(),
+      vendorId,
+      isAvailable: input.isAvailable,
+    });
+
+    return this.toShopDto(updated);
+  }
+
   async updateShop(shopId: string, vendorId: string, input: UpdateShopInput): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -181,6 +346,7 @@ export default class ShopService {
     input: UpdateWorkingHoursInput,
   ): Promise<ShopDto> {
     const shop = await this.assertShopOwnership(shopId, vendorId);
+    this.assertShopActive(shop);
 
     const updated = await this.shopRepository.updateWorkingHours(
       shop._id.toString(),
@@ -237,66 +403,27 @@ export default class ShopService {
   }
 
   // --- Public discovery ---
-  private computeDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6_371_000; // Earth radius in metres
-    const φ1 = (lat1 * Math.PI) / 180;
-    const φ2 = (lat2 * Math.PI) / 180;
-    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
-    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
-
-  async getShopDetails(shopId: string, options?: GetShopDetailsOptions): Promise<ShopDetailsDto> {
+  async getShopDetails(shopId: string, userId?: string): Promise<ShopDetailsDto> {
     const shop = await this.shopRepository.findById(shopId);
     if (!shop || shop.status === 'DELETED') {
       throw new NotFoundError('Shop not found.');
     }
 
-    const [services, barbers, barberServices] = await Promise.all([
-      this.serviceService.getServicesByShopId(shopId),
+    const [barbers, favoriteShopIds] = await Promise.all([
       this.barberService.getBarbersByShopId(shopId),
-      this.barberService.getBarberServicesByShopId(shopId),
+      this.getFavoriteShopIds(userId),
     ]);
 
-    // Build a map of serviceId → list of barber-specific durations
-    const durationMap = new Map<string, number[]>();
-    for (const bs of barberServices) {
-      const sid = bs.serviceId;
-      const existing = durationMap.get(sid) ?? [];
-      existing.push(bs.durationMinutes);
-      durationMap.set(sid, existing);
-    }
-
-    const publicServices: PublicServiceDto[] = services.map((s) => {
-      const durations = durationMap.get(s.id) ?? [];
-      const minDuration = durations.length > 0 ? Math.min(...durations) : s.baseDurationMinutes;
-      const maxDuration = durations.length > 0 ? Math.max(...durations) : s.baseDurationMinutes;
-      return {
-        id: s.id,
-        categoryId: s.categoryId,
-        name: s.name,
-        basePrice: s.basePrice,
-        minDuration,
-        maxDuration,
-        applicableFor: s.applicableFor,
-        description: s.description,
-      };
-    });
-
-    const publicBarbers: PublicBarberDto[] = barbers.map((b) => ({
+    const publicBarbers: PublicBarberDto[] = barbers.slice(0, 4).map((b) => ({
       id: b.id,
       name: b.name,
       photo: b.photo,
-      rating: b.rating,
+      rating: {
+        average: formatRating(b.rating.average),
+        count: b.rating.count,
+      },
       isAvailableToday: b.isAvailable,
     }));
-
-    let distance: number | undefined;
-    if (options?.latitude !== undefined && options?.longitude !== undefined) {
-      const [shopLon, shopLat] = shop.location.coordinates;
-      distance = this.computeDistanceMeters(options.latitude, options.longitude, shopLat, shopLon);
-    }
 
     return {
       id: shop._id.toString(),
@@ -304,49 +431,172 @@ export default class ShopService {
       description: shop.description,
       shopType: shop.shopType,
       address: shop.address,
-      distance,
-      rating: shop.rating,
+      location: shop.location,
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
       workingHours: shop.workingHours,
       photos: shop.photos,
-      services: publicServices,
       barbers: publicBarbers,
+      isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
+      isFavorite: favoriteShopIds.has(shopId),
     };
   }
 
-  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopDto[]> {
-    const maxDistance = input.maxDistanceMeters ?? DEFAULT_MAX_DISTANCE;
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+  private isShopOpenToday(shop: IShop): boolean {
+    if (!shop.workingHours) return true;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = days[new Date().getDay()] as keyof typeof shop.workingHours;
+    const todayHours = shop.workingHours[todayKey];
+    return !!(todayHours && todayHours.isOpen);
+  }
+
+  private getTodayClosingTime(shop: IShop): string | null {
+    if (!shop.workingHours) return null;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const todayKey = days[new Date().getDay()] as keyof typeof shop.workingHours;
+    const todayHours = shop.workingHours[todayKey];
+    if (!todayHours || !todayHours.isOpen) return null;
+    return todayHours.close;
+  }
+
+  async getNearbyShops(input: NearbyShopsInput): Promise<NearbyShopsResponse> {
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.SHOP_MAX_DISTANCE_METERS,
+    );
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
 
-    const results = await this.shopRepository.findNearby(
+    const { results, total } = await this.shopRepository.findNearby(
       input.longitude,
       input.latitude,
       maxDistance,
-      { shopType: input.shopType },
+      { shopType: input.shopType, categoryId: input.categoryId },
       skip,
       limit,
     );
 
-    return results.map((r) => this.toNearbyShopDto(r.shop, r.distance));
+    const shopIds = results.map((r) => r.shop._id.toString());
+    const [allServices, favoriteShopIds] = await Promise.all([
+      this.serviceService.getServicesByShopIds(shopIds),
+      this.getFavoriteShopIds(input.userId),
+    ]);
+
+    const servicesByShopId = new Map<string, string[]>();
+    for (const svc of allServices) {
+      const key = svc.shopId;
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      const names = servicesByShopId.get(key)!;
+      if (names.length < 3) names.push(svc.name);
+    }
+
+    const shops: NearbyShopCardDto[] = results.map((r) => {
+      const shop = r.shop;
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        image: shop.photos?.[0] ?? null,
+        name: shop.name,
+        shopType: shop.shopType,
+        address: shop.address,
+        isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
+        closingTime: this.getTodayClosingTime(shop),
+        distance: Math.round(r.distance / 100) / 10,
+        topServices: servicesByShopId.get(shopId) ?? [],
+        isFavorite: favoriteShopIds.has(shopId),
+        rating: {
+          average: formatRating(shop.rating.average),
+          count: shop.rating.count,
+        },
+      };
+    });
+
+    return { shops, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getRecommendedShops(input: RecommendedShopsInput): Promise<NearbyShopsResponse> {
+    const limit = input.limit ?? 20;
+    const page = input.page ?? 1;
+    const skip = (page - 1) * limit;
+
+    const [user, favoriteShopIds] = await Promise.all([
+      this.userService.getUserById(input.userId).catch(() => null),
+      this.getFavoriteShopIds(input.userId),
+    ]);
+    const gender = user?.gender ?? null;
+
+    const shopTypes =
+      gender === 'MALE' ? ['MENS', 'UNISEX'] : gender === 'FEMALE' ? ['WOMENS', 'UNISEX'] : null;
+
+    const maxDistance = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.RECOMMENDED_SHOPS_MAX_DISTANCE_METERS,
+    );
+    const { results, total } = await this.shopRepository.findRecommended(
+      input.longitude,
+      input.latitude,
+      maxDistance,
+      shopTypes,
+      skip,
+      limit,
+      input.categoryId,
+    );
+
+    const shopIds = results.map((r) => r.shop._id.toString());
+    const allServices = await this.serviceService.getServicesByShopIds(shopIds);
+
+    const servicesByShopId = new Map<string, string[]>();
+    for (const svc of allServices) {
+      const key = svc.shopId;
+      if (!servicesByShopId.has(key)) servicesByShopId.set(key, []);
+      const names = servicesByShopId.get(key)!;
+      if (names.length < 3) names.push(svc.name);
+    }
+
+    const shops: NearbyShopCardDto[] = results.map((r) => {
+      const shop = r.shop;
+      const shopId = shop._id.toString();
+      return {
+        id: shopId,
+        image: shop.photos?.[0] ?? null,
+        name: shop.name,
+        shopType: shop.shopType,
+        address: shop.address,
+        isAvailable: shop.isAvailable && this.isShopOpenToday(shop),
+        closingTime: this.getTodayClosingTime(shop),
+        distance: Math.round(r.distance / 100) / 10,
+        topServices: servicesByShopId.get(shopId) ?? [],
+        isFavorite: favoriteShopIds.has(shopId),
+        rating: {
+          average: formatRating(shop.rating.average),
+          count: shop.rating.count,
+        },
+      };
+    });
+
+    return { shops, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async searchShops(input: SearchShopsInput): Promise<SearchShopsResponse> {
-    const limit = input.limit ?? DEFAULT_PAGE_LIMIT;
+    const limit = input.limit ?? 20;
     const page = input.page ?? 1;
     const skip = (page - 1) * limit;
+
+    const trimmedQuery = input.query?.trim();
+    const serviceShopIds = trimmedQuery
+      ? await this.serviceService.getShopIdsByServiceQuery(trimmedQuery)
+      : undefined;
 
     const { shops, total } = await this.shopRepository.searchByName(
       input.query,
       {
-        city: input.city,
         shopType: input.shopType,
-        minRating: input.minRating,
-        serviceName: input.serviceName,
-        availableNow: input.availableNow,
+        categoryIds: input.categoryIds,
         latitude: input.latitude,
         longitude: input.longitude,
         maxDistanceMeters: input.maxDistanceMeters,
+        serviceShopIds,
       },
       skip,
       limit,
@@ -364,7 +614,7 @@ export default class ShopService {
 
     const result: ShopSearchResultDto[] = shops.map((s) => {
       const shopId = s._id.toString();
-      const shopServices = (servicesByShopId.get(shopId) ?? []).map((svc) => ({
+      const shopServices = (servicesByShopId.get(shopId) ?? []).slice(0, 5).map((svc) => ({
         id: svc.id,
         name: svc.name,
         basePrice: svc.basePrice,
@@ -374,12 +624,18 @@ export default class ShopService {
         id: shopId,
         name: s.name,
         photos: s.photos ?? [],
+        shopType: s.shopType,
         address: s.address,
         services: shopServices,
+        isAvailable: s.isAvailable && this.isShopOpenToday(s),
+        rating: {
+          average: formatRating(s.rating.average),
+          count: s.rating.count,
+        },
       };
 
       if ('distance' in s && typeof s.distance === 'number') {
-        dto.distance = Math.round(s.distance);
+        dto.distance = Math.round(s.distance / 100) / 10;
       }
 
       return dto;
@@ -401,6 +657,14 @@ export default class ShopService {
     return this.serviceService.getActiveServicesByIds(serviceIds, shopId);
   }
 
+  async syncShopCategory(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.addCategoryIfMissing(shopId, categoryId);
+  }
+
+  async removeCategoryFromShop(shopId: string, categoryId: string): Promise<void> {
+    await this.shopRepository.removeCategoryFromShop(shopId, categoryId);
+  }
+
   async updateOnboardingStatus(
     shopId: string,
     status: OnboardingStatus,
@@ -419,10 +683,199 @@ export default class ShopService {
       photo: b.photo,
       isAvailable: b.isAvailable,
       shopId: b.shopId,
+      cancellationCount: b.cancellationCount,
+      cancellationsThisWeek: b.cancellationsThisWeek,
     }));
   }
 
   async getServicesByShopIds(shopIds: string[]): Promise<AdminServiceSummaryDto[]> {
     return this.serviceService.getServicesByShopIds(shopIds);
+  }
+
+  async incrementShopCancellationCount(
+    shopId: string,
+  ): Promise<{ cancellationsThisWeek: number; vendorId: string }> {
+    const updated = await this.shopRepository.incrementCancellation(shopId);
+    if (!updated) throw new NotFoundError('Shop not found.');
+
+    return {
+      cancellationsThisWeek: updated.cancellationsThisWeek,
+      vendorId: updated.vendorId.toString(),
+    };
+  }
+
+  async updateRating(shopId: string, average: number, count: number): Promise<void> {
+    await this.shopRepository.updateRating(shopId, average, count);
+  }
+
+  getShopIdsByVendorIds(vendorIds: string[]): Promise<string[]> {
+    return this.shopRepository.findIdsByVendorIds(vendorIds);
+  }
+
+  getCancellationStatsByVendorId(
+    vendorId: string,
+  ): Promise<{ cancellationCount: number; cancellationsThisWeek: number }> {
+    return this.shopRepository.getCancellationStatsByVendorId(vendorId);
+  }
+
+  async setAvailabilityByVendorId(vendorId: string, isAvailable: boolean): Promise<void> {
+    await this.shopRepository.updateIsAvailableByVendorId(vendorId, isAvailable);
+    this.logger.info({
+      action: isAvailable ? 'VENDOR_SHOPS_REOPENED' : 'VENDOR_SHOPS_CLOSED',
+      module: 'shop',
+      vendorId,
+    });
+  }
+
+  getAllPhotoUrls(): Promise<string[]> {
+    return this.shopRepository.getAllPhotoUrls();
+  }
+
+  async getPendingShopDetails(shopId: string): Promise<PendingShopDetailsDto> {
+    const shop = await this.shopRepository.findPendingById(shopId);
+    if (!shop) throw new NotFoundError('Shop not found or not pending approval.');
+
+    const [barbers, services] = await Promise.all([
+      this.barberService.getBarbersByShopId(shopId),
+      this.serviceService.getServicesByShopId(shopId),
+    ]);
+
+    const mappedBarbers: PendingShopDetailsBarberDto[] = barbers.map((b) => ({
+      id: b.id,
+      name: b.name,
+      phone: b.phone,
+      photo: b.photo,
+      isAvailable: b.isAvailable,
+      serviceCount: b.serviceCount,
+    }));
+
+    const mappedServices: PendingShopDetailsServiceDto[] = services.map((s) => ({
+      id: s.id,
+      categoryId: s.categoryId,
+      name: s.name,
+      basePrice: s.basePrice,
+      baseDurationMinutes: s.baseDurationMinutes,
+      applicableFor: s.applicableFor,
+      description: s.description,
+      status: s.status,
+    }));
+
+    return {
+      id: (shop._id as { toString(): string }).toString(),
+      name: shop.name,
+      shopType: shop.shopType,
+      phone: shop.phone,
+      address: shop.address,
+      location: shop.location,
+      description: shop.description,
+      workingHours: shop.workingHours,
+      photos: shop.photos ?? [],
+      rating: {
+        average: formatRating(shop.rating.average),
+        count: shop.rating.count,
+      },
+      createdAt: shop.createdAt,
+      vendor: {
+        id: shop.vendor._id.toString(),
+        name: shop.vendor.ownerName,
+        phone: shop.vendor.phone,
+        email: shop.vendor.email,
+      },
+      services: mappedServices,
+      barbers: mappedBarbers,
+    };
+  }
+
+  async getPendingShopCount(): Promise<number> {
+    return this.shopRepository.findPendingApprovalCount();
+  }
+
+  async getPendingApprovalShops(
+    page: number,
+    limit: number,
+  ): Promise<PendingApprovalShopsResponse> {
+    const { shops, total } = await this.shopRepository.findPendingApproval(page, limit);
+
+    const dtos: PendingApprovalShopDto[] = shops.map((s) => ({
+      id: (s._id as { toString(): string }).toString(),
+      name: s.name,
+      shopType: s.shopType,
+      address: s.address,
+      vendorId: s.vendorId.toString(),
+      vendorName: s.vendorName,
+      vendorPhone: s.vendorPhone,
+      createdAt: s.createdAt,
+    }));
+
+    return { shops: dtos, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async approveShop(shopId: string): Promise<void> {
+    const shop = await this.shopRepository.findById(shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+    if (shop.status !== 'PENDING_APPROVAL') {
+      throw new ConflictError('Shop is not pending approval.');
+    }
+
+    await this.shopRepository.updateStatus(shopId, 'ACTIVE');
+
+    this.logger.info({
+      action: 'SHOP_APPROVED',
+      module: 'shop',
+      shopId,
+      vendorId: shop.vendorId.toString(),
+    });
+
+    await enqueueShopApproved({ vendorId: shop.vendorId.toString(), shopName: shop.name });
+  }
+
+  async rejectShop(shopId: string, reason: string): Promise<void> {
+    const shop = await this.shopRepository.findById(shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+    if (shop.status !== 'PENDING_APPROVAL') {
+      throw new ConflictError('Shop is not pending approval.');
+    }
+
+    await this.shopRepository.updateStatus(shopId, 'DELETED');
+
+    this.logger.info({
+      action: 'SHOP_REJECTED',
+      module: 'shop',
+      shopId,
+      vendorId: shop.vendorId.toString(),
+      reason,
+    });
+
+    await enqueueShopRejected({ vendorId: shop.vendorId.toString(), shopName: shop.name, reason });
+  }
+
+  async adminSearchShops(input: AdminShopSearchInput): Promise<AdminShopSearchResponse> {
+    const limit = input.limit ?? 20;
+    const page = input.page ?? 1;
+    const skip = (page - 1) * limit;
+
+    const { results, total } = await this.shopRepository.adminSearchShops(input.query, skip, limit);
+
+    return { shops: results, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getShopServices(input: ShopServicesInput): Promise<ShopServicesResponse> {
+    const shop = await this.shopRepository.findById(input.shopId);
+    if (!shop || shop.status === 'DELETED') {
+      throw new NotFoundError('Shop not found.');
+    }
+
+    const categoriesWithServices = await this.serviceService.getServicesWithCategories(
+      input.shopId,
+      input.type,
+    );
+
+    return {
+      categories: categoriesWithServices,
+    };
   }
 }

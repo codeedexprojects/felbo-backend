@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import VendorService from './vendor.service';
+import { KERALA_DISTRICTS } from '../../shared/constants';
 import {
   sendOtpSchema,
   loginVerifyOtpSchema,
@@ -8,6 +9,12 @@ import {
   registerIndependentInitiateSchema,
   registerIndependentConfirmSchema,
   refreshTokenSchema,
+  fcmTokenSchema,
+  updateProfileSchema,
+  dashboardStatsQuerySchema,
+  vendorBookingsQuerySchema,
+  vendorBookingIdParamSchema,
+  deactivateAccountSchema,
 } from './vendor.validators';
 
 export default class VendorController {
@@ -53,6 +60,15 @@ export default class VendorController {
     });
   };
 
+  getRegistrationPaymentSummary = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.vendorService.getRegistrationPaymentSummary();
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   registerIndependentInitiate = async (req: Request, res: Response): Promise<void> => {
     const validated = registerIndependentInitiateSchema.parse(req.body);
     const result = await this.vendorService.registerIndependentInitiate(validated);
@@ -82,8 +98,27 @@ export default class VendorController {
     });
   };
 
+  getOnboardingStatus = async (req: Request, res: Response): Promise<void> => {
+    const result = await this.vendorService.getOnboardingStatus(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
   getProfile = async (req: Request, res: Response): Promise<void> => {
     const result = await this.vendorService.getProfile(req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  updateProfile = async (req: Request, res: Response): Promise<void> => {
+    const validated = updateProfileSchema.parse(req.body);
+    const result = await this.vendorService.updateProfile(req.user!.sub, validated);
 
     res.status(200).json({
       success: true,
@@ -107,6 +142,77 @@ export default class VendorController {
     res.status(200).json({
       success: true,
       message: 'Logged out successfully.',
+    });
+  };
+
+  deactivateAccount = async (req: Request, res: Response): Promise<void> => {
+    const { reason } = deactivateAccountSchema.parse(req.body);
+    await this.vendorService.deactivateAccount(req.user!.sub, reason);
+    res.status(200).json({ success: true, message: 'Account deactivated successfully.' });
+  };
+
+  registerFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.registerFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token registered',
+    });
+  };
+
+  unregisterFcmToken = async (req: Request, res: Response): Promise<void> => {
+    const { token } = fcmTokenSchema.parse(req.body);
+    await this.vendorService.unregisterFcmToken(req.user!.sub, token);
+
+    res.status(200).json({
+      success: true,
+      message: 'Token removed',
+    });
+  };
+
+  getDashboardStats = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = dashboardStatsQuerySchema.parse(req.query);
+    const result = await this.vendorService.getDashboardCounts(req.user!.sub, shopId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getVendorBookings = async (req: Request, res: Response): Promise<void> => {
+    const { shopId, status, page, limit, startDate, endDate } = vendorBookingsQuerySchema.parse(
+      req.query,
+    );
+    const result = await this.vendorService.getVendorBookings(req.user!.sub, {
+      shopId,
+      status,
+      page,
+      limit,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(`${endDate}T23:59:59.999Z`) : undefined,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getVendorBookingDetail = async (req: Request, res: Response): Promise<void> => {
+    const { bookingId } = vendorBookingIdParamSchema.parse(req.params);
+    const result = await this.vendorService.getVendorBookingDetail(req.user!.sub, bookingId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+  getKeralaDistricts = (_req: Request, res: Response): void => {
+    res.status(200).json({
+      success: true,
+      data: KERALA_DISTRICTS,
     });
   };
 }

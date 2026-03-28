@@ -34,12 +34,13 @@ export interface ListUsersFilter {
 }
 
 export interface UserListItemDto {
+  slNo: number;
   id: string;
   name: string;
   phone: string;
   email: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   lastLoginAt: Date | null;
   registeredAt: Date;
@@ -68,6 +69,48 @@ export interface UserIssueDto {
   createdAt: Date;
 }
 
+// ─── Broadcast Notification ─────────────────────────────────────────────────
+
+export type BroadcastAudience = 'users' | 'barbers' | 'vendors' | 'all';
+
+export interface BroadcastNotificationInput {
+  audience: BroadcastAudience;
+  title: string;
+  body: string;
+  imageUrl?: string;
+}
+
+// ─── Dashboard ──────────────────────────────────────────────────────────────
+
+export interface DashboardRecentIssueDto {
+  id: string;
+  userName: string;
+  userProfileUrl: string | null;
+  reason: string;
+  status: 'OPEN' | 'RESOLVED' | 'REJECTED';
+  createdAt: Date;
+}
+
+export interface SuperAdminDashboardDto {
+  totalUsers: number;
+  totalVendors: number;
+  totalBookings: number;
+  todaysBookings: number;
+  todaysRevenue: number;
+  pendingVerifications: number;
+  pendingShops: number;
+  recentIssues: DashboardRecentIssueDto[];
+}
+
+export interface AssociationAdminDashboardDto {
+  myVendorsCount: number;
+  myVendorsBookings: {
+    today: number;
+    total: number;
+  };
+  myVendorsRevenue: number;
+}
+
 export interface UserDetailDto {
   id: string;
   name: string;
@@ -75,7 +118,7 @@ export interface UserDetailDto {
   email: string | null;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason: string | null;
-  walletBalance: number;
+  felboCoinBalance: number;
   cancellationCount: number;
   registeredAt: Date;
   lastLoginAt: Date | null;

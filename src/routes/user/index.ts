@@ -5,6 +5,14 @@ import { authorize } from '../../shared/middleware/authorize';
 import authRoutes from './auth.routes';
 import profileRoutes from './profile.routes';
 import issueRoutes from './issue.routes';
+import fcmRoutes from './fcm.routes';
+import homeRoutes from './home.routes';
+import shopRoutes from './shop.routes';
+import bookingRoutes from './booking.routes';
+import favoritesRoutes from './favorites.routes';
+import reviewRoutes from './review.routes';
+import felboCoinRoutes from './felbocoin.routes';
+import notificationRoutes from './notification.routes';
 
 const router = Router();
 
@@ -15,5 +23,13 @@ router.use(authorize('USER'));
 
 router.use('/profile', profileRoutes);
 router.use('/issues', issueRoutes);
+router.use('/fcm-token', fcmRoutes);
+router.use('/home', homeRoutes);
+router.use('/shops', shopRoutes);
+router.use('/favorites', favoritesRoutes);
+router.use('/bookings', bookingRoutes);
+router.use('/reviews', reviewRoutes);
+router.use('/felbocoin', felboCoinRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;

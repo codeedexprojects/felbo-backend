@@ -1,21 +1,58 @@
 import { Request, Response } from 'express';
 import ShopService from './shop.service';
 import {
+  createShopSchema,
   updateShopSchema,
+  toggleAvailableSchema,
   updateWorkingHoursSchema,
   nearbyShopsSchema,
+  recommendedShopsSchema,
   searchShopsSchema,
   shopIdParamSchema,
-  shopDetailsQuerySchema,
   shopIdOnboardingParamSchema,
   completeProfileSchema,
+  adminSearchShopsSchema,
+  shopServicesSchema,
+  addAdditionalShopSchema,
+  pendingShopsQuerySchema,
+  rejectShopSchema,
 } from './shop.validators';
 
 export default class ShopController {
   constructor(private readonly shopService: ShopService) {}
 
+  createShop = async (req: Request, res: Response): Promise<void> => {
+    const { location, ...rest } = createShopSchema.parse(req.body);
+    const result = await this.shopService.createShopForVendor({
+      ...rest,
+      vendorId: req.user!.sub,
+      location: {
+        type: 'Point',
+        coordinates: [location.longitude, location.latitude],
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  addAdditionalShop = async (req: Request, res: Response): Promise<void> => {
+    const validated = addAdditionalShopSchema.parse(req.body);
+    const result = await this.shopService.addAdditionalShop(req.user!.sub, {
+      ...validated,
+      location: {
+        type: 'Point',
+        coordinates: [validated.location.longitude, validated.location.latitude],
+      },
+    });
+
+    res.status(201).json({ success: true, data: result });
+  };
+
   getMyShops = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.shopService.getMyShops(req.user!.sub);
+    const result = await this.shopService.getMyShopsWithBarberProfile(req.user!.sub);
 
     res.status(200).json({
       success: true,
@@ -68,7 +105,20 @@ export default class ShopController {
 
   getNearbyShops = async (req: Request, res: Response): Promise<void> => {
     const validated = nearbyShopsSchema.parse(req.query);
-    const result = await this.shopService.getNearbyShops(validated);
+    const result = await this.shopService.getNearbyShops({ ...validated, userId: req.user!.sub });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getRecommendedShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = recommendedShopsSchema.parse(req.query);
+    const result = await this.shopService.getRecommendedShops({
+      ...validated,
+      userId: req.user!.sub,
+    });
 
     res.status(200).json({
       success: true,
@@ -88,8 +138,87 @@ export default class ShopController {
 
   getShopDetails = async (req: Request, res: Response): Promise<void> => {
     const { id } = shopIdParamSchema.parse(req.params);
-    const { latitude, longitude } = shopDetailsQuerySchema.parse(req.query);
-    const result = await this.shopService.getShopDetails(id, { latitude, longitude });
+    const result = await this.shopService.getShopDetails(id, req.user?.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getShopServices = async (req: Request, res: Response): Promise<void> => {
+    const { id } = shopIdParamSchema.parse(req.params);
+    const { type } = shopServicesSchema.parse(req.query);
+
+    const result = await this.shopService.getShopServices({
+      shopId: id,
+      type: type === 'UNISEX' ? 'ALL' : (type as 'MENS' | 'WOMENS' | 'ALL' | undefined),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  deleteShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.deleteShop(shopId, req.user!.sub);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  adminSearchShops = async (req: Request, res: Response): Promise<void> => {
+    const validated = adminSearchShopsSchema.parse(req.query);
+    const result = await this.shopService.adminSearchShops(validated);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  };
+
+  getPendingShopCount = async (_req: Request, res: Response): Promise<void> => {
+    const count = await this.shopService.getPendingShopCount();
+    res.status(200).json({ success: true, data: { count } });
+  };
+
+  listPendingShops = async (req: Request, res: Response): Promise<void> => {
+    const { page, limit } = pendingShopsQuerySchema.parse(req.query);
+    const result = await this.shopService.getPendingApprovalShops(page, limit);
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  getPendingShopDetails = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const result = await this.shopService.getPendingShopDetails(shopId);
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  approveShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    await this.shopService.approveShop(shopId);
+
+    res.status(200).json({ success: true, message: 'Shop approved.' });
+  };
+
+  rejectShop = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const { reason } = rejectShopSchema.parse(req.body);
+    await this.shopService.rejectShop(shopId, reason);
+
+    res.status(200).json({ success: true, message: 'Shop rejected.' });
+  };
+
+  toggleShopAvailable = async (req: Request, res: Response): Promise<void> => {
+    const { shopId } = shopIdOnboardingParamSchema.parse(req.params);
+    const validated = toggleAvailableSchema.parse(req.body);
+    const result = await this.shopService.toggleShopAvailable(shopId, req.user!.sub, validated);
 
     res.status(200).json({
       success: true,

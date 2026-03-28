@@ -1,3 +1,4 @@
+import type { Types } from 'mongoose';
 import { Logger } from 'winston';
 import VendorRepository from './vendor.repository';
 import { IVendor } from './vendor.model';
@@ -14,6 +15,7 @@ import {
   RegisterIndependentConfirmInput,
   RegisterIndependentConfirmResponse,
   RegistrationStatusResponse,
+  OnboardingStatusResponse,
   VendorProfileDto,
   ListVendorsFilter,
   ListVendorsResponse,
@@ -22,20 +24,42 @@ import {
   VendorAdminDetail,
   VendorRequestAdminDetail,
   RefreshTokenResponse,
+  UpdateProfileInput,
+  UpdateProfileResponse,
+  VendorDashboardCountsDto,
 } from './vendor.types';
+import {
+  VendorBookingListResponse,
+  VendorBookingStatus,
+  VendorBookingDetailDto,
+} from '../booking/booking.types';
+import { RegistrationPaymentSummaryResponse } from './vendor.types';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import PaymentService from '../payment/payment.service';
 import ShopService from '../shop/shop.service';
+import { BarberService } from '../barber/barber.service';
+import { BookingService } from '../booking/booking.service';
+import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
+import { formatRating } from '../../shared/utils/rating';
 import {
   UnauthorizedError,
   ForbiddenError,
   NotFoundError,
   ConflictError,
   ValidationError,
+  AppError,
 } from '../../shared/errors/index';
 import { withTransaction } from '../../shared/database/transaction';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { getRedisClient } from '../../shared/redis/redis';
+import { config } from '../../shared/config/config.service';
+import {
+  enqueueVendorApproved,
+  enqueueVendorRejected,
+} from '../../shared/notification/notification.queue';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -47,11 +71,34 @@ export default class VendorService {
     private readonly otpService: OtpService,
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
-    private readonly paymentService: PaymentService,
-    private readonly shopService: ShopService,
-    private readonly registrationFee: number,
+    private readonly getPaymentService: () => PaymentService,
+    private readonly getShopService: () => ShopService,
+    private readonly getBarberService: () => BarberService,
+    private readonly getBookingService: () => BookingService,
+    private readonly getAvailabilityService: () => BarberAvailabilityService,
+    private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {}
+
+  private get paymentService(): PaymentService {
+    return this.getPaymentService();
+  }
+
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
+  }
+
+  private get bookingService(): BookingService {
+    return this.getBookingService();
+  }
+
+  private get availabilityService(): BarberAvailabilityService {
+    return this.getAvailabilityService();
+  }
 
   private toVendorDto(vendor: IVendor): LoginVerifyOtpResponse['vendor'] {
     return {
@@ -59,50 +106,76 @@ export default class VendorService {
       phone: vendor.phone,
       ownerName: vendor.ownerName,
       email: vendor.email || null,
+      profilePhoto: vendor.profilePhoto || null,
+      verificationStatus: vendor.verificationStatus,
     };
   }
 
   private toProfileDto(
     vendor: IVendor,
     onboardingStatus: VendorProfileDto['onboardingStatus'],
+    shopDetails: VendorProfileDto['shopDetails'],
+    isVendorBarber: boolean,
   ): VendorProfileDto {
     return {
       id: vendor._id.toString(),
       phone: vendor.phone,
       ownerName: vendor.ownerName,
       email: vendor.email || null,
+      profilePhoto: vendor.profilePhoto || null,
       registrationType: vendor.registrationType,
       verificationStatus: vendor.verificationStatus,
       status: vendor.status,
       onboardingStatus,
+      shopDetails,
+      isVendorBarber,
     };
   }
 
-  private async getShopOnboardingStatus(
-    vendorId: string,
-  ): Promise<VendorProfileDto['onboardingStatus']> {
+  private async getOnboardingInfo(vendorId: string): Promise<{
+    onboardingStatus: OnboardingStatusResponse['onboardingStatus'];
+    shopDetails: OnboardingStatusResponse['shopDetails'];
+  }> {
     const shops = await this.shopService.getMyShops(vendorId);
-    if (shops.length === 0) return null;
+    const primaryShop = shops.find((s) => s.isPrimary && s.status !== 'DELETED');
 
-    // Return the least-progressed onboarding status across all shops
-    const statusPriority: Record<string, number> = {
-      PENDING_PROFILE: 0,
-      PENDING_SERVICES: 1,
-      PENDING_BARBERS: 2,
-      PENDING_BARBER_SERVICES: 3,
-      COMPLETED: 4,
+    if (!primaryShop) {
+      return { onboardingStatus: null, shopDetails: null };
+    }
+
+    const onboardingStatus = primaryShop.onboardingStatus;
+
+    return {
+      onboardingStatus,
+      shopDetails:
+        onboardingStatus === 'COMPLETED'
+          ? null
+          : {
+              shopId: primaryShop.id,
+              shopName: primaryShop.name,
+              address: primaryShop.address,
+              phoneNo: primaryShop.phone,
+            },
     };
-
-    const leastProgressed = shops.reduce((min, shop) =>
-      (statusPriority[shop.onboardingStatus] ?? 0) < (statusPriority[min.onboardingStatus] ?? 0)
-        ? shop
-        : min,
-    );
-
-    return leastProgressed.onboardingStatus;
   }
 
   async sendOtp(phone: string): Promise<SendOtpResponse> {
+    const existingVendor = await this.vendorRepository.findByPhone(phone);
+    if (existingVendor?.status === 'DELETED') {
+      const GRACE_DAYS = 10;
+      const deactivatedAt = existingVendor.deactivatedAt;
+      if (!deactivatedAt) {
+        throw new ForbiddenError('This account no longer exists.');
+      }
+      const daysSince = Math.floor((Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = GRACE_DAYS - daysSince;
+      if (daysRemaining > 0) {
+        throw new ForbiddenError(
+          `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+        );
+      }
+    }
+
     const phoneWithCode = `91${phone}`;
     const result = await this.otpService.sendOtp(phoneWithCode, 'VENDOR');
 
@@ -130,10 +203,16 @@ export default class VendorService {
 
     await this.otpSessionService.deleteSession(input.sessionId);
 
-    const vendor = await this.vendorRepository.findByPhone(input.phone);
+    let vendor = await this.vendorRepository.findByPhone(input.phone);
 
     if (!vendor) {
       throw new NotFoundError('No vendor account found. Please register.');
+    }
+
+    if (vendor.verificationStatus === 'PAYMENT_PENDING') {
+      throw new ForbiddenError(
+        'Your registration payment is incomplete. Please complete the payment to continue.',
+      );
     }
 
     if (vendor.verificationStatus === 'PENDING') {
@@ -151,15 +230,39 @@ export default class VendorService {
     }
 
     if (vendor.status === 'DELETED') {
-      throw new ForbiddenError('This account no longer exists.');
+      const GRACE_DAYS = 10;
+      const deactivatedAt = vendor.deactivatedAt;
+
+      if (!deactivatedAt) {
+        throw new ForbiddenError('This account no longer exists.');
+      }
+
+      const daysSince = Math.floor((Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = GRACE_DAYS - daysSince;
+
+      if (daysRemaining > 0) {
+        throw new ForbiddenError(
+          `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+        );
+      }
+
+      await this.vendorRepository.reactivateById(vendor._id.toString());
+      await getRedisClient().del(`vendor:deleted:${vendor._id.toString()}`);
+      await this.shopService.setAvailabilityByVendorId(vendor._id.toString(), true);
+      vendor = (await this.vendorRepository.findByPhone(input.phone))!;
     }
 
     await this.vendorRepository.updateLastLogin(vendor._id.toString());
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
     const tokenPayload: TokenPayload = {
       sub: vendor._id.toString(),
-      role: 'VENDOR',
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
+
+    const isVendorBarber = !!barberProfile;
 
     const token = this.jwtService.signToken(tokenPayload);
     const refreshToken = this.jwtService.signRefreshToken(tokenPayload);
@@ -167,7 +270,14 @@ export default class VendorService {
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.vendorRepository.updateRefreshToken(vendor._id.toString(), refreshTokenHash);
 
-    const onboardingStatus = await this.getShopOnboardingStatus(vendor._id.toString());
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendor._id.toString());
+
+    if (input.fcmToken) {
+      void this.vendorRepository.addFcmToken(vendor._id.toString(), input.fcmToken);
+      if (barberProfile) {
+        void this.barberService.registerFcmToken(barberProfile.id, input.fcmToken);
+      }
+    }
 
     this.logger.info({
       action: 'VENDOR_LOGIN',
@@ -176,7 +286,14 @@ export default class VendorService {
       phone: last4(input.phone),
     });
 
-    return { token, refreshToken, vendor: this.toVendorDto(vendor), onboardingStatus };
+    return {
+      token,
+      refreshToken,
+      vendor: this.toVendorDto(vendor),
+      onboardingStatus,
+      shopDetails,
+      isVendorBarber,
+    };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<RefreshTokenResponse> {
@@ -202,9 +319,12 @@ export default class VendorService {
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
     }
 
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendor._id.toString());
+
     const tokenPayload: TokenPayload = {
       sub: vendor._id.toString(),
-      role: 'VENDOR',
+      role: barberProfile ? 'VENDOR_BARBER' : 'VENDOR',
+      ...(barberProfile ? { barberId: barberProfile.id } : {}),
     };
 
     const newToken = this.jwtService.signToken(tokenPayload);
@@ -217,8 +337,30 @@ export default class VendorService {
   }
 
   async logout(vendorId: string): Promise<void> {
-    await this.vendorRepository.updateRefreshToken(vendorId, null);
+    await Promise.all([
+      this.vendorRepository.updateRefreshToken(vendorId, null),
+      this.vendorRepository.clearFcmTokens(vendorId),
+    ]);
     this.logger.info('Vendor logged out', { vendorId });
+  }
+
+  async deactivateAccount(vendorId: string, reason?: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+
+    if (!vendor || vendor.status === 'DELETED') {
+      throw new NotFoundError('Vendor not found.');
+    }
+    if (vendor.status !== 'ACTIVE') {
+      throw new ForbiddenError('Only active vendor accounts can be deactivated.');
+    }
+
+    const updated = await this.vendorRepository.deactivateById(vendorId, reason);
+    if (!updated) throw new AppError('Failed to deactivate account. Please try again.', 500);
+
+    await this.shopService.setAvailabilityByVendorId(vendorId, false);
+    await getRedisClient().set(`vendor:deleted:${vendorId}`, '1', { EX: config.jwt.expirySeconds });
+
+    this.logger.info({ action: 'VENDOR_SELF_DEACTIVATED', module: 'vendor', vendorId, reason });
   }
 
   async registerVerifyOtp(input: RegisterVerifyOtpInput): Promise<RegisterVerifyOtpResponse> {
@@ -282,6 +424,10 @@ export default class VendorService {
       status: 'PENDING',
     });
 
+    if (input.fcmToken) {
+      await this.vendorRepository.addFcmToken(newVendor._id.toString(), input.fcmToken);
+    }
+
     this.logger.info({
       action: 'VENDOR_REGISTRATION_SUBMITTED',
       module: 'vendor',
@@ -309,23 +455,27 @@ export default class VendorService {
       }
     }
 
-    const amount = this.registrationFee;
+    const amount = await this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE);
 
     const { orderId } = await this.paymentService.createVendorRegistrationOrder({
       phone: input.phone,
       amountRupees: amount,
     });
 
-    await this.vendorRepository.upsertByPhone(input.phone, {
+    const upsertedVendor = await this.vendorRepository.upsertByPhone(input.phone, {
       ownerName: input.ownerName,
       email: input.email,
       registrationType: 'INDEPENDENT',
       documents: input.documents,
       shopDetails: input.shopDetails,
       registrationPaymentOrderId: orderId,
-      verificationStatus: 'PENDING',
+      verificationStatus: 'PAYMENT_PENDING',
       status: 'PENDING',
     });
+
+    if (input.fcmToken && upsertedVendor) {
+      await this.vendorRepository.addFcmToken(upsertedVendor._id.toString(), input.fcmToken);
+    }
 
     this.logger.info({
       action: 'VENDOR_REGISTRATION_PAYMENT_INITIATED',
@@ -347,6 +497,9 @@ export default class VendorService {
     if (vendor.registrationPaymentOrderId !== input.orderId) {
       throw new ValidationError('Order ID mismatch.');
     }
+    if (vendor.verificationStatus !== 'PAYMENT_PENDING') {
+      throw new ConflictError('Payment already confirmed or not initiated.');
+    }
 
     await this.paymentService.verifyVendorRegistrationPayment({
       orderId: input.orderId,
@@ -355,10 +508,11 @@ export default class VendorService {
     });
 
     await withTransaction(async (session) => {
+      const fee = await this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE);
       await this.vendorRepository.updateRegistrationPayment(
         vendor._id.toString(),
         {
-          amount: this.registrationFee,
+          amount: fee,
           paymentId: input.paymentId,
           paidAt: new Date(),
         },
@@ -383,6 +537,18 @@ export default class VendorService {
     return { message: 'Payment confirmed. Application submitted for verification.' };
   }
 
+  async getRegistrationPaymentSummary(): Promise<RegistrationPaymentSummaryResponse> {
+    const [total, gstPercentage] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_FEE),
+      this.configService.getValueAsNumber(CONFIG_KEYS.VENDOR_REGISTRATION_GST_PERCENTAGE),
+    ]);
+
+    const gstAmount = Number(((total * gstPercentage) / 100).toFixed(2));
+    const registrationFee = Number((total - gstAmount).toFixed(2));
+
+    return { registrationFee, gstPercentage, gstAmount, total };
+  }
+
   async getRegistrationStatus(vendorId: string): Promise<RegistrationStatusResponse> {
     const vendor = await this.vendorRepository.findById(vendorId);
     if (!vendor) {
@@ -396,15 +562,33 @@ export default class VendorService {
     };
   }
 
+  async getOnboardingStatus(vendorId: string): Promise<OnboardingStatusResponse> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
+
+    return {
+      vendorName: vendor.ownerName,
+      onboardingStatus,
+      shopDetails,
+    };
+  }
+
   async getProfile(vendorId: string): Promise<VendorProfileDto> {
     const vendor = await this.vendorRepository.findById(vendorId);
     if (!vendor) {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const onboardingStatus = await this.getShopOnboardingStatus(vendorId);
+    const barberProfile = await this.barberService.getVendorBarberProfile(vendorId);
+    const isVendorBarber = !!barberProfile;
 
-    return this.toProfileDto(vendor, onboardingStatus);
+    const { onboardingStatus, shopDetails } = await this.getOnboardingInfo(vendorId);
+
+    return this.toProfileDto(vendor, onboardingStatus, shopDetails ?? null, isVendorBarber);
   }
 
   async approveVendor(vendorId: string, approvedBy: string): Promise<void> {
@@ -433,6 +617,7 @@ export default class VendorService {
           phone: vendor.phone,
           address: vendor.shopDetails!.address,
           location: vendor.shopDetails!.location,
+          isPrimary: true,
         },
         session,
       );
@@ -445,8 +630,7 @@ export default class VendorService {
       approvedBy,
     });
 
-    // TODO: Queue FCM push notification via Bull queue
-    // "Your Felbo vendor account has been approved. You can now log in."
+    await enqueueVendorApproved({ vendorId });
   }
 
   async rejectVendor(vendorId: string, rejectedBy: string, reason: string): Promise<void> {
@@ -481,12 +665,32 @@ export default class VendorService {
       rejectedBy,
       reason,
     });
+
+    await enqueueVendorRejected({ vendorId, reason });
   }
 
   async flagVendor(vendorId: string): Promise<void> {
     const vendor = await this.vendorRepository.findById(vendorId);
     if (!vendor) throw new NotFoundError('Vendor not found.');
     await this.vendorRepository.flagById(vendorId);
+  }
+
+  async blockVendor(vendorId: string, reason: string, adminId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor || vendor.status === 'DELETED') throw new NotFoundError('Vendor not found.');
+    if (vendor.isBlocked) throw new ConflictError('Vendor is already blocked.');
+    await this.vendorRepository.blockById(vendorId, reason, adminId);
+    await getRedisClient().set(`vendor:blocked:${vendorId}`, '1', {
+      EX: config.jwt.expirySeconds,
+    });
+  }
+
+  async unblockVendor(vendorId: string): Promise<void> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor || vendor.status === 'DELETED') throw new NotFoundError('Vendor not found.');
+    if (!vendor.isBlocked) throw new ConflictError('Vendor is not blocked.');
+    await this.vendorRepository.unblockById(vendorId);
+    await getRedisClient().del(`vendor:blocked:${vendorId}`);
   }
 
   async getVendorDetailForAdmin(vendorId: string): Promise<VendorAdminDetail> {
@@ -496,7 +700,10 @@ export default class VendorService {
       throw new NotFoundError('Vendor not found.');
     }
 
-    const shopDtos = await this.shopService.getMyShops(vendorId);
+    const [shopDtos, cancellationStats] = await Promise.all([
+      this.shopService.getMyShops(vendorId),
+      this.shopService.getCancellationStatsByVendorId(vendorId),
+    ]);
 
     const shopIds = shopDtos.map((shop) => shop.id);
 
@@ -507,6 +714,9 @@ export default class VendorService {
         this.shopService.getBarbersByShopIds(shopIds),
         this.shopService.getServicesByShopIds(shopIds),
       ]);
+
+      const allBarberIds = allBarbers.map((b) => b.id.toString());
+      const timingByBarberId = await this.availabilityService.getTimingByBarberIds(allBarberIds);
 
       const barbersByShop = new Map<string, typeof allBarbers>();
       const servicesByShop = new Map<string, typeof allServices>();
@@ -533,10 +743,15 @@ export default class VendorService {
           shopType: shopDto.shopType,
           phone: shopDto.phone,
           address: shopDto.address,
-          rating: shopDto.rating,
+          rating: {
+            average: formatRating(shopDto.rating.average),
+            count: shopDto.rating.count,
+          },
           onboardingStatus: shopDto.onboardingStatus,
           status: shopDto.status,
-          isActive: shopDto.isActive,
+          isAvailable: shopDto.isAvailable,
+          photos: shopDto.photos,
+          workingHours: shopDto.workingHours,
 
           barbers: barberList.map((b) => ({
             id: b.id.toString(),
@@ -544,6 +759,9 @@ export default class VendorService {
             phone: b.phone,
             photo: b.photo,
             isAvailable: b.isAvailable,
+            cancellationCount: b.cancellationCount,
+            cancellationsThisWeek: b.cancellationsThisWeek,
+            timing: timingByBarberId.get(b.id.toString()) ?? { presets: [], todaySchedule: null },
           })),
           barberCount: barberList.length,
 
@@ -572,11 +790,12 @@ export default class VendorService {
       status: vendor.status,
       isBlocked: vendor.isBlocked,
       isFlagged: vendor.isFlagged,
+      deactivationReason: vendor.deactivationReason ?? undefined,
       documents: vendor.documents,
       associationMemberId: vendor.associationMemberId,
       associationIdProofUrl: vendor.associationIdProofUrl,
-      cancellationCount: vendor.cancellationCount,
-      cancellationsThisWeek: vendor.cancellationsThisWeek,
+      cancellationCount: cancellationStats.cancellationCount,
+      cancellationsThisWeek: cancellationStats.cancellationsThisWeek,
       shops,
       recentBookings: [],
     };
@@ -611,6 +830,7 @@ export default class VendorService {
             type: vendor.shopDetails.type,
             address: vendor.shopDetails.address,
             location: vendor.shopDetails.location,
+            photos: vendor.shopDetails.photos || [],
           }
         : undefined,
     };
@@ -644,7 +864,8 @@ export default class VendorService {
     const counts = await this.vendorRepository.getStatusCounts(filter.registrationType);
 
     return {
-      vendors: vendors.map((v) => ({
+      vendors: vendors.map((v, i) => ({
+        slNo: total - (filter.page - 1) * filter.limit - i,
         id: v._id.toString(),
         ownerName: v.ownerName,
         phone: v.phone,
@@ -678,7 +899,8 @@ export default class VendorService {
 
     return {
       vendors: vendors.map(
-        (v): VerificationRequestItemDto => ({
+        (v, i): VerificationRequestItemDto => ({
+          slNo: total - (page - 1) * limit - i,
           id: v._id.toString(),
           shopName: v.shopDetails?.name ?? null,
           ownerName: v.ownerName,
@@ -695,7 +917,197 @@ export default class VendorService {
     };
   }
 
+  async updateProfile(vendorId: string, input: UpdateProfileInput): Promise<UpdateProfileResponse> {
+    const vendor = await this.vendorRepository.findById(vendorId);
+    if (!vendor) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    const updateData: { ownerName?: string; email?: string; profilePhoto?: string } = {};
+    if (input.ownerName !== undefined) updateData.ownerName = input.ownerName;
+    if (input.email !== undefined) updateData.email = input.email;
+    if (input.profilePhoto !== undefined) updateData.profilePhoto = input.profilePhoto;
+
+    const updated = await this.vendorRepository.updateProfile(vendorId, updateData);
+    if (!updated) {
+      throw new NotFoundError('Vendor not found.');
+    }
+
+    this.logger.info({
+      action: 'VENDOR_PROFILE_UPDATED',
+      module: 'vendor',
+      vendorId,
+    });
+
+    return {
+      id: updated._id.toString(),
+      phone: updated.phone,
+      ownerName: updated.ownerName,
+      email: updated.email || null,
+      profilePhoto: updated.profilePhoto || null,
+    };
+  }
+
   async getAllPhotoKeys(): Promise<string[]> {
-    return this.vendorRepository.getAllPhotoKeys();
+    const [vendorKeys, shopPhotoUrls, barberPhotoUrls] = await Promise.all([
+      this.vendorRepository.getAllPhotoKeys(),
+      this.shopService.getAllPhotoUrls(),
+      this.barberService.getAllPhotoUrls(),
+    ]);
+
+    const extractKey = (url: string): string => new URL(url).pathname.slice(1);
+
+    const shopKeys = shopPhotoUrls.map(extractKey);
+    const barberKeys = barberPhotoUrls.map(extractKey);
+
+    return [...new Set([...vendorKeys, ...shopKeys, ...barberKeys])];
+  }
+
+  async registerFcmToken(vendorId: string, token: string): Promise<void> {
+    if (!token) {
+      throw new ValidationError('Token is required');
+    }
+    await this.vendorRepository.addFcmToken(vendorId, token);
+  }
+
+  async unregisterFcmToken(vendorId: string, token: string): Promise<void> {
+    await this.vendorRepository.removeFcmToken(vendorId, token);
+  }
+
+  async getVendorStatusCounts(): Promise<{
+    total: number;
+    active: number;
+    pendingVerification: number;
+    suspended: number;
+  }> {
+    return this.vendorRepository.getStatusCounts();
+  }
+
+  async getPendingVerificationCount(): Promise<number> {
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+    return counts.pending;
+  }
+
+  async getPendingRequestCounts(): Promise<{
+    total: number;
+    association: number;
+    independent: number;
+  }> {
+    const counts = await this.vendorRepository.getVerificationRequestCounts();
+    return {
+      total: counts.pending,
+      association: counts.association,
+      independent: counts.independent,
+    };
+  }
+
+  async getVendorDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
+    return this.vendorRepository.getDashboardStats();
+  }
+
+  async getAssociationVendorIds(): Promise<Types.ObjectId[]> {
+    return this.vendorRepository.findIdsByRegistrationType('ASSOCIATION');
+  }
+
+  async getDashboardCounts(vendorId: string, shopId?: string): Promise<VendorDashboardCountsDto> {
+    let shopIds: string[];
+
+    if (shopId) {
+      const shop = await this.shopService.getShopById(shopId);
+      if (shop.vendorId !== vendorId) {
+        throw new ForbiddenError('You do not own this shop.');
+      }
+      shopIds = [shopId];
+    } else {
+      const shops = await this.shopService.getMyShops(vendorId);
+      shopIds = shops.map((s) => s.id);
+    }
+
+    if (shopIds.length === 0) {
+      return {
+        dailyBookings: 0,
+        bookingComparison: { today: 0, yesterday: 0, diff: 0, trend: 'same' },
+        staffWorking: { count: 0, staff: [] },
+        staffOnLeave: { count: 0, staff: [] },
+      };
+    }
+
+    const [bookingStats, workingBarberIds, allActiveStaff] = await Promise.all([
+      this.bookingService.getStatsByShopIds(shopIds),
+      this.availabilityService.getWorkingBarberIdsByShopIds(shopIds),
+      this.barberService.getActiveStaffByShopIds(shopIds),
+    ]);
+
+    const workingSet = new Set(workingBarberIds);
+    const workingStaff = allActiveStaff.filter((b) => workingSet.has(b.id));
+    const onLeaveStaff = allActiveStaff.filter((b) => !workingSet.has(b.id));
+
+    const today = bookingStats.todaysBookings;
+    const yesterday = bookingStats.yesterdaysBookings;
+    const diff = today - yesterday;
+
+    return {
+      dailyBookings: today,
+      bookingComparison: {
+        today,
+        yesterday,
+        diff,
+        trend: diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
+      },
+      staffWorking: { count: workingStaff.length, staff: workingStaff },
+      staffOnLeave: { count: onLeaveStaff.length, staff: onLeaveStaff },
+    };
+  }
+
+  async getVendorBookings(
+    vendorId: string,
+    query: {
+      shopId?: string;
+      status?: VendorBookingStatus;
+      page: number;
+      limit: number;
+      startDate?: Date;
+      endDate?: Date;
+    },
+  ): Promise<VendorBookingListResponse> {
+    let shopIds: string[];
+
+    if (query.shopId) {
+      const shop = await this.shopService.getShopById(query.shopId);
+      if (shop.vendorId !== vendorId) {
+        throw new ForbiddenError('You do not own this shop.');
+      }
+      shopIds = [query.shopId];
+    } else {
+      const shops = await this.shopService.getMyShops(vendorId);
+      shopIds = shops.map((s) => s.id);
+    }
+
+    if (shopIds.length === 0) {
+      return { bookings: [], total: 0, page: query.page, limit: query.limit, totalPages: 0 };
+    }
+
+    return this.bookingService.vendorGetBookings({
+      shopIds,
+      status: query.status,
+      page: query.page,
+      limit: query.limit,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+  }
+
+  async getVendorBookingDetail(
+    vendorId: string,
+    bookingId: string,
+  ): Promise<VendorBookingDetailDto> {
+    const shops = await this.shopService.getMyShops(vendorId);
+    const shopIds = shops.map((s) => s.id);
+
+    if (shopIds.length === 0) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    return this.bookingService.vendorGetBookingDetail(bookingId, shopIds);
   }
 }

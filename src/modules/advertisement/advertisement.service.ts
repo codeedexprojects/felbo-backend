@@ -5,6 +5,7 @@ import {
   AdDto,
   ListAdsFilter,
   ListAdsResponse,
+  ListUserAdsResponse,
 } from './advertisement.types';
 import { IAd } from './advertisement.model';
 import { NotFoundError, ConflictError } from '../../shared/errors';
@@ -18,6 +19,7 @@ export class AdvertisementService {
 
   async createAd(input: CreateAdInput, adminId: string): Promise<AdDto> {
     await this.shopService.getShopById(input.shopId);
+
     const ad = await this.advertisementRepository.create({ ...input, createdBy: adminId });
     return this.toDto(ad);
   }
@@ -26,6 +28,32 @@ export class AdvertisementService {
     const { ads, total } = await this.advertisementRepository.findAll(filter);
     return {
       ads: ads.map((a) => this.toDto(a)),
+      total,
+      page: filter.page,
+      limit: filter.limit,
+      totalPages: Math.ceil(total / filter.limit),
+    };
+  }
+
+  async listUserAds(filter: ListAdsFilter): Promise<ListUserAdsResponse> {
+    const { ads, total } = await this.advertisementRepository.findAllActiveWithShop(filter);
+
+    return {
+      ads: ads.map((a) => ({
+        id: a._id.toString(),
+        title: a.title,
+        subtitle: a.subtitle ?? '',
+        image: a.bannerImage,
+        priority: a.priority,
+        targetShop: {
+          id: a.shopId._id.toString(),
+          name: a.shopId.name,
+          address: {
+            area: a.shopId.address.area,
+            city: a.shopId.address.city,
+          },
+        },
+      })),
       total,
       page: filter.page,
       limit: filter.limit,

@@ -6,6 +6,13 @@ import { barberService } from '../barber/barber.container';
 import { BarberService } from '../barber/barber.service';
 import { serviceService } from '../service/service.container';
 import { ServiceService } from '../service/service.service';
+import { userService } from '../user/user.container';
+import UserService from '../user/user.service';
+import { configService } from '../config/config.container';
+import { favoriteService } from '../favorite/favorite.container';
+import { FavoriteService } from '../favorite/favorite.service';
+import { bookingService } from '../booking/booking.container';
+import { BookingService } from '../booking/booking.service';
 
 const shopRepository = new ShopRepository();
 
@@ -14,6 +21,10 @@ const shopService: ShopService = new ShopService(
   logger,
   (): BarberService => barberService,
   (): ServiceService => serviceService,
+  (): UserService => userService,
+  configService,
+  (): FavoriteService => favoriteService,
+  (): BookingService => bookingService,
 );
 
 const shopController = new ShopController(shopService);

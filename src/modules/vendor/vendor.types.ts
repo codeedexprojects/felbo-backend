@@ -11,6 +11,7 @@ export interface LoginVerifyOtpInput {
   phone: string;
   otp: string;
   sessionId: string;
+  fcmToken?: string;
 }
 
 export interface LoginVerifyOtpResponse {
@@ -21,6 +22,8 @@ export interface LoginVerifyOtpResponse {
     phone: string;
     ownerName: string;
     email: string | null;
+    profilePhoto: string | null;
+    verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   };
   onboardingStatus:
     | 'PENDING_PROFILE'
@@ -29,6 +32,13 @@ export interface LoginVerifyOtpResponse {
     | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
+  shopDetails?: {
+    shopId: string;
+    shopName: string;
+    address: AddressInput;
+    phoneNo: string;
+  } | null;
+  isVendorBarber: boolean;
 }
 
 export interface RegisterVerifyOtpInput {
@@ -67,6 +77,7 @@ export interface RegisterAssociationInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterAssociationResponse {
@@ -90,6 +101,7 @@ export interface RegisterIndependentInitiateInput {
       coordinates: [number, number];
     };
   };
+  fcmToken?: string;
 }
 
 export interface RegisterIndependentInitiateResponse {
@@ -109,9 +121,26 @@ export interface RegisterIndependentConfirmResponse {
 }
 
 export interface RegistrationStatusResponse {
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   rejectionReason?: string;
   registrationType?: 'ASSOCIATION' | 'INDEPENDENT';
+}
+
+export interface OnboardingStatusResponse {
+  vendorName: string;
+  onboardingStatus:
+    | 'PENDING_PROFILE'
+    | 'PENDING_SERVICES'
+    | 'PENDING_BARBERS'
+    | 'PENDING_BARBER_SERVICES'
+    | 'COMPLETED'
+    | null;
+  shopDetails?: {
+    shopId: string;
+    shopName: string;
+    address: AddressInput;
+    phoneNo: string;
+  } | null;
 }
 
 export interface VendorProfileDto {
@@ -119,8 +148,9 @@ export interface VendorProfileDto {
   phone: string;
   ownerName: string;
   email: string | null;
+  profilePhoto: string | null;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   onboardingStatus:
     | 'PENDING_PROFILE'
@@ -129,6 +159,13 @@ export interface VendorProfileDto {
     | 'PENDING_BARBER_SERVICES'
     | 'COMPLETED'
     | null;
+  shopDetails: {
+    shopId: string;
+    shopName: string;
+    address: AddressInput;
+    phoneNo: string;
+  } | null;
+  isVendorBarber: boolean;
 }
 
 export interface CreateVendorData {
@@ -174,7 +211,7 @@ export interface UpsertVendorData {
     };
   };
   registrationPaymentOrderId?: string;
-  verificationStatus: 'PENDING';
+  verificationStatus: 'PAYMENT_PENDING';
   status: 'PENDING';
 }
 
@@ -220,11 +257,12 @@ export interface VendorStatusCounts {
 }
 
 export interface VendorListSlimDto {
+  slNo: number;
   id: string;
   ownerName: string;
   phone: string;
   type: 'ASSOCIATION' | 'INDEPENDENT';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   registered: Date;
 }
@@ -245,6 +283,7 @@ export interface VerificationRequestCounts {
 }
 
 export interface VerificationRequestItemDto {
+  slNo: number;
   id: string;
   shopName: string | null;
   ownerName: string;
@@ -269,12 +308,13 @@ export interface VendorAdminDetail {
   ownerName: string;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   verifiedAt?: Date;
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
   isBlocked: boolean;
   isFlagged: boolean;
+  deactivationReason?: string;
   documents?: {
     shopLicense?: string;
     ownerIdProof?: string;
@@ -293,7 +333,17 @@ export interface VendorAdminDetail {
     rating: { average: number; count: number };
     onboardingStatus: string;
     status: string;
-    isActive: boolean;
+    isAvailable: boolean;
+    photos: string[];
+    workingHours?: {
+      monday: { open: string; close: string; isOpen: boolean };
+      tuesday: { open: string; close: string; isOpen: boolean };
+      wednesday: { open: string; close: string; isOpen: boolean };
+      thursday: { open: string; close: string; isOpen: boolean };
+      friday: { open: string; close: string; isOpen: boolean };
+      saturday: { open: string; close: string; isOpen: boolean };
+      sunday: { open: string; close: string; isOpen: boolean };
+    };
 
     barbers: {
       id: string;
@@ -301,6 +351,21 @@ export interface VendorAdminDetail {
       phone: string;
       photo?: string;
       isAvailable: boolean;
+      cancellationCount: number;
+      cancellationsThisWeek: number;
+      timing: {
+        presets: {
+          id: string;
+          name: string;
+          workingHours: { start: string; end: string };
+          breaks: Array<{ start: string; end: string; reason?: string }>;
+        }[];
+        todaySchedule: {
+          isWorking: boolean;
+          workingHours: { start: string; end: string } | null;
+          breaks: Array<{ start: string; end: string; reason?: string }>;
+        } | null;
+      };
     }[];
     barberCount: number;
 
@@ -324,7 +389,7 @@ export interface VendorRequestAdminDetail {
   ownerName: string;
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
   registrationDate: Date;
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   associationMemberId?: string;
   associationIdProofUrl?: string;
@@ -345,10 +410,52 @@ export interface VendorRequestAdminDetail {
       type: 'Point';
       coordinates: [number, number];
     };
+    photos: string[];
   };
 }
 
 export interface RefreshTokenResponse {
   token: string;
   refreshToken: string;
+}
+
+export interface UpdateProfileInput {
+  ownerName?: string;
+  email?: string;
+  profilePhoto?: string;
+}
+
+export interface UpdateProfileResponse {
+  id: string;
+  phone: string;
+  ownerName: string;
+  email: string | null;
+  profilePhoto: string | null;
+}
+
+export interface RegistrationPaymentSummaryResponse {
+  registrationFee: number;
+  gstPercentage: number;
+  gstAmount: number;
+  total: number;
+}
+
+export interface StaffMemberDto {
+  id: string;
+  name: string;
+  photo: string | null;
+}
+
+export interface BookingComparisonDto {
+  today: number;
+  yesterday: number;
+  diff: number;
+  trend: 'up' | 'down' | 'same';
+}
+
+export interface VendorDashboardCountsDto {
+  dailyBookings: number;
+  bookingComparison: BookingComparisonDto;
+  staffWorking: { count: number; staff: StaffMemberDto[] };
+  staffOnLeave: { count: number; staff: StaffMemberDto[] };
 }

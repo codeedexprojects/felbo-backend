@@ -1,9 +1,20 @@
+import { BookingListItemDto } from '../booking/booking.types';
+
+export interface UserFavoriteShopDto {
+  shopId: string;
+  name: string;
+  image: string | null;
+  rating: number;
+}
+
 export interface UserDto {
   id: string;
   phone: string;
   name: string;
   email: string | null;
-  walletBalance: number;
+  profileUrl: string | null;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
+  felboCoinBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   lastLoginAt: Date | null;
@@ -15,12 +26,17 @@ export interface UserProfileDto {
   phone: string;
   name: string;
   email: string | null;
-  walletBalance: number;
+  profileUrl: string | null;
+  gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
+  felboCoinBalance: number;
+  unreadNotificationCount: number;
 }
 
 export interface UpdateProfileInput {
   name?: string;
   email?: string;
+  profileUrl?: string;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER';
 }
 
 export interface SendOtpInput {
@@ -36,6 +52,7 @@ export interface VerifyOtpInput {
   phone: string;
   otp: string;
   sessionId: string;
+  fcmToken?: string;
 }
 
 export interface VerifyOtpResponse {
@@ -47,11 +64,77 @@ export interface VerifyOtpResponse {
     phone: string;
     name: string;
     email: string | null;
-    walletBalance: number;
+    profileUrl: string | null;
+    gender: 'MALE' | 'FEMALE' | 'OTHER' | null;
+    felboCoinBalance: number;
   };
 }
 
 export interface RefreshTokenResponse {
   token: string;
   refreshToken: string;
+}
+
+// ─── Admin user management ───────────────────────────────────────────────────
+
+export interface ListUsersFilter {
+  search?: string;
+  status?: 'ACTIVE' | 'BLOCKED';
+  page: number;
+  limit: number;
+}
+
+export interface UserListItemDto {
+  slNo: number;
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
+  felboCoinBalance: number;
+  cancellationCount: number;
+  lastLoginAt: Date | null;
+  registeredAt: Date;
+}
+
+export interface UserStatusCounts {
+  total: number;
+  active: number;
+  blocked: number;
+}
+
+export interface ListUsersResponse {
+  users: UserListItemDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  counts: UserStatusCounts;
+}
+
+export interface UserIssueDto {
+  id: string;
+  type: string;
+  description: string;
+  status: string;
+  createdAt: Date;
+}
+
+export interface UserDetailDto {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  profileUrl: string | null;
+  status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
+  blockReason: string | null;
+  deactivationReason: string | null;
+  felboCoinBalance: number;
+  cancellationCount: number;
+  registeredAt: Date;
+  lastLoginAt: Date | null;
+  issuesReported: UserIssueDto[];
+  issueCount: number;
+  favorites: UserFavoriteShopDto[];
+  recentBookings: BookingListItemDto[];
 }

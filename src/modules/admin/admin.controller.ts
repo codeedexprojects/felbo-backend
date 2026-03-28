@@ -4,10 +4,8 @@ import {
   adminLoginSchema,
   listVendorsSchema,
   rejectVendorSchema,
+  blockVendorSchema,
   vendorIdParamSchema,
-  listUsersSchema,
-  userIdParamSchema,
-  blockUserSchema,
 } from './admin.validators';
 import { AdminLoginInput } from './admin.types';
 import { UnauthorizedError } from '../../shared/errors/index';
@@ -84,6 +82,11 @@ export class AdminController {
     });
   };
 
+  getPendingRequestCounts = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getPendingRequestCounts();
+    res.status(200).json({ success: true, data: result });
+  };
+
   listVerificationRequests = async (req: Request, res: Response): Promise<void> => {
     const validated = listVendorsSchema.parse(req.query);
 
@@ -147,28 +150,27 @@ export class AdminController {
     });
   };
 
-  listUsers = async (req: Request, res: Response): Promise<void> => {
-    const validated = listUsersSchema.parse(req.query);
-    const result = await this.adminService.listUsers(validated);
+  getSuperAdminDashboard = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getSuperAdminDashboard();
     res.status(200).json({ success: true, data: result });
   };
 
-  getUserDetail = async (req: Request, res: Response): Promise<void> => {
-    const { id } = userIdParamSchema.parse(req.params);
-    const result = await this.adminService.getUserDetail(id);
+  getAssociationAdminDashboard = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getAssociationAdminDashboard();
     res.status(200).json({ success: true, data: result });
   };
 
-  blockUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = userIdParamSchema.parse(req.params);
-    const { reason } = blockUserSchema.parse(req.body);
-    await this.adminService.blockUser(id, reason);
-    res.status(200).json({ success: true, message: 'User blocked successfully.' });
+  blockVendor = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+    const { reason } = blockVendorSchema.parse(req.body);
+    const adminId = req.user!.sub;
+    await this.adminService.blockVendor(id, reason, adminId);
+    res.status(200).json({ success: true, message: 'Vendor blocked successfully.' });
   };
 
-  unblockUser = async (req: Request, res: Response): Promise<void> => {
-    const { id } = userIdParamSchema.parse(req.params);
-    await this.adminService.unblockUser(id);
-    res.status(200).json({ success: true, message: 'User unblocked successfully.' });
+  unblockVendor = async (req: Request, res: Response): Promise<void> => {
+    const { id } = vendorIdParamSchema.parse(req.params);
+    await this.adminService.unblockVendor(id);
+    res.status(200).json({ success: true, message: 'Vendor unblocked successfully.' });
   };
 }

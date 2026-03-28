@@ -1,5 +1,10 @@
-import { ClientSession } from 'mongoose';
+import { PipelineStage, Types } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { BarberServiceModel, IBarberService, ServiceModel, IService } from './service.model';
+
+export interface IBarberServicePopulated extends Omit<IBarberService, 'serviceId'> {
+  serviceId: Pick<IService, '_id' | 'name' | 'basePrice'>;
+}
 
 export class ServiceRepository {
   createBarberService(
@@ -25,6 +30,13 @@ export class ServiceRepository {
 
   findBarberServicesByBarberId(barberId: string): Promise<IBarberService[]> {
     return BarberServiceModel.find({ barberId, isActive: true }).lean().exec();
+  }
+
+  findBarberServicesByBarberIdPopulated(barberId: string): Promise<IBarberServicePopulated[]> {
+    return BarberServiceModel.find({ barberId, isActive: true })
+      .populate<Pick<IBarberServicePopulated, 'serviceId'>>('serviceId', 'name basePrice')
+      .lean()
+      .exec() as unknown as Promise<IBarberServicePopulated[]>;
   }
 
   findBarberServicesByShopId(shopId: string): Promise<IBarberService[]> {
@@ -60,6 +72,18 @@ export class ServiceRepository {
       })),
       { session },
     );
+  }
+
+  updateBarberServiceDuration(
+    barberId: string,
+    serviceId: string,
+    durationMinutes: number,
+  ): Promise<IBarberService | null> {
+    return BarberServiceModel.findOneAndUpdate(
+      { barberId, serviceId },
+      { $set: { durationMinutes } },
+      { new: true },
+    ).exec();
   }
 
   async removeBarberServiceByBarberAndServiceId(
@@ -126,6 +150,7 @@ export class ServiceRepository {
   findServicesByShopIds(shopIds: string[]): Promise<IService[]> {
     return ServiceModel.find({
       shopId: { $in: shopIds },
+      isActive: true,
     })
       .lean()
       .exec();
@@ -164,5 +189,103 @@ export class ServiceRepository {
       { $set: { isActive, status: isActive ? 'ACTIVE' : 'INACTIVE' } },
       { returnDocument: 'after' },
     ).exec();
+  }
+
+  countActiveByCategoryId(categoryId: string): Promise<number> {
+    return ServiceModel.countDocuments({ categoryId, isActive: true }).exec();
+  }
+
+  countActiveServicesByShopAndCategory(shopId: string, categoryId: string): Promise<number> {
+    return ServiceModel.countDocuments({ shopId, categoryId, isActive: true }).exec();
+  }
+
+  async findServicesByCategoryForShop(
+    shopId: string,
+    shopType?: 'MENS' | 'WOMENS' | 'ALL',
+  ): Promise<Array<{ _id: Types.ObjectId; name: string; services: IService[] }>> {
+    const matchStage: Record<string, unknown> = {
+      shopId: new Types.ObjectId(shopId),
+      isActive: true,
+      status: 'ACTIVE',
+    };
+
+    if (shopType && shopType !== 'ALL') {
+      matchStage.applicableFor = shopType;
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      { $unwind: '$category' },
+      {
+        $match: {
+          'category.status': 'ACTIVE',
+          'category.isActive': true,
+        },
+      },
+      {
+        $group: {
+          _id: '$category._id',
+          name: { $first: '$category.name' },
+          displayOrder: { $first: '$category.displayOrder' },
+          services: { $push: '$$ROOT' },
+        },
+      },
+      { $sort: { displayOrder: 1 } },
+    ];
+
+    return ServiceModel.aggregate(pipeline).exec();
+  }
+
+  async countServicesByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    const results = await ServiceModel.aggregate([
+      {
+        $match: {
+          shopId: { $in: shopIds.map((id) => new Types.ObjectId(id)) },
+          isActive: true,
+        },
+      },
+      { $group: { _id: '$shopId', count: { $sum: 1 } } },
+    ]).exec();
+
+    const countsMap = new Map<string, number>();
+    for (const r of results) {
+      countsMap.set(r._id.toString(), r.count);
+    }
+    return countsMap;
+  }
+
+  async findShopIdsByServiceOrCategoryName(query: string): Promise<Set<string>> {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = { $regex: escaped, $options: 'i' };
+
+    const pipeline: PipelineStage[] = [
+      { $match: { isActive: true } },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'categoryId',
+          foreignField: '_id',
+          as: 'category',
+        },
+      },
+      { $unwind: '$category' },
+      {
+        $match: {
+          $or: [{ name: regex }, { 'category.name': regex }],
+        },
+      },
+      { $group: { _id: '$shopId' } },
+    ];
+
+    const results = await ServiceModel.aggregate<{ _id: Types.ObjectId }>(pipeline).exec();
+    return new Set(results.map((r) => r._id.toString()));
   }
 }

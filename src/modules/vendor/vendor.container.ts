@@ -4,7 +4,11 @@ import { TwoFactorOtpService, DevOtpService } from '../../shared/services/otp.se
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService } from '../../shared/services/jwt.service';
 import { paymentService } from '../payment/payment.container';
+import { configService } from '../config/config.container';
 import { shopService } from '../shop/shop.container';
+import { barberService } from '../barber/barber.container';
+import { bookingService } from '../booking/booking.container';
+import { availabilityService } from '../barberAvailability/barberAvailability.container';
 import VendorRepository from './vendor.repository';
 import VendorService from './vendor.service';
 import VendorController from './vendor.controller';
@@ -19,14 +23,17 @@ const otpSessionService = new OtpSessionService();
 
 const jwtService = new JwtService(config.jwt.secret, config.jwt.expirySeconds);
 
-const vendorService = new VendorService(
+const vendorService: VendorService = new VendorService(
   vendorRepository,
   otpService,
   otpSessionService,
   jwtService,
-  paymentService,
-  shopService,
-  config.vendor.registrationFee,
+  () => paymentService,
+  () => shopService,
+  () => barberService,
+  () => bookingService,
+  () => availabilityService,
+  configService,
   logger,
 );
 

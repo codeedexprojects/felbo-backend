@@ -4,11 +4,17 @@ import { logger } from './shared/logger/logger';
 import { connectMongo } from './shared/database/mongo';
 import { connectRedis } from './shared/redis/redis';
 import { uploadService } from './modules/upload/upload.container';
+import { configService } from './modules/config/config.container';
 import { SEVEN_DAYS_MS } from './shared/constants';
+import { initFirebase } from './shared/notification/fcm.service';
+import { scheduleBarberAvailabilityCron } from './shared/notification/barber.cron';
+import { scheduleStatusHealer } from './cron/statusHealer';
 
 async function bootstrap(): Promise<void> {
   await connectMongo();
   await connectRedis();
+  await configService.initialize();
+  initFirebase();
 
   app.listen(config.port, () => {
     logger.info(`Server running on port ${config.port} [${config.nodeEnv}]`);
@@ -16,6 +22,8 @@ async function bootstrap(): Promise<void> {
 
   void uploadService.runCleanupJob();
   setInterval(() => void uploadService.runCleanupJob(), SEVEN_DAYS_MS);
+  scheduleBarberAvailabilityCron();
+  scheduleStatusHealer();
   logger.info({ action: 'CLEANUP_JOB_SCHEDULED', module: 'upload', intervalDays: SEVEN_DAYS_MS });
 }
 

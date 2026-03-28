@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { AdminModel, IAdmin } from './admin.model';
 
 export class AdminRepository {

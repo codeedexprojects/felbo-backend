@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { UserModel, IUser } from './user.model';
 
 // ─── Repository ──────────────────────────────────────────────────
@@ -39,7 +39,12 @@ export default class UserRepository {
 
   updateProfile(
     id: string,
-    data: { name?: string; email?: string },
+    data: {
+      name?: string;
+      email?: string;
+      profileUrl?: string;
+      gender?: 'MALE' | 'FEMALE' | 'OTHER';
+    },
     session?: ClientSession,
   ): Promise<IUser | null> {
     return UserModel.findByIdAndUpdate(id, data, {
@@ -112,6 +117,92 @@ export default class UserRepository {
       id,
       { status: 'ACTIVE', blockReason: null },
       { returnDocument: 'after' },
+    ).exec();
+  }
+
+  deactivateById(id: string, reason?: string): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: 'DELETED',
+          deactivatedAt: new Date(),
+          deactivationReason: reason ?? null,
+          refreshTokenHash: null,
+          fcmTokens: [],
+        },
+      },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
+  reactivateById(id: string): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      id,
+      { $set: { status: 'ACTIVE', deactivatedAt: null } },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
+  addFcmToken(userId: string, token: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(userId: string, token: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  clearFcmTokens(userId: string): Promise<unknown> {
+    return UserModel.updateOne({ _id: userId }, { $set: { fcmTokens: [] } }).exec();
+  }
+
+  async getFcmTokens(userId: string): Promise<string[]> {
+    const doc = await UserModel.findById(userId)
+      .select('+fcmTokens')
+      .lean<{ fcmTokens?: string[] }>()
+      .exec();
+    return doc?.fcmTokens ?? [];
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    if (!tokens.length) return;
+    await UserModel.updateMany(
+      { fcmTokens: { $in: tokens } },
+      { $pull: { fcmTokens: { $in: tokens } } },
+    ).exec();
+  }
+
+  incrementCoinBalance(
+    userId: string,
+    coins: number,
+    session?: ClientSession,
+  ): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { felboCoinBalance: coins } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  incrementCancellationCount(userId: string, session?: ClientSession): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { cancellationCount: 1 } },
+      { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  decrementCoinBalance(
+    userId: string,
+    coins: number,
+    session?: ClientSession,
+  ): Promise<IUser | null> {
+    // Conditional update: only decrements if current balance >= coins.
+    // Returns null if user not found OR balance insufficient — prevents going negative atomically.
+    return UserModel.findOneAndUpdate(
+      { _id: userId, felboCoinBalance: { $gte: coins } },
+      { $inc: { felboCoinBalance: -coins } },
+      { returnDocument: 'after', session },
     ).exec();
   }
 }

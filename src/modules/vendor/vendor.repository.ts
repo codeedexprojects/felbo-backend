@@ -1,4 +1,5 @@
-import { ClientSession } from 'mongoose';
+import mongoose from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { VendorModel, IVendor } from './vendor.model';
 import { CreateVendorData, UpsertVendorData } from './vendor.types';
 
@@ -115,6 +116,35 @@ export default class VendorRepository {
     return { pending, association, independent };
   }
 
+  async getDashboardStats(): Promise<{ total: number; pendingVerifications: number }> {
+    const result = await VendorModel.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pendingVerifications: {
+            $sum: { $cond: [{ $eq: ['$verificationStatus', 'PENDING'] }, 1, 0] },
+          },
+        },
+      },
+    ]).exec();
+
+    return {
+      total: result[0]?.total ?? 0,
+      pendingVerifications: result[0]?.pendingVerifications ?? 0,
+    };
+  }
+
+  async findIdsByRegistrationType(
+    registrationType: 'ASSOCIATION' | 'INDEPENDENT',
+  ): Promise<mongoose.Types.ObjectId[]> {
+    const vendors = await VendorModel.find({ registrationType })
+      .select('_id')
+      .lean<{ _id: mongoose.Types.ObjectId }[]>()
+      .exec();
+    return vendors.map((v) => v._id);
+  }
+
   async findAll(
     filter: Record<string, unknown>,
     page: number,
@@ -141,6 +171,33 @@ export default class VendorRepository {
     return { vendors, total };
   }
 
+  blockById(id: string, reason: string, adminId: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        isBlocked: true,
+        blockReason: reason,
+        blockedAt: new Date(),
+        blockedBy: adminId,
+        refreshTokenHash: null,
+      },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  unblockById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        isBlocked: false,
+        blockReason: null,
+        blockedAt: null,
+        blockedBy: null,
+      },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
   flagById(id: string): Promise<IVendor | null> {
     return VendorModel.findByIdAndUpdate(
       id,
@@ -149,10 +206,39 @@ export default class VendorRepository {
     ).exec();
   }
 
+  deactivateById(id: string, reason?: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: 'DELETED',
+          deactivatedAt: new Date(),
+          deactivationReason: reason ?? null,
+          refreshTokenHash: null,
+          fcmTokens: [],
+        },
+      },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
+  reactivateById(id: string): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { $set: { status: 'ACTIVE', deactivatedAt: null } },
+      { returnDocument: 'after', new: true },
+    ).exec();
+  }
+
   async getAllPhotoKeys(): Promise<string[]> {
     const vendors = await VendorModel.find(
       {},
-      { 'documents.shopLicense': 1, 'documents.ownerIdProof': 1, associationIdProofUrl: 1 },
+      {
+        'documents.shopLicense': 1,
+        'documents.ownerIdProof': 1,
+        associationIdProofUrl: 1,
+        profilePhoto: 1,
+      },
     )
       .lean()
       .exec();
@@ -162,6 +248,7 @@ export default class VendorRepository {
       if (v.documents?.shopLicense) keys.push(v.documents.shopLicense);
       if (v.documents?.ownerIdProof) keys.push(v.documents.ownerIdProof);
       if (v.associationIdProofUrl) keys.push(v.associationIdProofUrl);
+      if (v.profilePhoto) keys.push(v.profilePhoto);
     }
 
     return [...new Set(keys)];
@@ -177,5 +264,29 @@ export default class VendorRepository {
 
   findByIdWithRefreshToken(id: string): Promise<IVendor | null> {
     return VendorModel.findById(id).select('+refreshTokenHash').exec();
+  }
+
+  addFcmToken(vendorId: string, token: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $addToSet: { fcmTokens: token } }).exec();
+  }
+
+  removeFcmToken(vendorId: string, token: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $pull: { fcmTokens: token } }).exec();
+  }
+
+  clearFcmTokens(vendorId: string): Promise<unknown> {
+    return VendorModel.updateOne({ _id: vendorId }, { $set: { fcmTokens: [] } }).exec();
+  }
+
+  updateProfile(
+    id: string,
+    data: { ownerName?: string; email?: string; profilePhoto?: string },
+    session?: ClientSession,
+  ): Promise<IVendor | null> {
+    return VendorModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { returnDocument: 'after', session },
+    ).exec();
   }
 }

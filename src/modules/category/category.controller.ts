@@ -4,6 +4,8 @@ import {
   createCategorySchema,
   updateCategorySchema,
   categoryIdParamSchema,
+  listCategoriesSchema,
+  toggleCategoryStatusSchema,
 } from './category.validators';
 
 export class CategoryController {
@@ -18,6 +20,13 @@ export class CategoryController {
 
   getAll = async (_req: Request, res: Response): Promise<void> => {
     const result = await this.categoryService.getAllCategories();
+
+    res.status(200).json({ success: true, data: result });
+  };
+
+  listUserCategories = async (req: Request, res: Response): Promise<void> => {
+    const { page, limit } = listCategoriesSchema.parse(req.query);
+    const result = await this.categoryService.listUserCategories(page, limit);
 
     res.status(200).json({ success: true, data: result });
   };
@@ -41,5 +50,13 @@ export class CategoryController {
     await this.categoryService.deleteCategory(categoryId);
 
     res.status(200).json({ success: true, message: 'Category deleted successfully.' });
+  };
+
+  toggleStatus = async (req: Request, res: Response): Promise<void> => {
+    const { categoryId } = categoryIdParamSchema.parse(req.params);
+    const { isActive } = toggleCategoryStatusSchema.parse(req.body);
+    const result = await this.categoryService.toggleCategoryStatus(categoryId, isActive);
+
+    res.status(200).json({ success: true, data: result });
   };
 }

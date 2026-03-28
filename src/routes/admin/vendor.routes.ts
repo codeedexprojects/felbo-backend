@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import { adminController } from '../../modules/admin/admin.container';
+import { bookingController } from '../../modules/booking/booking.container';
 import { authorize } from '../../shared/middleware/authorize';
 
 const router = Router();
 
+router.get(
+  '/requests/counts',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  adminController.getPendingRequestCounts,
+);
 router.get(
   '/requests',
   authorize('SUPER_ADMIN', 'SUB_ADMIN'),
@@ -27,5 +33,13 @@ router.get(
 );
 router.post('/:id/verify', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.verifyVendor);
 router.post('/:id/reject', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.rejectVendor);
+router.post('/:id/block', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.blockVendor);
+router.post('/:id/unblock', authorize('SUPER_ADMIN', 'SUB_ADMIN'), adminController.unblockVendor);
+
+router.get(
+  '/:id/bookings',
+  authorize('SUPER_ADMIN', 'SUB_ADMIN'),
+  bookingController.adminGetVendorBookings,
+);
 
 export default router;

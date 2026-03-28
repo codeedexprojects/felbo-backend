@@ -1,1 +1,1997 @@
-// TODO: Implement
+import PaymentService from '../payment/payment.service';
+import { Logger } from 'winston';
+import { BookingRepository } from './booking.repository';
+import {
+  GetSlotsInput,
+  GetSlotsResponse,
+  TimeSlot,
+  BlockedRange,
+  InitiateBookingInput,
+  InitiateBookingResponse,
+  ConfirmBookingInput,
+  ConfirmBookingResponse,
+  BookingDetailsDto,
+  UserBookingsResponse,
+  AdminBookingListParams,
+  AdminBookingListResponse,
+  AdminBookingDetailDto,
+  CancellationReason,
+  CancelBookingByBarberResponse,
+  CancelBookingByUserResponse,
+  CompleteBookingResponse,
+  MarkNoShowResponse,
+  BarberBookingListResponse,
+  BarberBookingDetailDto,
+  GetBarbersForServicesResponse,
+  VendorBookingListParams,
+  VendorBookingListResponse,
+  VendorBookingDetailDto,
+  UserBookingTab,
+  UserBookingListResponseV2,
+  UserBookingDetailDto,
+  BarberDashboardStatsDto,
+  BarberTodayBookingsResponse,
+  AdminCancellationListParams,
+  AdminCancellationListResponse,
+  AdminCancellationDetailDto,
+  UserHomeBookingDto,
+  AdminVendorBookingListResponse,
+  AdminBookingStatsResult,
+} from './booking.types';
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
+import {
+  getTodayInIst,
+  getCurrentIstMinutes,
+  parseDateAsIst,
+  getIstDayRangeUtc,
+  formatAppointmentTime,
+  formatDateAsIst,
+  formatTimestampAsIst,
+  buildAppointmentDate,
+} from '../../shared/utils/time';
+import {
+  enqueueNewBookingBarber,
+  enqueueReminder10Min,
+  enqueueBookingCancelledByBarber,
+  enqueueBookingCancelledByUser,
+  cancelReminder10Min,
+} from '../../shared/notification/notification.queue';
+import { BarberService } from '../barber/barber.service';
+import { BarberAvailabilityService } from '../barberAvailability/barberAvailability.service';
+import ShopService from '../shop/shop.service';
+import UserService from '../user/user.service';
+import { ServiceService } from '../service/service.service';
+import VendorService from '../vendor/vendor.service';
+import { IWorkingHours } from '../shop/shop.model';
+import { ConfigService } from '../config/config.service';
+import { CONFIG_KEYS } from '../../shared/config/config.keys';
+import { config as staticConfig } from '../../shared/config/config.service';
+import { FelboCoinService } from '../felbocoin/felbocoin.service';
+import { withTransaction } from '../../shared/database/transaction';
+import { IssueService } from '../issue/issue.service';
+
+// const SLOT_INTERVAL_MINUTES = 15;
+const MIN_BUFFER_MINUTES = 30;
+const APPOINTMENT_BUFFER_MINUTES = 5;
+const SLOT_LOCK_MINUTES = 2;
+
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+export class BookingService {
+  constructor(
+    private readonly bookingRepository: BookingRepository,
+    private readonly getBarberService: () => BarberService,
+    private readonly getAvailabilityService: () => BarberAvailabilityService,
+    private readonly getShopService: () => ShopService,
+    private readonly configService: ConfigService,
+    private readonly getUserService: () => UserService,
+    private readonly getServiceService: () => ServiceService,
+    private readonly getPaymentService: () => PaymentService,
+    private readonly getVendorService: () => VendorService,
+    private readonly logger: Logger,
+    private readonly getFelboCoinService: () => FelboCoinService,
+    private readonly getIssueService: () => IssueService,
+  ) {}
+
+  private get barberService(): BarberService {
+    return this.getBarberService();
+  }
+
+  private get availabilityService(): BarberAvailabilityService {
+    return this.getAvailabilityService();
+  }
+
+  private get shopService(): ShopService {
+    return this.getShopService();
+  }
+
+  private get userService(): UserService {
+    return this.getUserService();
+  }
+
+  private get serviceService(): ServiceService {
+    return this.getServiceService();
+  }
+
+  private get paymentService(): PaymentService {
+    return this.getPaymentService();
+  }
+
+  private get vendorService(): VendorService {
+    return this.getVendorService();
+  }
+
+  private get felboCoinService(): FelboCoinService {
+    return this.getFelboCoinService();
+  }
+
+  private get issueService(): IssueService {
+    return this.getIssueService();
+  }
+
+  async getBarbersForServices(
+    shopId: string,
+    serviceIds: string[],
+    userId: string,
+  ): Promise<GetBarbersForServicesResponse> {
+    const { maxServicesPerBooking } = staticConfig.booking;
+    if (serviceIds.length > maxServicesPerBooking) {
+      throw new ValidationError(
+        `You can select at most ${maxServicesPerBooking} services per booking.`,
+      );
+    }
+
+    const [barbers, bookingAmount, coinRedeemThreshold, user] = await Promise.all([
+      this.barberService.getBarbersForServices(shopId, serviceIds),
+      this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_REDEEM_THRESHOLD),
+      this.userService.getUserById(userId),
+    ]);
+
+    return {
+      barbers,
+      bookingAmount,
+      userCoinBalance: user.felboCoinBalance,
+      coinRedeemThreshold,
+      maxServicesPerBooking,
+    };
+  }
+
+  async getSlots(input: GetSlotsInput): Promise<GetSlotsResponse> {
+    const [slotIntervalMinutes, minBufferMinutes, appointmentBufferMinutes] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.SLOT_INTERVAL_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.MIN_BOOKING_BUFFER_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.APPOINTMENT_BUFFER_MINUTES),
+    ]);
+
+    // Validate date is today (same-day only)
+    const requestedDate = parseDateAsIst(input.date);
+    const todayUtc = getTodayInIst();
+
+    if (requestedDate.getTime() !== todayUtc.getTime()) {
+      throw new ValidationError('Bookings are only available for today.');
+    }
+
+    const shop = await this.shopService.getShopById(input.shopId);
+    if (shop.status !== 'ACTIVE') {
+      throw new NotFoundError('Shop not found or not active.');
+    }
+
+    const barber = await this.barberService.getBarberById(input.barberId);
+    if (barber.shopId !== input.shopId) {
+      throw new ValidationError('Barber does not belong to this shop.');
+    }
+    if (!barber.isAvailable) {
+      return this.emptyResponse(input, barber.name, 0, slotIntervalMinutes);
+    }
+
+    const barberServiceLinks = await this.barberService.getBarberServicesByBarberId(input.barberId);
+    const barberServiceMap = new Map(
+      barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
+    );
+
+    const uniqueServiceIds = [...new Set(input.serviceIds)];
+    let totalDurationMinutes = 0;
+    for (const serviceId of uniqueServiceIds) {
+      const duration = barberServiceMap.get(serviceId);
+      if (duration === undefined) {
+        throw new ValidationError('One or more services are not offered by this barber.');
+      }
+      totalDurationMinutes += duration;
+    }
+
+    // Step 1: Get barber schedule
+    const availability = await this.availabilityService.getTodayAvailability(input.barberId);
+
+    // Step 2: Stop if not working
+    if (!availability || !availability.isWorking || !availability.workingHours) {
+      return this.emptyResponse(input, barber.name, totalDurationMinutes, slotIntervalMinutes);
+    }
+
+    const workingHours = availability.workingHours;
+    const breaks = availability.breaks ?? [];
+
+    // Step 3: Confirmed bookings
+    const confirmedBookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+
+    // Step 4: Walk-in blocks — via barber service to respect module boundaries
+    const slotBlocks = await this.barberService.getActiveSlotBlocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+
+    // Step 5: Payment locks
+    const slotLocks = await this.bookingRepository.findActiveSlotLocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+
+    // Step 6: Collect all blocked ranges
+    const bookedRanges: BlockedRange[] = confirmedBookings.map((b) => ({
+      startMinutes: this.toMinutes(b.startTime),
+      // Extend by appointment buffer to enforce gap between appointments
+      endMinutes: this.toMinutes(b.endTime) + appointmentBufferMinutes,
+    }));
+
+    const blockedRanges: BlockedRange[] = slotBlocks.map((b) => ({
+      startMinutes: this.toMinutes(b.startTime),
+      endMinutes: this.toMinutes(b.endTime),
+    }));
+
+    const lockedRanges: BlockedRange[] = slotLocks.map((l) => ({
+      startMinutes: this.toMinutes(l.startTime),
+      endMinutes: this.toMinutes(l.endTime),
+    }));
+
+    const breakRanges: BlockedRange[] = breaks.map((b) => ({
+      startMinutes: this.toMinutes(b.start),
+      endMinutes: this.toMinutes(b.end),
+    }));
+
+    const workStart = this.toMinutes(workingHours.start);
+    const workEnd = this.toMinutes(workingHours.end);
+
+    const nowMinutesUtc = getCurrentIstMinutes();
+    const earliestBookable = nowMinutesUtc + minBufferMinutes;
+
+    const slots = this.generateSlots({
+      workStart,
+      workEnd,
+      totalDurationMinutes,
+      earliestBookable,
+      slotIntervalMinutes,
+      breakRanges,
+      bookedRanges,
+      blockedRanges,
+      lockedRanges,
+    });
+
+    this.logger.info({
+      action: 'SLOTS_GENERATED',
+      module: 'booking',
+      shopId: input.shopId,
+      barberId: input.barberId,
+      date: input.date,
+      totalSlots: slots.length,
+      availableSlots: slots.filter((s) => s.available).length,
+    });
+
+    return {
+      shopId: input.shopId,
+      date: input.date,
+      barberId: input.barberId,
+      barberName: barber.name,
+      totalDurationMinutes,
+      slotIntervalMinutes,
+      workingHours,
+      slots,
+    };
+  }
+
+  async getBookingById(bookingId: string): Promise<BookingDetailsDto | null> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) return null;
+    return {
+      id: booking._id.toString(),
+      userId: booking.userId.toString(),
+      shopId: booking.shopId.toString(),
+      barberId: booking.barberId.toString(),
+      status: booking.status,
+    };
+  }
+
+  async getUserBookings(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<UserBookingsResponse> {
+    const { bookings, total } = await this.bookingRepository.findByUserId(userId, page, limit);
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        barberName: b.barberName,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        endTime: b.endTime,
+        totalServiceAmount: b.totalServiceAmount,
+        advancePaid: b.advancePaid,
+        remainingAmount: b.remainingAmount,
+        paymentMethod: b.paymentMethod,
+        status: b.status,
+        cancellation: b.cancellation
+          ? {
+              cancelledAt: formatTimestampAsIst(b.cancellation.cancelledAt),
+              cancelledBy: b.cancellation.cancelledBy,
+              reason: b.cancellation.reason,
+              refundCoins: b.cancellation.refundCoins ?? 0,
+              refundStatus: b.cancellation.refundStatus,
+            }
+          : undefined,
+        createdAt: b.createdAt.toISOString(),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getAdvancePaidForBooking(bookingId: string): Promise<number> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    return booking.advancePaid;
+  }
+
+  async getBookingPaymentDetails(bookingId: string): Promise<{
+    advancePaid: number;
+    paymentId?: string;
+    paymentMethod: 'RAZORPAY' | 'FELBO_COINS';
+    bookingNumber: string;
+  }> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    return {
+      advancePaid: booking.advancePaid,
+      paymentId: booking.paymentId,
+      paymentMethod: booking.paymentMethod,
+      bookingNumber: booking.bookingNumber,
+    };
+  }
+
+  async refundIssuePayment(razorpayPaymentId: string, amountPaise: number): Promise<string> {
+    return this.paymentService.refundIssuePayment(razorpayPaymentId, amountPaise);
+  }
+
+  async processIssueCoinsRefund(bookingId: string, userId: string): Promise<void> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    // Refund exactly the coins that were originally paid (1 coin = ₹1 = 1 advance rupee),
+    // so config changes after booking time don't affect the refund amount.
+    const coinsToRefund = booking.advancePaid;
+
+    await this.felboCoinService.creditCoins({
+      userId,
+      coins: coinsToRefund,
+      type: 'COIN_REFUND',
+      bookingId: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      description: `Coins refunded for issue resolution on booking ${booking.bookingNumber}`,
+    });
+  }
+
+  async findOverlappingConfirmedBookings(
+    barberId: string,
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ): Promise<Array<{ bookingNumber: string; startTime: string; endTime: string }>> {
+    const bookings = await this.bookingRepository.findOverlappingConfirmedBookings(
+      barberId,
+      date,
+      startTime,
+      endTime,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      startTime: b.startTime,
+      endTime: b.endTime,
+    }));
+  }
+
+  async getConfirmedBookingsByBarberAndDate(
+    barberId: string,
+    date: Date,
+  ): Promise<
+    Array<{
+      bookingNumber: string;
+      customerName: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      services: Array<{ name: string; durationMinutes: number }>;
+    }>
+  > {
+    const bookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      barberId,
+      date,
+    );
+    return bookings.map((b) => ({
+      bookingNumber: b.bookingNumber,
+      customerName: b.userName,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      durationMinutes: b.totalDurationMinutes,
+      services: b.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+      })),
+    }));
+  }
+
+  async getGlobalDashboardStats(): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    todaysRevenue: number;
+  }> {
+    const charge = staticConfig.razorpay.chargePercentage;
+    const tax = staticConfig.razorpay.taxPercentage;
+    const razorpayFeeRate = (charge + (charge * tax) / 100) / 100;
+    return this.bookingRepository.getGlobalDashboardStats(razorpayFeeRate);
+  }
+
+  async getStatsByShopIds(shopIds: string[]): Promise<{
+    totalBookings: number;
+    todaysBookings: number;
+    yesterdaysBookings: number;
+    totalRevenue: number;
+  }> {
+    return this.bookingRepository.getStatsByShopIds(shopIds);
+  }
+
+  async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
+    const booking = await this.bookingRepository.findById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+    if (booking.userId.toString() !== userId)
+      throw new ForbiddenError('This booking does not belong to you.');
+    if (booking.shopId.toString() !== shopId)
+      throw new ValidationError('Booking does not match the provided shop.');
+    if (booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR')
+      throw new ConflictError('Cannot raise an issue for a cancelled booking.');
+  }
+
+  async initiateBooking(
+    input: InitiateBookingInput,
+    userId: string,
+  ): Promise<InitiateBookingResponse> {
+    // 1. Validate date is today
+    const requestedDate = parseDateAsIst(input.date);
+    const todayIst = getTodayInIst();
+    if (requestedDate.getTime() !== todayIst.getTime()) {
+      throw new ValidationError('Bookings are only available for today.');
+    }
+
+    // 2. Get user info
+    const user = await this.userService.getUserById(userId);
+
+    // 3. Validate shop
+    const shop = await this.shopService.getShopById(input.shopId);
+    if (shop.status !== 'ACTIVE') {
+      throw new NotFoundError('Shop not found or not active.');
+    }
+
+    // 4. Validate barber
+    const barber = await this.barberService.getBarberById(input.barberId);
+    if (barber.shopId !== input.shopId) {
+      throw new ValidationError('Barber does not belong to this shop.');
+    }
+    if (!barber.isAvailable) {
+      throw new ValidationError('This barber is currently unavailable.');
+    }
+
+    // 5. Validate services and compute total duration
+    const { maxServicesPerBooking } = staticConfig.booking;
+    if (input.serviceIds.length > maxServicesPerBooking) {
+      throw new ValidationError(
+        `You can select at most ${maxServicesPerBooking} services per booking.`,
+      );
+    }
+    const barberServiceLinks = await this.barberService.getBarberServicesByBarberId(input.barberId);
+    const barberServiceMap = new Map(
+      barberServiceLinks.map((l) => [l.serviceId, l.durationMinutes]),
+    );
+
+    let totalDurationMinutes = 0;
+    for (const serviceId of input.serviceIds) {
+      const duration = barberServiceMap.get(serviceId);
+      if (duration === undefined) {
+        throw new ValidationError('One or more services are not offered by this barber.');
+      }
+      totalDurationMinutes += duration;
+    }
+
+    // 6. Get service snapshot data (names, prices, category names)
+    const serviceSnapshots = await this.serviceService.getServicesForBookingSnapshot(
+      input.serviceIds,
+      input.shopId,
+    );
+    if (serviceSnapshots.length !== input.serviceIds.length) {
+      throw new ValidationError('One or more services are invalid or inactive.');
+    }
+    const serviceSnapshotMap = new Map(serviceSnapshots.map((s) => [s.id, s]));
+
+    // 7. Compute endTime
+    const startMinutes = this.toMinutes(input.startTime);
+    const endMinutes = startMinutes + totalDurationMinutes;
+    const endTime = this.fromMinutes(endMinutes);
+
+    // 8. Validate against shop working hours
+    if (
+      !this.isWithinShopWorkingHours(shop.workingHours, requestedDate, input.startTime, endTime)
+    ) {
+      throw new ValidationError('The selected time is outside shop working hours.');
+    }
+
+    // 9. Re-validate slot availability
+    const availability = await this.availabilityService.getTodayAvailability(input.barberId);
+    if (!availability || !availability.isWorking || !availability.workingHours) {
+      throw new ValidationError('Barber is not working today.');
+    }
+
+    const nowMinutes = getCurrentIstMinutes();
+    if (startMinutes < nowMinutes + MIN_BUFFER_MINUTES) {
+      throw new ValidationError('Selected time is too soon. Please choose a later slot.');
+    }
+
+    const slotRange: BlockedRange = { startMinutes, endMinutes };
+
+    for (const br of availability.breaks ?? []) {
+      if (
+        this.rangesOverlap(slotRange, {
+          startMinutes: this.toMinutes(br.start),
+          endMinutes: this.toMinutes(br.end),
+        })
+      ) {
+        throw new ValidationError('Selected time overlaps with a barber break.');
+      }
+    }
+
+    const confirmedBookings = await this.bookingRepository.findConfirmedBookingsByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+    for (const b of confirmedBookings) {
+      if (
+        this.rangesOverlap(slotRange, {
+          startMinutes: this.toMinutes(b.startTime),
+          endMinutes: this.toMinutes(b.endTime) + APPOINTMENT_BUFFER_MINUTES,
+        })
+      ) {
+        throw new ValidationError('Selected time slot is no longer available.');
+      }
+    }
+
+    const slotBlocks = await this.barberService.getActiveSlotBlocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+    for (const block of slotBlocks) {
+      if (
+        this.rangesOverlap(slotRange, {
+          startMinutes: this.toMinutes(block.startTime),
+          endMinutes: this.toMinutes(block.endTime),
+        })
+      ) {
+        throw new ValidationError('Selected time slot is blocked.');
+      }
+    }
+
+    const slotLocks = await this.bookingRepository.findActiveSlotLocksByBarberAndDate(
+      input.barberId,
+      requestedDate,
+    );
+    for (const lock of slotLocks) {
+      if (
+        this.rangesOverlap(slotRange, {
+          startMinutes: this.toMinutes(lock.startTime),
+          endMinutes: this.toMinutes(lock.endTime),
+        })
+      ) {
+        throw new ValidationError('Selected time slot is currently being held by another user.');
+      }
+    }
+
+    // 10. Fetch advance amount and coin threshold from config
+    const [advanceAmountRupees, coinRedeemThreshold] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.BOOKING_AMOUNT),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_REDEEM_THRESHOLD),
+    ]);
+
+    // 11. Build service data for DB and response
+    const dbServices = input.serviceIds.map((serviceId) => {
+      const snap = serviceSnapshotMap.get(serviceId)!;
+      const duration = barberServiceMap.get(serviceId)!;
+      return {
+        serviceId,
+        serviceName: snap.name,
+        categoryName: snap.categoryName,
+        durationMinutes: duration,
+        price: snap.basePrice,
+      };
+    });
+
+    const totalServiceAmount = dbServices.reduce((sum, s) => sum + s.price, 0);
+    const remainingAmount = totalServiceAmount - advanceAmountRupees;
+
+    const lockExpiresAt = new Date(Date.now() + SLOT_LOCK_MINUTES * 60 * 1000);
+    await this.bookingRepository.createSlotLock({
+      shopId: input.shopId,
+      barberId: input.barberId,
+      date: requestedDate,
+      startTime: input.startTime,
+      endTime,
+      lockedBy: userId,
+      expiresAt: lockExpiresAt,
+    });
+
+    const timePart = (Date.now() % 46656).toString(36).padStart(3, '0').toUpperCase();
+    const randomPart = Math.random().toString(36).slice(2, 5).toUpperCase().padEnd(3, '0');
+    const bookingNumber = `${timePart}${randomPart}`;
+    const verificationCode = String(Math.floor(1000 + Math.random() * 9000));
+
+    const responseServices = input.serviceIds.map((serviceId) => {
+      const snap = serviceSnapshotMap.get(serviceId)!;
+      const duration = barberServiceMap.get(serviceId)!;
+      return {
+        serviceId,
+        serviceName: snap.name,
+        price: snap.basePrice,
+        durationMinutes: duration,
+      };
+    });
+
+    if (input.paymentMethod === 'FELBO_COINS') {
+      if (user.felboCoinBalance < coinRedeemThreshold) {
+        throw new ValidationError(
+          `Insufficient FelboCoin balance. You need at least ${coinRedeemThreshold} coins to use FelboCoin payment.`,
+        );
+      }
+
+      let booking: Awaited<ReturnType<BookingRepository['createBooking']>>;
+
+      await withTransaction(async (session) => {
+        booking = await this.bookingRepository.createBooking(
+          {
+            bookingNumber,
+            userId,
+            userName: user.name ?? '',
+            userPhone: user.phone,
+            shopId: input.shopId,
+            shopName: shop.name,
+            barberId: input.barberId,
+            barberName: barber.name,
+            barberSelectionType: 'SPECIFIC',
+            date: requestedDate,
+            startTime: input.startTime,
+            endTime,
+            totalDurationMinutes,
+            services: dbServices,
+            totalServiceAmount,
+            advancePaid: advanceAmountRupees,
+            remainingAmount,
+            paymentMethod: 'FELBO_COINS',
+            verificationCode,
+            status: 'CONFIRMED',
+          },
+          session,
+        );
+
+        await this.felboCoinService.debitCoins(
+          {
+            userId,
+            coins: coinRedeemThreshold,
+            type: 'COIN_REDEEMED',
+            bookingId: booking!._id.toString(),
+            bookingNumber,
+            description: `Advance payment waived for booking ${bookingNumber}`,
+          },
+          session,
+        );
+      });
+
+      this.logger.info({
+        action: 'BOOKING_CONFIRMED_VIA_FELBOCOIN',
+
+        module: 'booking',
+        bookingId: booking!._id.toString(),
+        bookingNumber,
+        userId,
+        coinsUsed: coinRedeemThreshold,
+      });
+
+      const coinAppointmentTime = formatAppointmentTime(booking!.startTime);
+      const coinAppointmentAt = buildAppointmentDate(booking!.date, booking!.startTime);
+      const coinBarberId = booking!.barberId.toString();
+      const coinBookingId = booking!._id.toString();
+      const coinServiceName = booking!.services.map((s) => s.serviceName).join(', ');
+
+      await Promise.all([
+        enqueueNewBookingBarber({
+          barberId: coinBarberId,
+          customerName: user.name ?? 'A customer',
+          serviceName: coinServiceName,
+          appointmentTime: coinAppointmentTime,
+        }),
+        enqueueReminder10Min({
+          userId,
+          barberId: coinBarberId,
+          shopName: shop.name,
+          appointmentTime: coinAppointmentTime,
+          appointmentAt: coinAppointmentAt,
+          bookingId: coinBookingId,
+        }),
+      ]);
+
+      return {
+        booking: {
+          id: booking!._id.toString(),
+          bookingNumber,
+          status: booking!.status,
+          shop: { id: input.shopId, name: shop.name },
+          barber: { id: input.barberId, name: barber.name },
+          services: responseServices,
+          date: input.date,
+          startTime: input.startTime,
+          endTime,
+          totalServiceAmount,
+          advancePaid: advanceAmountRupees,
+          remainingAmount,
+          paymentMethod: 'FELBO_COINS',
+          verificationCode,
+          expiresAt: lockExpiresAt.toISOString(),
+        },
+      };
+    }
+
+    // 14b. Razorpay payment: create order and pending booking
+    const { orderId } = await this.paymentService.createBookingAdvanceOrder({
+      userId,
+      shopId: input.shopId,
+      amountRupees: advanceAmountRupees,
+    });
+
+    const booking = await this.bookingRepository.createBooking({
+      bookingNumber,
+      userId,
+      userName: user.name ?? '',
+      userPhone: user.phone,
+      shopId: input.shopId,
+      shopName: shop.name,
+      barberId: input.barberId,
+      barberName: barber.name,
+      barberSelectionType: 'SPECIFIC',
+      date: requestedDate,
+      startTime: input.startTime,
+      endTime,
+      totalDurationMinutes,
+      services: dbServices,
+      totalServiceAmount,
+      advancePaid: advanceAmountRupees,
+      remainingAmount,
+      paymentMethod: 'RAZORPAY',
+      razorpayOrderId: orderId,
+      verificationCode,
+      status: 'PENDING_PAYMENT',
+    });
+
+    this.logger.info({
+      action: 'BOOKING_INITIATED',
+      module: 'booking',
+      bookingId: booking._id.toString(),
+      bookingNumber,
+      userId,
+      shopId: input.shopId,
+      barberId: input.barberId,
+    });
+
+    return {
+      booking: {
+        id: booking._id.toString(),
+        bookingNumber,
+        status: booking.status,
+        shop: { id: input.shopId, name: shop.name },
+        barber: { id: input.barberId, name: barber.name },
+        services: responseServices,
+        date: input.date,
+        startTime: input.startTime,
+        endTime,
+        totalServiceAmount,
+        advancePaid: advanceAmountRupees,
+        remainingAmount,
+        paymentMethod: 'RAZORPAY',
+        verificationCode,
+        expiresAt: lockExpiresAt.toISOString(),
+      },
+      payment: { orderId, amount: advanceAmountRupees * 100, currency: 'INR' },
+    };
+  }
+
+  async confirmBooking(
+    bookingId: string,
+    input: ConfirmBookingInput,
+    userId: string,
+  ): Promise<ConfirmBookingResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    if (booking.userId.toString() !== userId) {
+      throw new ValidationError('You are not authorised to confirm this booking.');
+    }
+
+    if (booking.status !== 'PENDING_PAYMENT') {
+      throw new ValidationError('This booking is not awaiting payment.');
+    }
+
+    if (!booking.razorpayOrderId || booking.razorpayOrderId !== input.razorpayOrderId) {
+      throw new ValidationError('Payment order ID mismatch.');
+    }
+
+    await this.paymentService.verifyBookingPayment({
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      signature: input.razorpaySignature,
+    });
+
+    const confirmed = await this.bookingRepository.updateBookingConfirmed(
+      bookingId,
+      input.razorpayPaymentId,
+    );
+    if (!confirmed) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    this.logger.info({
+      action: 'BOOKING_CONFIRMED',
+      module: 'booking',
+      bookingId,
+      paymentId: input.razorpayPaymentId,
+      userId,
+    });
+
+    const appointmentTime = formatAppointmentTime(confirmed.startTime);
+    const appointmentAt = buildAppointmentDate(confirmed.date, confirmed.startTime);
+    const confirmedBarberId = confirmed.barberId.toString();
+    const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
+
+    await Promise.all([
+      enqueueNewBookingBarber({
+        barberId: confirmedBarberId,
+        customerName: confirmed.userName,
+        serviceName: confirmedServiceName,
+        appointmentTime,
+      }),
+      enqueueReminder10Min({
+        userId,
+        barberId: confirmedBarberId,
+        shopName: confirmed.shopName,
+        appointmentTime,
+        appointmentAt,
+        bookingId,
+      }),
+    ]);
+
+    return {
+      booking: {
+        id: confirmed._id.toString(),
+        bookingNumber: confirmed.bookingNumber,
+        status: confirmed.status,
+        paymentId: input.razorpayPaymentId,
+        advancePaid: confirmed.advancePaid,
+        remainingAmount: confirmed.remainingAmount,
+      },
+    };
+  }
+
+  async cancelBookingByBarber(
+    bookingId: string,
+    reason: CancellationReason,
+    barberId: string,
+  ): Promise<CancelBookingByBarberResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ConflictError(
+        booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR'
+          ? 'This booking has already been cancelled.'
+          : 'Only confirmed bookings can be cancelled.',
+      );
+    }
+
+    const weeklyLimit = await this.configService.getValueAsNumber(
+      CONFIG_KEYS.SHOP_CANCEL_WEEKLY_LIMIT,
+    );
+
+    let cancelled: Awaited<ReturnType<BookingRepository['updateBookingCancelled']>> = null;
+
+    if (booking.paymentMethod === 'FELBO_COINS') {
+      // FelboCoin-paid booking: return coins to user (COIN_REVERSAL) atomically
+      const coinRedeemThreshold = await this.configService.getValueAsNumber(
+        CONFIG_KEYS.COIN_REDEEM_THRESHOLD,
+      );
+
+      await withTransaction(async (session) => {
+        cancelled = await this.bookingRepository.updateBookingCancelled(
+          bookingId,
+          {
+            cancelledBy: 'VENDOR',
+            reason,
+            refundAmount: 0,
+            refundCoins: coinRedeemThreshold,
+            refundType: 'FELBO_COINS',
+            refundStatus: 'COMPLETED',
+          },
+          session,
+        );
+
+        if (!cancelled || !cancelled.cancellation) {
+          throw new ConflictError(
+            'Booking could not be cancelled — it may have already been updated.',
+          );
+        }
+
+        await this.felboCoinService.creditCoins(
+          {
+            userId: booking.userId.toString(),
+            coins: coinRedeemThreshold,
+            type: 'COIN_REVERSAL',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Coins returned for barber-cancelled booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      });
+    } else {
+      // Razorpay-paid booking: issue Razorpay refund
+      if (!booking.paymentId) {
+        throw new ValidationError('No payment record found for this booking.');
+      }
+
+      await this.paymentService.refundBookingAdvance(booking.paymentId, booking.advancePaid * 100);
+
+      cancelled = await this.bookingRepository.updateBookingCancelled(bookingId, {
+        cancelledBy: 'VENDOR',
+        reason,
+        refundAmount: booking.advancePaid,
+        refundCoins: 0,
+        refundType: 'ORIGINAL',
+        refundStatus: 'PENDING',
+      });
+
+      if (!cancelled || !cancelled.cancellation) {
+        throw new ConflictError(
+          'Booking could not be cancelled — it may have already been updated.',
+        );
+      }
+    }
+
+    const [{ cancellationsThisWeek, vendorId }] = await Promise.all([
+      this.shopService.incrementShopCancellationCount(booking.shopId.toString()),
+      this.barberService.incrementCancellationCount(barberId),
+    ]);
+
+    let flagged = false;
+    if (cancellationsThisWeek >= weeklyLimit) {
+      await this.vendorService.flagVendor(vendorId);
+      flagged = true;
+    }
+
+    this.logger.info({
+      action: 'BOOKING_CANCELLED_BY_BARBER',
+      module: 'booking',
+      bookingId,
+      barberId,
+      shopId: booking.shopId.toString(),
+      reason,
+      flagged,
+    });
+
+    await Promise.all([
+      cancelReminder10Min(bookingId),
+      enqueueBookingCancelledByBarber({
+        userId: booking.userId.toString(),
+        shopName: booking.shopName,
+      }),
+    ]);
+
+    return {
+      booking: {
+        id: cancelled!._id.toString(),
+        bookingNumber: cancelled!.bookingNumber,
+        status: cancelled!.status,
+        cancellation: {
+          cancelledAt: cancelled!.cancellation!.cancelledAt.toISOString(),
+          cancelledBy: cancelled!.cancellation!.cancelledBy,
+          reason: cancelled!.cancellation!.reason,
+          refundAmount: cancelled!.cancellation!.refundAmount,
+          refundCoins: cancelled!.cancellation!.refundCoins ?? 0,
+          refundType: cancelled!.cancellation!.refundType,
+          refundStatus: cancelled!.cancellation!.refundStatus,
+        },
+      },
+    };
+  }
+
+  async cancelBookingByUser(
+    bookingId: string,
+    reason: string,
+    userId: string,
+  ): Promise<CancelBookingByUserResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.userId.toString() !== userId) {
+      throw new ForbiddenError('You are not authorised to cancel this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ConflictError(
+        booking.status === 'CANCELLED_BY_USER' || booking.status === 'CANCELLED_BY_VENDOR'
+          ? 'This booking has already been cancelled.'
+          : 'Only confirmed bookings can be cancelled.',
+      );
+    }
+
+    const [freeCancelWindowMinutes, refundCoinsConfig] = await Promise.all([
+      this.configService.getValueAsNumber(CONFIG_KEYS.FREE_CANCELLATION_WINDOW_MINUTES),
+      this.configService.getValueAsNumber(CONFIG_KEYS.COIN_CANCELLATION_REFUND_COINS),
+    ]);
+
+    const nowMinutes = getCurrentIstMinutes();
+    const bookingStartMinutes = this.toMinutes(booking.startTime);
+    const minutesUntilBooking = bookingStartMinutes - nowMinutes;
+
+    if (minutesUntilBooking <= 0) {
+      throw new ValidationError('Cannot cancel a booking that has already started or passed.');
+    }
+
+    const createdAtTime = booking.createdAt ? booking.createdAt.getTime() : Date.now();
+    const elapsedMinutesSinceBooking = (Date.now() - createdAtTime) / (1000 * 60);
+
+    const isEarlyCancel = elapsedMinutesSinceBooking <= freeCancelWindowMinutes;
+    const refundCoins = isEarlyCancel ? refundCoinsConfig : 0;
+
+    // Cancel and credit coins atomically so they never get out of sync
+    let cancelled: typeof booking | null = null;
+
+    await withTransaction(async (session) => {
+      cancelled = await this.bookingRepository.updateBookingCancelled(
+        bookingId,
+        {
+          cancelledBy: 'USER',
+          reason,
+          refundAmount: 0,
+          refundCoins: refundCoins,
+          refundType: 'FELBO_COINS',
+          refundStatus: 'COMPLETED',
+        },
+        session,
+      );
+
+      if (!cancelled || !cancelled.cancellation) {
+        throw new ConflictError(
+          'Booking could not be cancelled — it may have already been updated.',
+        );
+      }
+
+      if (isEarlyCancel && refundCoins > 0) {
+        await this.felboCoinService.creditCoins(
+          {
+            userId,
+            coins: refundCoins,
+            type: 'COIN_REFUND',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Refund for early cancellation of booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      }
+
+      await this.userService.incrementCancellationCount(userId, session);
+    });
+
+    this.logger.info({
+      action: 'BOOKING_CANCELLED_BY_USER',
+      module: 'booking',
+      bookingId,
+      userId,
+      isEarlyCancel,
+      refundCoins,
+    });
+
+    await Promise.all([
+      cancelReminder10Min(bookingId),
+      enqueueBookingCancelledByUser({
+        barberId: booking.barberId.toString(),
+        customerName: booking.userName,
+        appointmentTime: formatAppointmentTime(booking.startTime),
+      }),
+    ]);
+
+    return {
+      booking: {
+        id: cancelled!._id.toString(),
+        bookingNumber: cancelled!.bookingNumber,
+        status: cancelled!.status,
+        cancellation: {
+          cancelledAt: formatTimestampAsIst(cancelled!.cancellation!.cancelledAt),
+          cancelledBy: cancelled!.cancellation!.cancelledBy,
+          reason: cancelled!.cancellation!.reason,
+          refundCoins,
+        },
+      },
+    };
+  }
+
+  async completeBooking(
+    bookingId: string,
+    barberId: string,
+    verificationCode: string,
+  ): Promise<CompleteBookingResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED') {
+      throw new ConflictError(
+        booking.status === 'COMPLETED'
+          ? 'Booking has already been completed.'
+          : 'Only confirmed bookings can be marked as completed.',
+      );
+    }
+
+    const bookingStartUtc = buildAppointmentDate(booking.date, booking.startTime);
+    if (new Date() < bookingStartUtc) {
+      throw new ConflictError(
+        `Booking cannot be completed before its scheduled start time (${formatAppointmentTime(booking.startTime)}).`,
+      );
+    }
+
+    if (booking.verificationCode !== verificationCode) {
+      throw new ValidationError('Invalid verification code.');
+    }
+
+    const isRazorpay = booking.paymentMethod === 'RAZORPAY';
+
+    const coinsEarned = isRazorpay
+      ? await this.configService.getValueAsNumber(CONFIG_KEYS.COIN_EARN_PER_BOOKING)
+      : 0;
+
+    let completed: Awaited<ReturnType<BookingRepository['updateBookingCompleted']>>;
+
+    await withTransaction(async (session) => {
+      completed = await this.bookingRepository.updateBookingCompleted(bookingId, 'BARBER', session);
+      if (!completed) throw new ConflictError('Booking has already been completed.');
+
+      if (isRazorpay && coinsEarned > 0) {
+        await this.felboCoinService.creditCoins(
+          {
+            userId: booking.userId.toString(),
+            coins: coinsEarned,
+            type: 'COIN_EARNED',
+            bookingId: booking._id.toString(),
+            bookingNumber: booking.bookingNumber,
+            description: `Coins earned for completing booking ${booking.bookingNumber}`,
+          },
+          session,
+        );
+      }
+    });
+
+    this.logger.info({
+      action: 'BOOKING_COMPLETED',
+      module: 'booking',
+      bookingId,
+      barberId,
+      userId: booking.userId.toString(),
+      coinsEarned,
+    });
+
+    return {
+      booking: {
+        id: completed!._id.toString(),
+        bookingNumber: completed!.bookingNumber,
+        status: completed!.status,
+        completedAt: completed!.completedAt!.toISOString(),
+        coinsEarned,
+      },
+    };
+  }
+
+  async markNoShow(bookingId: string, barberId: string): Promise<MarkNoShowResponse> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    if (booking.barberId.toString() !== barberId) {
+      throw new ForbiddenError('You are not assigned to this booking.');
+    }
+
+    if (booking.status !== 'CONFIRMED' && booking.status !== 'COMPLETED') {
+      throw new ConflictError('Only confirmed or completed bookings can be marked as no-show.');
+    }
+
+    if (booking.status === 'COMPLETED' && booking.completedBy === 'BARBER') {
+      throw new ConflictError(
+        'This booking was completed with a verification code — the user was present.',
+      );
+    }
+
+    // Barber must wait at least 10 minutes after startTime before marking no-show
+    const [startH, startM] = booking.startTime.split(':').map(Number);
+    const thresholdMinutes = startH * 60 + startM + 10;
+    const nowMinutes = getCurrentIstMinutes();
+
+    if (nowMinutes < thresholdMinutes) {
+      const thresholdH = Math.floor(thresholdMinutes / 60) % 24;
+      const thresholdMm = thresholdMinutes % 60;
+      const thresholdStr = `${String(thresholdH).padStart(2, '0')}:${String(thresholdMm).padStart(2, '0')}`;
+      throw new ValidationError(
+        `Cannot mark no-show before ${formatAppointmentTime(thresholdStr)}. Please wait 10 minutes after the booking start time.`,
+      );
+    }
+
+    const updated = await this.bookingRepository.updateBookingNoShow(bookingId);
+    if (!updated) {
+      throw new ConflictError('Booking status has already changed. Please refresh and try again.');
+    }
+
+    this.logger.info({
+      action: 'BOOKING_NO_SHOW',
+      module: 'booking',
+      bookingId,
+      barberId,
+      userId: booking.userId.toString(),
+    });
+
+    return {
+      booking: {
+        id: updated._id.toString(),
+        bookingNumber: updated.bookingNumber,
+        status: updated.status,
+        noShowAt: updated.noShowAt!.toISOString(),
+      },
+    };
+  }
+
+  private computeCanMarkNoShow(
+    status: string,
+    completedBy: string | undefined,
+    startTime: string,
+    nowMinutes: number,
+  ): boolean {
+    if (status !== 'CONFIRMED' && status !== 'COMPLETED') return false;
+    if (status === 'COMPLETED' && completedBy !== 'SYSTEM') return false;
+    const [h, m] = startTime.split(':').map(Number);
+    return nowMinutes >= h * 60 + m + 10;
+  }
+
+  async getBarberBookings(
+    barberId: string,
+    page: number,
+    limit: number,
+    status?: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED',
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<BarberBookingListResponse> {
+    const statuses =
+      status === 'CANCELLED'
+        ? ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW']
+        : status
+          ? [status]
+          : undefined;
+
+    const { bookings, total } = await this.bookingRepository.findByBarberId(
+      barberId,
+      page,
+      limit,
+      statuses,
+      startDate,
+      endDate,
+    );
+    const nowMinutes = getCurrentIstMinutes();
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userName: b.userName,
+        userImage: b.userImage,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+        canMarkNoShow: this.computeCanMarkNoShow(b.status, b.completedBy, b.startTime, nowMinutes),
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getBarberBookingDetail(
+    bookingId: string,
+    barberId: string,
+  ): Promise<BarberBookingDetailDto> {
+    const booking = await this.bookingRepository.barberGetBookingDetail(bookingId, barberId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: formatDateAsIst(booking.date),
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      customer: {
+        name: booking.userName,
+        image: booking.userImage,
+        gender: booking.userGender,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+        price: s.price,
+      })),
+      payment: {
+        total: booking.totalServiceAmount,
+        advancePaid: booking.advancePaid,
+        remainingToCollect: booking.remainingAmount,
+      },
+      canMarkNoShow: this.computeCanMarkNoShow(
+        booking.status,
+        booking.completedBy,
+        booking.startTime,
+        getCurrentIstMinutes(),
+      ),
+    };
+  }
+
+  async getBarberDashboardStats(barberId: string): Promise<BarberDashboardStatsDto> {
+    const { start, end } = getIstDayRangeUtc();
+    return this.bookingRepository.getBarberDashboardStats(barberId, start, end);
+  }
+
+  async getBarberTodayConfirmed(barberId: string): Promise<BarberTodayBookingsResponse> {
+    const { start, end } = getIstDayRangeUtc();
+    const bookings = await this.bookingRepository.findTodayConfirmedByBarberId(
+      barberId,
+      start,
+      end,
+    );
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userImage: b.userImage,
+        userName: b.userName,
+        services: b.services.map((s) => s.serviceName),
+        startTime: b.startTime,
+      })),
+    };
+  }
+
+  private isWithinShopWorkingHours(
+    workingHours: IWorkingHours | undefined,
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ): boolean {
+    if (!workingHours) return false;
+
+    const dayName = DAY_NAMES[date.getUTCDay()] as keyof IWorkingHours;
+    const dayHours = workingHours[dayName];
+
+    if (!dayHours || !dayHours.isOpen) return false;
+
+    const shopOpen = this.toMinutes(dayHours.open);
+    const shopClose = this.toMinutes(dayHours.close);
+    const slotStart = this.toMinutes(startTime);
+    const slotEnd = this.toMinutes(endTime);
+
+    return slotStart >= shopOpen && slotEnd <= shopClose;
+  }
+
+  private rangesOverlap(a: BlockedRange, b: BlockedRange): boolean {
+    return a.startMinutes < b.endMinutes && a.endMinutes > b.startMinutes;
+  }
+
+  private generateSlots(params: {
+    workStart: number;
+    workEnd: number;
+    totalDurationMinutes: number;
+    earliestBookable: number;
+    slotIntervalMinutes: number;
+    breakRanges: BlockedRange[];
+    bookedRanges: BlockedRange[];
+    blockedRanges: BlockedRange[];
+    lockedRanges: BlockedRange[];
+  }): TimeSlot[] {
+    const {
+      workStart,
+      workEnd,
+      totalDurationMinutes,
+      earliestBookable,
+      slotIntervalMinutes,
+      breakRanges,
+      bookedRanges,
+      blockedRanges,
+      lockedRanges,
+    } = params;
+
+    const slots: TimeSlot[] = [];
+
+    for (
+      let slotStart = workStart;
+      slotStart + totalDurationMinutes <= workEnd;
+      slotStart += slotIntervalMinutes
+    ) {
+      const slotEnd = slotStart + totalDurationMinutes;
+      const timeStr = this.fromMinutes(slotStart);
+
+      if (bookedRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
+        slots.push({ time: timeStr, available: false, reason: 'booked' });
+        continue;
+      }
+
+      if (slotStart < earliestBookable) {
+        slots.push({ time: timeStr, available: false, reason: 'passed' });
+        continue;
+      }
+
+      if (breakRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
+        slots.push({ time: timeStr, available: false, reason: 'break' });
+        continue;
+      }
+
+      if (blockedRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
+        slots.push({ time: timeStr, available: false, reason: 'blocked' });
+        continue;
+      }
+
+      if (lockedRanges.some((r) => slotStart < r.endMinutes && slotEnd > r.startMinutes)) {
+        slots.push({ time: timeStr, available: false, reason: 'locked' });
+        continue;
+      }
+
+      slots.push({ time: timeStr, available: true });
+    }
+
+    return slots;
+  }
+
+  private emptyResponse(
+    input: GetSlotsInput,
+    barberName: string,
+    totalDurationMinutes: number,
+    slotIntervalMinutes: number,
+  ): GetSlotsResponse {
+    return {
+      shopId: input.shopId,
+      date: input.date,
+      barberId: input.barberId,
+      barberName,
+      totalDurationMinutes,
+      slotIntervalMinutes,
+      workingHours: { start: '00:00', end: '00:00' },
+      slots: [],
+    };
+  }
+
+  private toMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  async adminGetBookings(params: AdminBookingListParams): Promise<AdminBookingListResponse> {
+    if (params.role === 'ASSOCIATION_ADMIN') {
+      const vendorIds = await this.vendorService.getAssociationVendorIds();
+      params.associatedShopIds = await this.shopService.getShopIdsByVendorIds(
+        vendorIds.map((id) => id.toString()),
+      );
+    }
+
+    const { bookings, total } = await this.bookingRepository.adminGetBookings(params);
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        ...(params.role !== 'ASSOCIATION_ADMIN' && { userPhone: b.userPhone }),
+        shopName: b.shopName,
+        barberName: b.barberName,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        endTime: b.endTime,
+        totalServiceAmount: b.totalServiceAmount,
+        advancePaid: b.advancePaid,
+        remainingAmount: b.remainingAmount,
+        status: b.status,
+        createdAt: b.createdAt.toISOString(),
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetVendorBookings(
+    vendorId: string,
+    params: { page: number; limit: number; status?: string; startDate?: Date; endDate?: Date },
+  ): Promise<AdminVendorBookingListResponse> {
+    const shopIds = await this.shopService.getShopIdsByVendorIds([vendorId]);
+
+    if (shopIds.length === 0) {
+      return { bookings: [], total: 0, page: params.page, limit: params.limit, totalPages: 0 };
+    }
+
+    const { bookings, total } = await this.bookingRepository.adminGetBookings({
+      page: params.page,
+      limit: params.limit,
+      status: params.status,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      associatedShopIds: shopIds,
+    });
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        barberName: b.barberName,
+        shopName: b.shopName,
+        userName: b.userName,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        status: b.status,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetBookingDetail(bookingId: string, role: string): Promise<AdminBookingDetailDto> {
+    let associatedShopIds: string[] | undefined;
+
+    if (role === 'ASSOCIATION_ADMIN') {
+      const vendorIds = await this.vendorService.getAssociationVendorIds();
+      associatedShopIds = await this.shopService.getShopIdsByVendorIds(
+        vendorIds.map((id) => id.toString()),
+      );
+    }
+
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    if (
+      associatedShopIds &&
+      associatedShopIds.length > 0 &&
+      !associatedShopIds.includes(booking.shopId.toString())
+    ) {
+      throw new ForbiddenError('You do not have permission to view this booking.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      ...(role !== 'ASSOCIATION_ADMIN' && {
+        userId: booking.userId.toString(),
+        userName: booking.userName,
+        userPhone: booking.userPhone,
+      }),
+      shopId: booking.shopId.toString(),
+      shopName: booking.shopName,
+      barberId: booking.barberId.toString(),
+      barberName: booking.barberName,
+      barberSelectionType: booking.barberSelectionType,
+      date: formatDateAsIst(booking.date),
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      totalDurationMinutes: booking.totalDurationMinutes,
+      services: booking.services.map((s) => ({
+        serviceId: s.serviceId.toString(),
+        serviceName: s.serviceName,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      })),
+      totalServiceAmount: booking.totalServiceAmount,
+      advancePaid: booking.advancePaid,
+      remainingAmount: booking.remainingAmount,
+      paymentMethod: booking.paymentMethod,
+      paymentId: booking.paymentId,
+      razorpayOrderId: booking.razorpayOrderId,
+      status: booking.status,
+      cancellation: booking.cancellation
+        ? {
+            cancelledAt: booking.cancellation.cancelledAt.toISOString(),
+            cancelledBy: booking.cancellation.cancelledBy,
+            reason: booking.cancellation.reason,
+            refundAmount: booking.cancellation.refundAmount,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
+            refundType: booking.cancellation.refundType,
+            refundStatus: booking.cancellation.refundStatus,
+          }
+        : undefined,
+      completedAt: booking.completedAt?.toISOString(),
+      createdAt: booking.createdAt.toISOString(),
+      updatedAt: booking.updatedAt.toISOString(),
+    };
+  }
+
+  async vendorGetBookingDetail(
+    bookingId: string,
+    shopIds: string[],
+  ): Promise<VendorBookingDetailDto> {
+    const booking = await this.bookingRepository.vendorGetBookingDetail(bookingId, shopIds);
+    if (!booking) {
+      throw new NotFoundError('Booking not found.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: formatDateAsIst(booking.date),
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      barberName: booking.barberName,
+      user: {
+        name: booking.userName,
+        profileUrl: booking.userProfileUrl,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        durationMinutes: s.durationMinutes,
+        price: s.price,
+      })),
+      payment: {
+        total: booking.totalServiceAmount,
+        advancePaid: booking.advancePaid,
+        remainingAmount: booking.remainingAmount,
+      },
+      status: booking.status,
+    };
+  }
+
+  async vendorGetBookings(params: VendorBookingListParams): Promise<VendorBookingListResponse> {
+    const { bookings, total } = await this.bookingRepository.vendorGetBookings(params);
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        userName: b.userName,
+        userImage: b.userImage,
+        barberName: b.barberName,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        endTime: b.endTime,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  private fromMinutes(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  async getUserBookingsList(
+    userId: string,
+    tab: UserBookingTab,
+    page: number,
+    limit: number,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<UserBookingListResponseV2> {
+    const statusMap: Record<UserBookingTab, string[]> = {
+      upcoming: ['CONFIRMED'],
+      completed: ['COMPLETED'],
+      cancelled: ['CANCELLED_BY_USER', 'CANCELLED_BY_VENDOR', 'NO_SHOW'],
+    };
+
+    const sortMap: Record<UserBookingTab, Record<string, 1 | -1>> = {
+      upcoming: { date: 1, startTime: 1 },
+      completed: { completedAt: -1, date: -1 },
+      cancelled: { updatedAt: -1 },
+    };
+
+    const { bookings, total } = await this.bookingRepository.findUserBookingsList(
+      userId,
+      statusMap[tab],
+      page,
+      limit,
+      startDate,
+      endDate,
+      sortMap[tab],
+    );
+
+    return {
+      bookings: bookings.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        shopImage: b.shopImage,
+        barberName: b.barberName,
+        services: b.services.map((s) => s.serviceName),
+        status: b.status,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        otp: b.verificationCode,
+        isReviewed: b.isReviewed,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getUserBookingDetail(userId: string, bookingId: string): Promise<UserBookingDetailDto> {
+    const booking = await this.bookingRepository.findUserBookingDetail(bookingId, userId);
+    if (!booking) throw new NotFoundError('Booking not found.');
+
+    const isReported = await this.issueService.existsByBookingId(bookingId);
+
+    const addr = booking.shopAddress;
+    const addressStr = addr
+      ? [addr.line1, addr.line2, addr.area, addr.city, addr.district, addr.state, addr.pincode]
+          .filter(Boolean)
+          .join(', ')
+      : '';
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: formatDateAsIst(booking.date),
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      paymentMethod: booking.paymentMethod,
+      otp: booking.verificationCode,
+      barberName: booking.barberName,
+      shop: {
+        id: booking.shopId.toString(),
+        name: booking.shopName,
+        image: booking.shopImage,
+        address: addressStr,
+        coordinates: booking.shopCoordinates,
+      },
+      services: booking.services.map((s) => ({
+        name: s.serviceName,
+        amount: s.price,
+      })),
+      payment: {
+        advancePaid: booking.advancePaid,
+        total: booking.totalServiceAmount,
+        remainingAmount: booking.remainingAmount,
+      },
+      cancellation: booking.cancellation
+        ? {
+            cancelledAt: formatTimestampAsIst(booking.cancellation.cancelledAt),
+            cancelledBy: booking.cancellation.cancelledBy,
+            reason: booking.cancellation.reason,
+            refundAmount: booking.cancellation.refundAmount,
+            refundCoins: booking.cancellation.refundCoins ?? 0,
+            refundType: booking.cancellation.refundType,
+            refundStatus: booking.cancellation.refundStatus,
+          }
+        : undefined,
+      isReported,
+    };
+  }
+
+  async getUserHomeBookingData(userId: string): Promise<UserHomeBookingDto> {
+    const nowMinutes = getCurrentIstMinutes();
+    const currentTimeStr = `${String(Math.floor(nowMinutes / 60)).padStart(2, '0')}:${String(nowMinutes % 60).padStart(2, '0')}`;
+    const { lastConfirmedBooking, totalConfirmedCount } =
+      await this.bookingRepository.getUserHomeBooking(userId, getTodayInIst(), currentTimeStr);
+
+    return {
+      lastConfirmedBooking: lastConfirmedBooking
+        ? {
+            id: lastConfirmedBooking._id.toString(),
+            bookingNumber: lastConfirmedBooking.bookingNumber,
+            shopName: lastConfirmedBooking.shopName,
+            shopImage: lastConfirmedBooking.shopImage,
+            bookingTime: lastConfirmedBooking.startTime,
+            shopCoordinates: lastConfirmedBooking.shopCoordinates
+              ? {
+                  longitude: lastConfirmedBooking.shopCoordinates[0],
+                  latitude: lastConfirmedBooking.shopCoordinates[1],
+                }
+              : null,
+          }
+        : null,
+      totalConfirmedCount,
+    };
+  }
+
+  async adminGetCancelledBookings(
+    params: AdminCancellationListParams,
+  ): Promise<AdminCancellationListResponse> {
+    const { cancellations, total } = await this.bookingRepository.adminGetCancelledBookings(params);
+
+    return {
+      cancellations: cancellations.map((b) => ({
+        id: b._id.toString(),
+        bookingNumber: b.bookingNumber,
+        shopName: b.shopName,
+        userPhone: b.userPhone,
+        date: formatDateAsIst(b.date),
+        startTime: b.startTime,
+        paymentMethod: b.paymentMethod,
+        advancePaid: b.advancePaid,
+        status: b.status,
+        cancelledBy: b.cancellation?.cancelledBy,
+        cancelledAt: b.cancellation!.cancelledAt.toISOString(),
+        reason: b.cancellation?.reason,
+        refundType: b.cancellation?.refundType,
+        refundStatus: b.cancellation?.refundStatus,
+        refundAmount: b.cancellation?.refundAmount,
+        refundCoins: b.cancellation?.refundCoins,
+        createdAt: b.createdAt.toISOString(),
+      })),
+      total,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(total / params.limit),
+    };
+  }
+
+  async adminGetCancelledBookingDetail(bookingId: string): Promise<AdminCancellationDetailDto> {
+    const booking = await this.bookingRepository.adminGetCancelledBookingDetail(bookingId);
+
+    if (!booking) throw new NotFoundError('Cancelled booking not found.');
+
+    if (!booking.cancellation) {
+      throw new NotFoundError('Cancellation details not found.');
+    }
+
+    return {
+      id: booking._id.toString(),
+      bookingNumber: booking.bookingNumber,
+      date: formatDateAsIst(booking.date),
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      totalDurationMinutes: booking.totalDurationMinutes,
+      status: booking.status,
+      services: booking.services.map((s) => ({
+        serviceId: s.serviceId.toString(),
+        serviceName: s.serviceName,
+        price: s.price,
+        durationMinutes: s.durationMinutes,
+      })),
+      totalServiceAmount: booking.totalServiceAmount,
+      advancePaid: booking.advancePaid,
+      remainingAmount: booking.remainingAmount,
+      paymentMethod: booking.paymentMethod,
+      paymentId: booking.paymentId,
+      cancellation: {
+        cancelledAt: booking.cancellation.cancelledAt.toISOString(),
+        cancelledBy: booking.cancellation.cancelledBy,
+        reason: booking.cancellation.reason,
+        refundAmount: booking.cancellation.refundAmount,
+        refundCoins: booking.cancellation.refundCoins,
+        refundType: booking.cancellation.refundType,
+        refundStatus: booking.cancellation.refundStatus,
+      },
+      user: {
+        id: booking.userId.toString(),
+        name: booking.userName,
+        phone: booking.userPhone,
+      },
+      shop: booking.shop
+        ? {
+            id: booking.shop._id.toString(),
+            name: booking.shop.name,
+            phone: booking.shop.phone,
+            address: booking.shop.address as AdminCancellationDetailDto['shop']['address'],
+            photos: booking.shop.photos,
+          }
+        : { id: '', name: '', phone: '', address: null, photos: [] },
+      vendor: booking.vendor
+        ? {
+            id: booking.vendor._id.toString(),
+            ownerName: booking.vendor.ownerName,
+            phone: booking.vendor.phone,
+            email: booking.vendor.email,
+          }
+        : { id: '', ownerName: '', phone: '' },
+      barber: booking.barber
+        ? {
+            id: booking.barber._id.toString(),
+            name: booking.barber.name,
+            phone: booking.barber.phone,
+            email: booking.barber.email,
+            photo: booking.barber.photo,
+          }
+        : { id: '', name: '', phone: '' },
+      createdAt: booking.createdAt.toISOString(),
+    };
+  }
+
+  async adminGetBookingStats(
+    period: 'day' | 'week' | 'month' | 'year' | 'custom',
+    startDate?: string,
+    endDate?: string,
+  ): Promise<AdminBookingStatsResult> {
+    const today = getTodayInIst();
+    const y = today.getUTCFullYear();
+    const mo = today.getUTCMonth();
+    const d = today.getUTCDate();
+
+    let start: Date;
+    let end: Date;
+
+    if (period === 'custom') {
+      start = parseDateAsIst(startDate!);
+      end = new Date(parseDateAsIst(endDate!).getTime() + 24 * 60 * 60 * 1000);
+    } else if (period === 'day') {
+      start = new Date(Date.UTC(y, mo, d));
+      end = new Date(Date.UTC(y, mo, d + 1));
+    } else if (period === 'week') {
+      const dow = today.getUTCDay(); // 0=Sun
+      const diffToMon = dow === 0 ? -6 : 1 - dow;
+      start = new Date(Date.UTC(y, mo, d + diffToMon));
+      end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'month') {
+      start = new Date(Date.UTC(y, mo, 1));
+      end = new Date(Date.UTC(y, mo + 1, 1));
+    } else {
+      // year
+      start = new Date(Date.UTC(y, 0, 1));
+      end = new Date(Date.UTC(y + 1, 0, 1));
+    }
+
+    const stats = await this.bookingRepository.getAdminBookingStats(start, end);
+
+    const toDateStr = (dt: Date): string => dt.toISOString().slice(0, 10);
+
+    return {
+      period,
+      startDate: toDateStr(start),
+      endDate: toDateStr(new Date(end.getTime() - 86400000)),
+      ...stats,
+    };
+  }
+
+  hasActiveBookingsForShop(shopId: string): Promise<boolean> {
+    return this.bookingRepository.hasActiveBookingsForShop(shopId);
+  }
+}

@@ -33,6 +33,32 @@ const workingHoursSchema = z.object({
 
 const mongoIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID');
 
+export const createShopSchema = z.object({
+  name: z.string().min(1, 'Shop name is required').max(100),
+  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  phone: z
+    .string()
+    .length(10, 'Enter a valid 10-digit mobile number')
+    .regex(/^[6-9]\d{9}$/),
+  address: addressSchema,
+  location: locationSchema,
+  photos: z.array(z.string().url()).max(10).optional(),
+});
+
+export const addAdditionalShopSchema = z.object({
+  name: z.string().min(1).max(100),
+  shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']),
+  phone: z
+    .string()
+    .length(10)
+    .regex(/^[6-9]\d{9}$/),
+  address: addressSchema,
+  location: locationSchema,
+  description: z.string().min(1).max(1000),
+  workingHours: workingHoursSchema,
+  photos: z.array(z.string().url()).min(1).max(10),
+});
+
 export const updateShopSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -42,6 +68,10 @@ export const updateShopSchema = z.object({
   photos: z.array(z.string().url()).max(10).optional(),
 });
 
+export const toggleAvailableSchema = z.object({
+  isAvailable: z.boolean(),
+});
+
 export const updateWorkingHoursSchema = z.object({
   workingHours: workingHoursSchema,
 });
@@ -49,22 +79,24 @@ export const updateWorkingHoursSchema = z.object({
 export const nearbyShopsSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180),
   latitude: z.coerce.number().min(-90).max(90),
-  maxDistanceMeters: z.coerce.number().positive().optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
+  categoryId: mongoIdSchema.optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
+
+export const recommendedShopsSchema = z.object({
+  longitude: z.coerce.number().min(-180).max(180),
+  latitude: z.coerce.number().min(-90).max(90),
+  categoryId: mongoIdSchema.optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
 });
 
 export const searchShopsSchema = z.object({
   query: z.string().min(1).optional(),
-  city: z.string().optional(),
   shopType: z.enum(['MENS', 'WOMENS', 'UNISEX']).optional(),
-  minRating: z.coerce.number().min(0).max(5).optional(),
-  serviceName: z.string().min(1).optional(),
-  availableNow: z
-    .string()
-    .optional()
-    .transform((val) => (val !== undefined ? val === 'true' : undefined)),
+  categoryIds: z.union([z.array(mongoIdSchema), mongoIdSchema.transform((v) => [v])]).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   maxDistanceMeters: z.coerce.number().positive().optional(),
@@ -76,16 +108,20 @@ export const shopIdParamSchema = z.object({
   id: mongoIdSchema,
 });
 
-export const shopDetailsQuerySchema = z.object({
-  latitude: z.coerce.number().min(-90).max(90).optional(),
-  longitude: z.coerce.number().min(-180).max(180).optional(),
-});
-
 export const shopIdOnboardingParamSchema = z.object({
   shopId: z
     .string()
     .min(1, 'Shop ID is required')
     .regex(/^[0-9a-fA-F]{24}$/, 'Invalid shop ID'),
+});
+
+export const shopServicesSchema = z.object({
+  type: z
+    .preprocess(
+      (val) => (typeof val === 'string' ? val.toUpperCase() : val),
+      z.enum(['MENS', 'WOMENS', 'ALL', 'UNISEX']),
+    )
+    .optional(),
 });
 
 export const completeProfileSchema = z.object({
@@ -120,9 +156,24 @@ export const updateServiceSchema = z
     message: 'At least one field is required for update.',
   });
 
+export const adminSearchShopsSchema = z.object({
+  query: z.string().min(1).optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+});
+
 export const serviceIdParamSchema = z.object({
   shopId: mongoIdSchema,
   serviceId: mongoIdSchema,
+});
+
+export const rejectShopSchema = z.object({
+  reason: z.string().min(1, 'Rejection reason is required').max(500),
+});
+
+export const pendingShopsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
 });
 
 export const addBarberSchema = z.object({

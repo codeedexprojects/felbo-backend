@@ -5,6 +5,7 @@ import {
   issueIdParamSchema,
   updateIssueStatusSchema,
   createIssueSchema,
+  userIssueListQuerySchema,
 } from './issue.validators';
 
 export class IssueController {
@@ -57,6 +58,22 @@ export class IssueController {
 
     const message = alreadyFlagged ? 'Vendor is already flagged.' : 'Vendor flagged successfully.';
     res.status(200).json({ success: true, message });
+  };
+
+  listUserIssues = async (req: Request, res: Response): Promise<void> => {
+    const { page, limit, status, startDate, endDate } = userIssueListQuerySchema.parse(req.query);
+    const userId = req.user!.sub;
+
+    const result = await this.issueService.getUserIssues(
+      userId,
+      page,
+      limit,
+      status,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(`${endDate}T23:59:59.999Z`) : undefined,
+    );
+
+    res.status(200).json({ success: true, data: result });
   };
 
   listIssues = async (req: Request, res: Response): Promise<void> => {

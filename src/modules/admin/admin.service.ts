@@ -4,24 +4,18 @@ import {
   AdminLoginInput,
   AdminLoginResponse,
   AdminDTO,
-  ListUsersFilter,
-  ListUsersResponse,
-  UserDetailDto,
-  UserListItemDto,
-  UserIssueDto,
+  SuperAdminDashboardDto,
+  AssociationAdminDashboardDto,
 } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
-import {
-  UnauthorizedError,
-  ForbiddenError,
-  NotFoundError,
-  ConflictError,
-} from '../../shared/errors/index';
+import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
 import { IAdmin } from './admin.model';
-import { IUser } from '../user/user.model';
-import UserRepository from '../user/user.repository';
+import UserService from '../user/user.service';
 import VendorService from '../vendor/vendor.service';
 import { IssueService } from '../issue/issue.service';
+import { BookingService } from '../booking/booking.service';
+import ShopService from '../shop/shop.service';
+import { FinanceService } from '../finance/finance.service';
 import {
   ListVendorsFilter,
   ListVendorsResponse,
@@ -36,10 +30,55 @@ export class AdminService {
     private readonly adminRepository: AdminRepository,
     private readonly jwtService: JwtService,
     private readonly vendorService: VendorService,
-    private readonly userRepository: UserRepository,
+    private readonly userService: UserService,
     private readonly issueService: IssueService,
     private readonly logger: Logger,
+    private readonly bookingService: BookingService,
+    private readonly shopService: ShopService,
+    private readonly financeService: FinanceService,
   ) {}
+
+  async getSuperAdminDashboard(): Promise<SuperAdminDashboardDto> {
+    const [userCounts, vendorStats, bookingStats, recentIssues, todayRegRevenue, pendingShops] =
+      await Promise.all([
+        this.userService.getUserStatusCounts(),
+        this.vendorService.getVendorDashboardStats(),
+        this.bookingService.getGlobalDashboardStats(),
+        this.issueService.getRecentIssuesForDashboard(5),
+        this.financeService.getTodayRegistrationRevenue(),
+        this.shopService.getPendingShopCount(),
+      ]);
+
+    return {
+      totalUsers: userCounts.total,
+      totalVendors: vendorStats.total,
+      totalBookings: bookingStats.totalBookings,
+      todaysBookings: bookingStats.todaysBookings,
+      todaysRevenue: Number((bookingStats.todaysRevenue + todayRegRevenue).toFixed(2)),
+      pendingVerifications: vendorStats.pendingVerifications,
+      pendingShops,
+      recentIssues,
+    };
+  }
+
+  async getAssociationAdminDashboard(): Promise<AssociationAdminDashboardDto> {
+    const vendorIds = await this.vendorService.getAssociationVendorIds();
+
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
+
+    const bookingStats = await this.bookingService.getStatsByShopIds(shopIds);
+
+    return {
+      myVendorsCount: vendorIds.length,
+      myVendorsBookings: {
+        today: bookingStats.todaysBookings,
+        total: bookingStats.totalBookings,
+      },
+      myVendorsRevenue: bookingStats.totalBookings * 2,
+    };
+  }
 
   async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {
     return this.vendorService.getVendorRequestDetailForAdmin(vendorId);
@@ -64,6 +103,14 @@ export class AdminService {
     return this.vendorService.listVendors(effectiveFilter);
   }
 
+  async getPendingRequestCounts(): Promise<{
+    total: number;
+    association: number;
+    independent: number;
+  }> {
+    return this.vendorService.getPendingRequestCounts();
+  }
+
   async listVerificationRequests(
     page: number,
     limit: number,
@@ -78,6 +125,14 @@ export class AdminService {
 
   async rejectVendor(vendorId: string, adminId: string, reason: string): Promise<void> {
     await this.vendorService.rejectVendor(vendorId, adminId, reason);
+  }
+
+  async blockVendor(vendorId: string, reason: string, adminId: string): Promise<void> {
+    await this.vendorService.blockVendor(vendorId, reason, adminId);
+  }
+
+  async unblockVendor(vendorId: string): Promise<void> {
+    await this.vendorService.unblockVendor(vendorId);
   }
 
   async login(input: AdminLoginInput): Promise<AdminLoginResponse> {
@@ -153,7 +208,7 @@ export class AdminService {
 
     if (!isValid) {
       await this.adminRepository.updateRefreshToken(admin._id.toString(), null);
-      this.logger.warn('Refresh token reuse detected — cleared stored token', {
+      this.logger.warn('Refresh token reuse detected - cleared stored token', {
         adminId: admin._id,
       });
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
@@ -180,72 +235,6 @@ export class AdminService {
   async logout(adminId: string): Promise<void> {
     await this.adminRepository.updateRefreshToken(adminId, null);
     this.logger.info('Admin logged out', { adminId });
-  }
-
-  async listUsers(filter: ListUsersFilter): Promise<ListUsersResponse> {
-    const [{ users, total }, counts] = await Promise.all([
-      this.userRepository.findAll(filter),
-      this.userRepository.getStatusCounts(),
-    ]);
-
-    return {
-      users: users.map((u) => this.mapUserToListItem(u)),
-      total,
-      page: filter.page,
-      limit: filter.limit,
-      totalPages: Math.ceil(total / filter.limit),
-      counts,
-    };
-  }
-
-  async getUserDetail(userId: string): Promise<UserDetailDto> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
-
-    const issuesReported: UserIssueDto[] = await this.issueService.getRecentIssuesByUserId(userId);
-
-    return {
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      email: user.email ?? null,
-      status: user.status,
-      blockReason: user.blockReason ?? null,
-      walletBalance: user.walletBalance,
-      cancellationCount: user.cancellationCount,
-      registeredAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt ?? null,
-      issuesReported,
-      issueCount: issuesReported.length,
-    };
-  }
-
-  async blockUser(userId: string, reason: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
-    if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
-    await this.userRepository.blockById(userId, reason);
-  }
-
-  async unblockUser(userId: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
-    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
-    if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
-    await this.userRepository.unblockById(userId);
-  }
-
-  private mapUserToListItem(user: IUser): UserListItemDto {
-    return {
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      email: user.email ?? null,
-      status: user.status,
-      walletBalance: user.walletBalance,
-      cancellationCount: user.cancellationCount,
-      lastLoginAt: user.lastLoginAt ?? null,
-      registeredAt: user.createdAt,
-    };
   }
 
   private mapToDTO(admin: IAdmin): AdminDTO {

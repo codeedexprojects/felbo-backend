@@ -1,4 +1,4 @@
-import { ClientSession } from 'mongoose';
+import { ClientSession } from '../../shared/database/transaction';
 import { Logger } from 'winston';
 import { ServiceRepository } from './service.repository';
 import { IBarberService, IService } from './service.model';
@@ -10,9 +10,10 @@ import {
   AddServiceInput,
   UpdateServiceInput,
   AdminServiceSummaryDto,
+  BookingServiceSnapshotData,
 } from './service.types';
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from '../../shared/errors';
-import { withTransaction } from '../../shared/database/transaction';
+
 import ShopService from '../shop/shop.service';
 import { BarberService } from '../barber/barber.service';
 import { CategoryService } from '../category/category.service';
@@ -65,39 +66,65 @@ export class ServiceService {
       throw new ValidationError('Duplicate service IDs are not allowed.');
     }
 
-    const validServices = await this.shopService.getActiveServicesByIds(uniqueServiceIds, shopId);
-    if (validServices.length !== uniqueServiceIds.length) {
-      throw new ValidationError(
-        'One or more service IDs are invalid or do not belong to this shop.',
+    const existing = await this.serviceRepository.findBarberServicesByBarberId(barberId);
+    const existingMap = new Map(existing.map((e) => [e.serviceId.toString(), e]));
+
+    const newServices = input.services.filter((s) => !existingMap.has(s.serviceId));
+    const updatedServices = input.services.filter((s) => {
+      const ex = existingMap.get(s.serviceId);
+      return ex && ex.durationMinutes !== s.durationMinutes;
+    });
+
+    if (newServices.length > 0) {
+      const newServiceIds = newServices.map((s) => s.serviceId);
+      const validServices = await this.shopService.getActiveServicesByIds(newServiceIds, shopId);
+      if (validServices.length !== newServiceIds.length) {
+        throw new ValidationError(
+          'One or more service IDs are invalid or do not belong to this shop.',
+        );
+      }
+
+      await this.serviceRepository.createBarberService(
+        newServices.map((s) => ({
+          barberId,
+          shopId,
+          serviceId: s.serviceId,
+          durationMinutes: s.durationMinutes,
+        })),
       );
     }
 
-    const newLinks = await withTransaction((session) =>
-      this.serviceRepository.replaceBarberServicesForBarber(
-        barberId,
-        shopId,
-        input.services,
-        session,
-      ),
-    );
+    if (updatedServices.length > 0) {
+      await Promise.all(
+        updatedServices.map((s) =>
+          this.serviceRepository.updateBarberServiceDuration(
+            barberId,
+            s.serviceId,
+            s.durationMinutes,
+          ),
+        ),
+      );
+    }
 
     this.logger.info({
       action: 'BARBER_SERVICES_ASSIGNED',
       module: 'service',
       barberId,
       vendorId,
-      serviceCount: newLinks.length,
+      added: newServices.length,
+      updated: updatedServices.length,
+      skipped: input.services.length - newServices.length - updatedServices.length,
     });
 
-    const serviceNameMap = new Map(validServices.map((s) => [s.id, s.name]));
-
-    return newLinks.map((l) => ({
+    const allLinks = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);
+    return allLinks.map((l) => ({
       id: l._id.toString(),
       barberId: l.barberId.toString(),
-      serviceId: l.serviceId.toString(),
+      serviceId: l.serviceId._id.toString(),
       shopId: l.shopId.toString(),
-      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
-      durationMinutes: l.durationMinutes,
+      serviceName: l.serviceId.name,
+      price: l.serviceId.basePrice,
+      duration: l.durationMinutes,
       isActive: l.isActive,
     }));
   }
@@ -105,20 +132,16 @@ export class ServiceService {
   async getBarberServices(barberId: string, vendorId: string): Promise<BarberAssignedServiceDto[]> {
     await this.barberService.getBarber(barberId, vendorId);
 
-    const links = await this.serviceRepository.findBarberServicesByBarberId(barberId);
-    if (links.length === 0) return [];
-
-    const serviceIds = links.map((l) => l.serviceId.toString());
-    const services = await this.getServicesByIds(serviceIds);
-    const serviceNameMap = new Map<string, string>(services.map((s) => [s.id, s.name]));
+    const links = await this.serviceRepository.findBarberServicesByBarberIdPopulated(barberId);
 
     return links.map((l) => ({
       id: l._id.toString(),
       barberId: l.barberId.toString(),
-      serviceId: l.serviceId.toString(),
+      serviceId: l.serviceId._id.toString(),
       shopId: l.shopId.toString(),
-      serviceName: serviceNameMap.get(l.serviceId.toString()) ?? '',
-      durationMinutes: l.durationMinutes,
+      serviceName: l.serviceId.name,
+      price: l.serviceId.basePrice,
+      duration: l.durationMinutes,
       isActive: l.isActive,
     }));
   }
@@ -187,6 +210,9 @@ export class ServiceService {
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
 
     if (shop.onboardingStatus === 'PENDING_PROFILE') {
       throw new ConflictError('Complete your shop profile before adding services.');
@@ -206,6 +232,8 @@ export class ServiceService {
       applicableFor: input.applicableFor,
       description: input.description,
     });
+
+    await this.shopService.syncShopCategory(shopId, input.categoryId);
 
     // Transition onboarding if this is the first service
     if (shop.onboardingStatus === 'PENDING_SERVICES') {
@@ -236,6 +264,9 @@ export class ServiceService {
     if (shop.vendorId !== vendorId) {
       throw new ForbiddenError('You do not own this shop.');
     }
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED') {
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
+    }
 
     if (shop.onboardingStatus === 'PENDING_PROFILE') {
       throw new ConflictError('Complete your shop profile before adding services.');
@@ -261,6 +292,8 @@ export class ServiceService {
       applicableFor: input.applicableFor,
       description: input.description,
     });
+
+    await this.shopService.syncShopCategory(shopId, input.categoryId);
 
     this.logger.info({
       action: 'SERVICE_CREATED',
@@ -289,6 +322,8 @@ export class ServiceService {
   ): Promise<ServiceDto> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
@@ -320,6 +355,8 @@ export class ServiceService {
   async deleteService(shopId: string, vendorId: string, serviceId: string): Promise<void> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
@@ -331,7 +368,16 @@ export class ServiceService {
       throw new ConflictError('Cannot delete service assigned to barbers.');
     }
 
+    const categoryId = service.categoryId.toString();
     await this.serviceRepository.softDeleteService(serviceId);
+
+    const remainingCount = await this.serviceRepository.countActiveServicesByShopAndCategory(
+      shopId,
+      categoryId,
+    );
+    if (remainingCount === 0) {
+      await this.shopService.removeCategoryFromShop(shopId, categoryId);
+    }
 
     this.logger.info({
       action: 'SERVICE_DELETED',
@@ -345,6 +391,8 @@ export class ServiceService {
   async toggleService(shopId: string, vendorId: string, serviceId: string): Promise<ServiceDto> {
     const shop = await this.shopService.getShopById(shopId);
     if (shop.vendorId !== vendorId) throw new ForbiddenError('You do not own this shop.');
+    if (shop.status === 'PENDING_APPROVAL' && shop.onboardingStatus === 'COMPLETED')
+      throw new ForbiddenError('This shop is pending admin approval and cannot be modified.');
 
     const service = await this.serviceRepository.findServiceById(serviceId);
     if (!service || service.shopId.toString() !== shopId || service.status === 'DELETED') {
@@ -354,6 +402,19 @@ export class ServiceService {
     const newIsActive = !service.isActive;
     const updated = await this.serviceRepository.toggleServiceActive(serviceId, newIsActive);
     if (!updated) throw new NotFoundError('Service not found.');
+
+    const categoryId = service.categoryId.toString();
+    if (newIsActive) {
+      await this.shopService.syncShopCategory(shopId, categoryId);
+    } else {
+      const remainingCount = await this.serviceRepository.countActiveServicesByShopAndCategory(
+        shopId,
+        categoryId,
+      );
+      if (remainingCount === 0) {
+        await this.shopService.removeCategoryFromShop(shopId, categoryId);
+      }
+    }
 
     this.logger.info({
       action: newIsActive ? 'SERVICE_ENABLED' : 'SERVICE_DISABLED',
@@ -392,5 +453,66 @@ export class ServiceService {
       baseDurationMinutes: s.baseDurationMinutes,
       description: s.description,
     }));
+  }
+
+  async countActiveByCategoryId(categoryId: string): Promise<number> {
+    return this.serviceRepository.countActiveByCategoryId(categoryId);
+  }
+
+  async getServicesForBookingSnapshot(
+    serviceIds: string[],
+    shopId: string,
+  ): Promise<BookingServiceSnapshotData[]> {
+    const services = await this.serviceRepository.findActiveServicesByIds(serviceIds, shopId);
+
+    const categoryIds = [...new Set(services.map((s) => s.categoryId.toString()))];
+    const categoryNameMap = await this.categoryService.getCategoryNamesByIds(categoryIds);
+
+    return services.map((s) => ({
+      id: s._id.toString(),
+      name: s.name,
+      categoryName: categoryNameMap.get(s.categoryId.toString()) ?? '',
+      basePrice: s.basePrice,
+    }));
+  }
+
+  async getServicesWithCategories(
+    shopId: string,
+    shopType?: 'MENS' | 'WOMENS' | 'ALL',
+  ): Promise<
+    Array<{
+      categoryName: string;
+      services: Array<{
+        id: string;
+        name: string;
+        durationMinutes: number;
+        price: number;
+        isAvailable: boolean;
+      }>;
+    }>
+  > {
+    const [categoriesWithServices, availableServiceIds] = await Promise.all([
+      this.serviceRepository.findServicesByCategoryForShop(shopId, shopType),
+      this.barberService.getAvailableServiceIds(shopId),
+    ]);
+
+    return categoriesWithServices.map((cat) => ({
+      categoryName: cat.name,
+      services: cat.services.map((s) => ({
+        id: s._id.toString(),
+        name: s.name,
+        durationMinutes: s.baseDurationMinutes,
+        price: s.basePrice,
+        isAvailable: availableServiceIds.has(s._id.toString()),
+      })),
+    }));
+  }
+
+  async countServicesByShopIds(shopIds: string[]): Promise<Map<string, number>> {
+    return this.serviceRepository.countServicesByShopIds(shopIds);
+  }
+
+  getShopIdsByServiceQuery(query: string): Promise<Set<string>> {
+    return this.serviceRepository.findShopIdsByServiceOrCategoryName(query);
   }
 }

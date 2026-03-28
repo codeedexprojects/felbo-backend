@@ -41,12 +41,17 @@ export interface IShop extends Document {
   location: IShopLocation;
   workingHours?: IWorkingHours;
   photos: string[];
+  categoryIds: mongoose.Types.ObjectId[];
   rating: {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  isPrimary: boolean;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+  lastCancellationAt?: Date;
   onboardingStatus:
     | 'PENDING_PROFILE'
     | 'PENDING_SERVICES'
@@ -119,15 +124,23 @@ const shopSchema = new Schema<IShop>(
     location: { type: locationSchema, required: true },
     workingHours: { type: workingHoursSchema },
     photos: { type: [String], default: [] },
+    categoryIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
+      default: [],
+    },
     rating: {
       average: { type: Number, default: 0 },
       count: { type: Number, default: 0 },
     },
-    isActive: { type: Boolean, default: true },
+    isAvailable: { type: Boolean, default: true },
+    isPrimary: { type: Boolean, default: false },
+    cancellationCount: { type: Number, default: 0 },
+    cancellationsThisWeek: { type: Number, default: 0 },
+    lastCancellationAt: { type: Date },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE', 'DELETED'],
-      default: 'ACTIVE',
+      enum: ['PENDING_APPROVAL', 'ACTIVE', 'DELETED'],
+      default: 'PENDING_APPROVAL',
     },
     onboardingStatus: {
       type: String,
@@ -147,11 +160,14 @@ const shopSchema = new Schema<IShop>(
 );
 
 shopSchema.index({ vendorId: 1 });
+shopSchema.index({ vendorId: 1, isPrimary: 1 });
 shopSchema.index({ location: '2dsphere' });
 shopSchema.index({ shopType: 1 });
-shopSchema.index({ status: 1, isActive: 1 });
+shopSchema.index({ status: 1, isAvailable: 1 });
 shopSchema.index({ 'rating.average': -1 });
 shopSchema.index({ 'address.city': 1 });
 shopSchema.index({ onboardingStatus: 1 });
+shopSchema.index({ categoryIds: 1, status: 1, isAvailable: 1 });
+shopSchema.index({ name: 'text', 'address.area': 'text' });
 
 export const ShopModel = mongoose.model<IShop>('Shop', shopSchema);

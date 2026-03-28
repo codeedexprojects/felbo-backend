@@ -15,7 +15,6 @@ export interface IBookingIssue extends Document {
   razorpayPaymentId?: string | null;
   refundId?: string | null;
   userLocation?: { lat: number; lng: number } | null;
-  photoUrl?: string | null;
   refundStatus: RefundStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -54,16 +53,14 @@ const bookingIssueSchema = new Schema<IBookingIssue>(
       type: { lat: Number, lng: Number },
       default: null,
     },
-    photoUrl: { type: String, default: null },
     refundStatus: {
       type: String,
-      enum: ['NONE', 'PENDING', 'ISSUED', 'FAILED'],
+      enum: ['NONE', 'PENDING', 'ISSUED', 'COMPLETED', 'FAILED'],
       default: 'NONE',
     },
   },
   {
     timestamps: true,
-    collection: 'bookingIssues',
   },
 );
 

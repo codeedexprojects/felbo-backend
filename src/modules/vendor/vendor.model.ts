@@ -20,6 +20,7 @@ export interface IVendorShopDetails {
   type: 'MENS' | 'WOMENS' | 'UNISEX';
   address: IVendorAddress;
   location: IVendorLocation;
+  photos: string[];
 }
 
 export interface IVendorRegistrationPayment {
@@ -37,6 +38,7 @@ export interface IVendor extends Document {
   phone: string;
   email?: string;
   ownerName: string;
+  profilePhoto?: string;
 
   registrationType: 'ASSOCIATION' | 'INDEPENDENT';
 
@@ -55,7 +57,7 @@ export interface IVendor extends Document {
   shopDetails?: IVendorShopDetails;
 
   // Verification
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAYMENT_PENDING';
   verificationNote?: string;
   verifiedAt?: Date;
   verifiedBy?: mongoose.Types.ObjectId;
@@ -72,6 +74,9 @@ export interface IVendor extends Document {
   isFlagged: boolean;
   flaggedAt?: Date;
 
+  // Fcm tokens for push notifications
+  fcmTokens: string[];
+
   // Block status
   isBlocked: boolean;
   blockedAt?: Date;
@@ -79,6 +84,8 @@ export interface IVendor extends Document {
   blockReason?: string;
 
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DELETED';
+  deactivatedAt?: Date | null;
+  deactivationReason?: string | null;
   refreshTokenHash?: string | null;
   lastLoginAt?: Date;
   createdAt: Date;
@@ -112,6 +119,7 @@ const shopDetailsSchema = new Schema(
     type: { type: String, enum: ['MENS', 'WOMENS', 'UNISEX'] },
     address: { type: addressSchema },
     location: { type: locationSchema },
+    photos: { type: [String], default: [] },
   },
   { _id: false },
 );
@@ -130,6 +138,10 @@ const vendorSchema = new Schema<IVendor>(
     ownerName: {
       type: String,
       default: '',
+    },
+    profilePhoto: {
+      type: String,
+      default: null,
     },
 
     registrationType: {
@@ -180,6 +192,12 @@ const vendorSchema = new Schema<IVendor>(
     isFlagged: { type: Boolean, default: false },
     flaggedAt: { type: Date },
 
+    fcmTokens: {
+      type: [String],
+      default: [],
+      select: false,
+    },
+
     // Block status
     isBlocked: { type: Boolean, default: false },
     blockedAt: { type: Date },
@@ -191,6 +209,8 @@ const vendorSchema = new Schema<IVendor>(
       enum: ['PENDING', 'ACTIVE', 'SUSPENDED', 'DELETED'],
       default: 'PENDING',
     },
+    deactivatedAt: { type: Date, default: null },
+    deactivationReason: { type: String, default: null },
     refreshTokenHash: { type: String, default: null },
     lastLoginAt: { type: Date },
   },

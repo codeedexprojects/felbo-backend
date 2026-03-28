@@ -4,11 +4,16 @@ export interface IUser extends Document {
   phone: string;
   name: string;
   email?: string;
-  walletBalance: number;
+  profileUrl?: string | null;
+  gender?: 'MALE' | 'FEMALE' | 'OTHER' | null;
+  felboCoinBalance: number;
   cancellationCount: number;
   status: 'ACTIVE' | 'BLOCKED' | 'DELETED';
   blockReason?: string | null;
+  deactivatedAt?: Date | null;
+  deactivationReason?: string | null;
   refreshTokenHash?: string | null;
+  fcmTokens: string[];
   lastLoginAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -30,7 +35,16 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: null,
     },
-    walletBalance: {
+    profileUrl: {
+      type: String,
+      default: null,
+    },
+    gender: {
+      type: String,
+      enum: ['MALE', 'FEMALE', 'OTHER'],
+      default: null,
+    },
+    felboCoinBalance: {
       type: Number,
       default: 0,
     },
@@ -48,9 +62,22 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: null,
     },
+    deactivatedAt: {
+      type: Date,
+      default: null,
+    },
+    deactivationReason: {
+      type: String,
+      default: null,
+    },
     refreshTokenHash: {
       type: String,
       default: null,
+      select: false,
+    },
+    fcmTokens: {
+      type: [String],
+      default: [],
       select: false,
     },
     lastLoginAt: {

@@ -8,22 +8,25 @@ export default class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   generateUploadUrl =
-    (prefix: string, appendUserId = false) =>
+    (prefix: string, appendUserId = false, subPath?: string) =>
     async (req: Request, res: Response): Promise<void> => {
       const { mimeType } = uploadBodySchema.parse(req.body);
       const ext = MIME_TO_EXT[mimeType];
       const mid = appendUserId ? `${req.user!.sub}/` : '';
-      const key = `${prefix}${mid}${randomUUID()}.${ext}`;
+      const sub = subPath ? `${subPath}/` : '';
+      const key = `${prefix}${mid}${sub}${randomUUID()}.${ext}`;
       const result = await this.uploadService.generateUploadUrlForKey(key, mimeType);
 
       res.status(200).json({ success: true, data: result });
     };
 
   verifyUpload =
-    (prefix: string, appendUserId = false) =>
+    (prefix: string, appendUserId = false, subPath?: string) =>
     async (req: Request, res: Response): Promise<void> => {
       const { key } = verifyKeySchema.parse(req.body);
-      const expectedPrefix = appendUserId ? `${prefix}${req.user!.sub}/` : prefix;
+      const mid = appendUserId ? `${req.user!.sub}/` : '';
+      const sub = subPath ? `${subPath}/` : '';
+      const expectedPrefix = `${prefix}${mid}${sub}`;
 
       if (!key.startsWith(expectedPrefix)) {
         res.status(400).json({

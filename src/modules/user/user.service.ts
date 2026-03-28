@@ -1,4 +1,5 @@
 import { Logger } from 'winston';
+import { ClientSession } from '../../shared/database/transaction';
 import UserRepository from './user.repository';
 import {
   UserDto,
@@ -9,17 +10,30 @@ import {
   VerifyOtpInput,
   VerifyOtpResponse,
   RefreshTokenResponse,
+  ListUsersFilter,
+  ListUsersResponse,
+  UserListItemDto,
+  UserDetailDto,
 } from './user.types';
 import { IUser } from './user.model';
+import { BookingService } from '../booking/booking.service';
+import { UserBookingsResponse } from '../booking/booking.types';
+import { IssueService } from '../issue/issue.service';
+import { FavoriteService } from '../favorite/favorite.service';
 import {
   NotFoundError,
   ForbiddenError,
   AppError,
   UnauthorizedError,
+  ValidationError,
+  ConflictError,
 } from '../../shared/errors/index';
 import { OtpService } from '../../shared/services/otp.service';
 import { OtpSessionService } from '../../shared/services/otp-session.service';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
+import { getRedisClient } from '../../shared/redis/redis';
+import { config } from '../../shared/config/config.service';
+import { NotificationService } from '../notification/notification.service';
 
 function last4(phone: string): string {
   return phone.slice(-4);
@@ -32,6 +46,10 @@ export default class UserService {
     private readonly otpSessionService: OtpSessionService,
     private readonly jwtService: JwtService,
     private readonly logger: Logger,
+    private readonly getIssueService?: () => IssueService,
+    private readonly getBookingService?: () => BookingService,
+    private readonly getFavoriteService?: () => FavoriteService,
+    private readonly getNotificationService?: () => NotificationService,
   ) {}
 
   private toUserDto(user: IUser): UserDto {
@@ -40,7 +58,9 @@ export default class UserService {
       phone: user.phone,
       name: user.name,
       email: user.email || null,
-      walletBalance: user.walletBalance,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
+      felboCoinBalance: user.felboCoinBalance,
       cancellationCount: user.cancellationCount,
       status: user.status,
       lastLoginAt: user.lastLoginAt || null,
@@ -48,13 +68,16 @@ export default class UserService {
     };
   }
 
-  private toProfileDto(user: IUser): UserProfileDto {
+  private toProfileDto(user: IUser, unreadNotificationCount: number): UserProfileDto {
     return {
       id: user._id.toString(),
       phone: user.phone,
       name: user.name,
       email: user.email || null,
-      walletBalance: user.walletBalance,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
+      felboCoinBalance: user.felboCoinBalance,
+      unreadNotificationCount,
     };
   }
 
@@ -64,11 +87,36 @@ export default class UserService {
       phone: user.phone,
       name: user.name,
       email: user.email || null,
-      walletBalance: user.walletBalance,
+      profileUrl: user.profileUrl || null,
+      gender: user.gender || null,
+      felboCoinBalance: user.felboCoinBalance,
     };
   }
 
   async sendOtp(input: SendOtpInput): Promise<SendOtpResponse> {
+    const existingUser = await this.userRepository.findByPhone(input.phone);
+    if (existingUser) {
+      if (existingUser.status === 'BLOCKED') {
+        throw new ForbiddenError('Your account has been suspended. Contact support.');
+      }
+      if (existingUser.status === 'DELETED') {
+        const GRACE_DAYS = 10;
+        const deactivatedAt = existingUser.deactivatedAt;
+        if (!deactivatedAt) {
+          throw new ForbiddenError('This account no longer exists.');
+        }
+        const daysSince = Math.floor(
+          (Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const daysRemaining = GRACE_DAYS - daysSince;
+        if (daysRemaining > 0) {
+          throw new ForbiddenError(
+            `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+          );
+        }
+      }
+    }
+
     const phoneWithCode = `91${input.phone}`;
     const result = await this.otpService.sendOtp(phoneWithCode, 'USER');
 
@@ -105,7 +153,28 @@ export default class UserService {
         throw new ForbiddenError('Your account has been suspended. Contact support.');
       }
       if (user.status === 'DELETED') {
-        throw new ForbiddenError('This account no longer exists.');
+        const GRACE_DAYS = 10;
+        const deactivatedAt = user.deactivatedAt;
+
+        if (!deactivatedAt) {
+          throw new ForbiddenError('This account no longer exists.');
+        }
+
+        const daysSince = Math.floor(
+          (Date.now() - deactivatedAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        const daysRemaining = GRACE_DAYS - daysSince;
+
+        if (daysRemaining > 0) {
+          throw new ForbiddenError(
+            `Your account was deactivated. Try logging in after ${daysRemaining} more day${daysRemaining !== 1 ? 's' : ''}.`,
+          );
+        }
+
+        // Grace period over — reactivate account
+        await this.userRepository.reactivateById(user._id.toString());
+        await getRedisClient().del(`user:deleted:${user._id.toString()}`);
+        user = (await this.userRepository.findByPhone(input.phone))!;
       }
     } else {
       user = await this.userRepository.create({ phone: input.phone });
@@ -124,6 +193,10 @@ export default class UserService {
 
     const refreshTokenHash = this.jwtService.hashToken(refreshToken);
     await this.userRepository.updateRefreshToken(user._id.toString(), refreshTokenHash);
+
+    if (input.fcmToken) {
+      void this.userRepository.addFcmToken(user._id.toString(), input.fcmToken);
+    }
 
     this.logger.info({
       action: 'USER_AUTHENTICATED',
@@ -179,18 +252,38 @@ export default class UserService {
   }
 
   async logout(userId: string): Promise<void> {
-    await this.userRepository.updateRefreshToken(userId, null);
+    await Promise.all([
+      this.userRepository.updateRefreshToken(userId, null),
+      this.userRepository.clearFcmTokens(userId),
+    ]);
     this.logger.info('User logged out', { userId });
   }
 
-  async getProfile(userId: string): Promise<UserProfileDto> {
+  async deactivateAccount(userId: string, reason?: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    const updated = await this.userRepository.deactivateById(userId, reason);
+    if (!updated) throw new AppError('Failed to deactivate account. Please try again.', 500);
+
+    await getRedisClient().set(`user:deleted:${userId}`, '1', { EX: config.jwt.expirySeconds });
+
+    this.logger.info({ action: 'USER_SELF_DEACTIVATED', module: 'user', userId, reason });
+  }
+
+  async getProfile(userId: string): Promise<UserProfileDto> {
+    const [user, unreadNotificationCount] = await Promise.all([
+      this.userRepository.findById(userId),
+      this.getNotificationService
+        ? this.getNotificationService().getUnreadCountForUser(userId)
+        : Promise.resolve(0),
+    ]);
 
     if (!user) {
       throw new NotFoundError('User not found');
     }
 
-    return this.toProfileDto(user);
+    return this.toProfileDto(user, unreadNotificationCount);
   }
 
   async updateProfile(userId: string, input: UpdateProfileInput): Promise<UserProfileDto> {
@@ -208,7 +301,11 @@ export default class UserService {
 
     this.logger.info('User profile updated', { userId });
 
-    return this.toProfileDto(updated);
+    const unreadNotificationCount = this.getNotificationService
+      ? await this.getNotificationService().getUnreadCountForUser(userId)
+      : 0;
+
+    return this.toProfileDto(updated, unreadNotificationCount);
   }
 
   async getUserById(userId: string): Promise<UserDto> {
@@ -219,5 +316,146 @@ export default class UserService {
     }
 
     return this.toUserDto(user);
+  }
+
+  async registerFcmToken(userId: string, token: string): Promise<void> {
+    if (!token) {
+      throw new ValidationError('Token is required');
+    }
+    await this.userRepository.addFcmToken(userId, token);
+  }
+
+  async unregisterFcmToken(userId: string, token: string): Promise<void> {
+    await this.userRepository.removeFcmToken(userId, token);
+  }
+
+  async getFcmTokens(userId: string): Promise<string[]> {
+    return this.userRepository.getFcmTokens(userId);
+  }
+
+  async pruneInvalidFcmTokens(tokens: string[]): Promise<void> {
+    await this.userRepository.pruneInvalidFcmTokens(tokens);
+  }
+
+  async incrementCancellationCount(userId: string, session?: ClientSession): Promise<void> {
+    await this.userRepository.incrementCancellationCount(userId, session);
+  }
+
+  async getUserStatusCounts(): Promise<{ total: number; active: number; blocked: number }> {
+    return this.userRepository.getStatusCounts();
+  }
+
+  async findAllUsers(filter: {
+    search?: string;
+    status?: 'ACTIVE' | 'BLOCKED';
+    page: number;
+    limit: number;
+  }): Promise<{ users: IUser[]; total: number }> {
+    return this.userRepository.findAll(filter);
+  }
+
+  async findUserForAdmin(userId: string): Promise<IUser> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    return user;
+  }
+
+  async blockUser(userId: string, reason: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status === 'BLOCKED') throw new ConflictError('User is already blocked.');
+    await this.userRepository.blockById(userId, reason);
+    await getRedisClient().set(`user:blocked:${userId}`, '1', { EX: config.jwt.expirySeconds });
+  }
+
+  async unblockUser(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+    if (user.status !== 'BLOCKED') throw new ConflictError('User is not blocked.');
+    await this.userRepository.unblockById(userId);
+    await getRedisClient().del(`user:blocked:${userId}`);
+  }
+
+  async listUsersForAdmin(filter: ListUsersFilter): Promise<ListUsersResponse> {
+    const [{ users, total }, counts] = await Promise.all([
+      this.userRepository.findAll(filter),
+      this.userRepository.getStatusCounts(),
+    ]);
+
+    const mappedUsers: UserListItemDto[] = users.map((u, i) => ({
+      slNo: total - (filter.page - 1) * filter.limit - i,
+      id: u._id.toString(),
+      name: u.name,
+      phone: u.phone,
+      email: u.email ?? null,
+      status: u.status,
+      felboCoinBalance: u.felboCoinBalance,
+      cancellationCount: u.cancellationCount,
+      lastLoginAt: u.lastLoginAt ?? null,
+      registeredAt: u.createdAt,
+    }));
+
+    return {
+      users: mappedUsers,
+      total,
+      page: filter.page,
+      limit: filter.limit,
+      totalPages: Math.ceil(total / filter.limit),
+      counts,
+    };
+  }
+
+  async getUserDetailForAdmin(userId: string): Promise<UserDetailDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    const issuesReported = this.getIssueService
+      ? await this.getIssueService().getRecentIssuesByUserId(userId)
+      : [];
+
+    const favoritesResponse = this.getFavoriteService
+      ? await this.getFavoriteService().listFavorites(userId, 1, 10)
+      : { favorites: [] };
+
+    const bookingsResponse = this.getBookingService
+      ? await this.getBookingService().getUserBookings(userId, 1, 10)
+      : { bookings: [] };
+
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      phone: user.phone,
+      email: user.email ?? null,
+      profileUrl: user.profileUrl ?? null,
+      status: user.status,
+      blockReason: user.blockReason ?? null,
+      deactivationReason: user.deactivationReason ?? null,
+      felboCoinBalance: user.felboCoinBalance,
+      cancellationCount: user.cancellationCount,
+      registeredAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt ?? null,
+      issuesReported,
+      issueCount: issuesReported.length,
+      recentBookings: bookingsResponse.bookings,
+      favorites: favoritesResponse.favorites.map((f) => ({
+        shopId: f.shopId,
+        name: f.name,
+        image: f.image,
+        rating: f.rating.average,
+      })),
+    };
+  }
+
+  async getAdminUserBookings(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<UserBookingsResponse> {
+    if (!this.getBookingService) throw new Error('BookingService not injected');
+
+    const user = await this.userRepository.findById(userId);
+    if (!user || user.status === 'DELETED') throw new NotFoundError('User not found.');
+
+    return this.getBookingService().getUserBookings(userId, page, limit);
   }
 }

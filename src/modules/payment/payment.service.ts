@@ -1,15 +1,22 @@
-import crypto from 'crypto';
+import { hmacSha256 } from '../../shared/utils/token';
 import Razorpay from 'razorpay';
 import { Logger } from 'winston';
 import PaymentRepository from './payment.repository';
-import { CreateOrderInput, CreateOrderResult, VerifyPaymentInput } from './payment.types';
+import {
+  CreateOrderInput,
+  CreateOrderResult,
+  VerifyPaymentInput,
+  CreateBookingPaymentInput,
+} from './payment.types';
 import { ValidationError, NotFoundError } from '../../shared/errors/index';
+import { IssueService } from '../issue/issue.service';
 
 export default class PaymentService {
   private readonly razorpay: InstanceType<typeof Razorpay>;
 
   constructor(
     private readonly paymentRepository: PaymentRepository,
+    private readonly getIssueService: () => IssueService,
     private readonly razorpayKeyId: string,
     private readonly razorpayKeySecret: string,
     private readonly webhookSecret: string,
@@ -18,6 +25,84 @@ export default class PaymentService {
     this.razorpay = new Razorpay({
       key_id: this.razorpayKeyId,
       key_secret: this.razorpayKeySecret,
+    });
+  }
+
+  private get issueService(): IssueService {
+    return this.getIssueService();
+  }
+
+  async createBookingAdvanceOrder(input: CreateBookingPaymentInput): Promise<CreateOrderResult> {
+    const amountPaise = input.amountRupees * 100;
+    const receipt = `bk_${input.userId.slice(-6)}_${Date.now()}`;
+
+    const order = await this.razorpay.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      receipt,
+      notes: { purpose: 'BOOKING_ADVANCE', userId: input.userId, shopId: input.shopId },
+    });
+
+    await this.paymentRepository.create({
+      razorpayOrderId: order.id,
+      purpose: 'BOOKING_ADVANCE',
+      amountPaise,
+      currency: 'INR',
+      userId: input.userId,
+      shopId: input.shopId,
+      receipt,
+      notes: { purpose: 'BOOKING_ADVANCE', userId: input.userId, shopId: input.shopId },
+      status: 'CREATED',
+    });
+
+    this.logger.info({
+      action: 'PAYMENT_ORDER_CREATED',
+      module: 'payment',
+      purpose: 'BOOKING_ADVANCE',
+      orderId: order.id,
+      amountPaise,
+      userId: input.userId,
+    });
+
+    return { orderId: order.id };
+  }
+
+  async verifyBookingPayment(input: VerifyPaymentInput): Promise<void> {
+    const expectedSignature = hmacSha256(
+      this.razorpayKeySecret,
+      `${input.orderId}|${input.paymentId}`,
+    );
+
+    if (expectedSignature !== input.signature) {
+      this.logger.warn({
+        action: 'PAYMENT_SIGNATURE_MISMATCH',
+        module: 'payment',
+        orderId: input.orderId,
+      });
+      throw new ValidationError('Payment verification failed. Invalid signature.');
+    }
+
+    const payment = await this.paymentRepository.findByOrderId(input.orderId);
+    if (!payment) {
+      throw new NotFoundError('Payment record not found for this order.');
+    }
+
+    if (payment.status === 'PAID') {
+      return;
+    }
+
+    await this.paymentRepository.updatePaymentVerified(input.orderId, {
+      razorpayPaymentId: input.paymentId,
+      razorpaySignature: input.signature,
+      paidAt: new Date(),
+    });
+
+    this.logger.info({
+      action: 'PAYMENT_VERIFIED',
+      module: 'payment',
+      purpose: 'BOOKING_ADVANCE',
+      orderId: input.orderId,
+      paymentId: input.paymentId,
     });
   }
 
@@ -58,10 +143,10 @@ export default class PaymentService {
   }
 
   async verifyVendorRegistrationPayment(input: VerifyPaymentInput): Promise<void> {
-    const expectedSignature = crypto
-      .createHmac('sha256', this.razorpayKeySecret)
-      .update(`${input.orderId}|${input.paymentId}`)
-      .digest('hex');
+    const expectedSignature = hmacSha256(
+      this.razorpayKeySecret,
+      `${input.orderId}|${input.paymentId}`,
+    );
 
     if (expectedSignature !== input.signature) {
       this.logger.warn({
@@ -136,11 +221,26 @@ export default class PaymentService {
     });
   }
 
-  async refundIssuePayment(razorpayPaymentId: string): Promise<string> {
-    const ISSUE_REFUND_PAISE = 1000; // ₹10
-
+  async refundBookingAdvance(razorpayPaymentId: string, amountPaise: number): Promise<string> {
     const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
-      amount: ISSUE_REFUND_PAISE,
+      amount: amountPaise,
+      notes: { reason: 'Booking cancelled by barber' },
+    });
+
+    this.logger.info({
+      action: 'BOOKING_ADVANCE_REFUND_INITIATED',
+      module: 'payment',
+      paymentId: razorpayPaymentId,
+      refundId: refund.id,
+      amountPaise,
+    });
+
+    return refund.id;
+  }
+
+  async refundIssuePayment(razorpayPaymentId: string, amountPaise: number): Promise<string> {
+    const refund = await this.razorpay.payments.refund(razorpayPaymentId, {
+      amount: amountPaise,
       notes: { reason: 'Issue refund' },
     });
 
@@ -149,7 +249,7 @@ export default class PaymentService {
       module: 'payment',
       paymentId: razorpayPaymentId,
       refundId: refund.id,
-      amountPaise: ISSUE_REFUND_PAISE,
+      amountPaise,
     });
 
     return refund.id;
@@ -194,6 +294,9 @@ export default class PaymentService {
             await payment.save();
           }
         }
+
+        await this.issueService.markIssueRefundCompleted(refundEntity.id);
+
         this.logger.info({
           action: 'REFUND_PROCESSED',
           module: 'payment',

@@ -25,7 +25,7 @@ export default class UploadService {
   constructor(
     private readonly vendorService: VendorService,
     private readonly bucket: string,
-    region: string,
+    private readonly region: string,
     private readonly logger: Logger,
   ) {
     this.s3 = new S3Client({ region });
@@ -89,7 +89,20 @@ export default class UploadService {
       key,
     });
 
-    return { verified: true, viewUrl };
+    const permanentUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+
+    return { verified: true, viewUrl, permanentUrl };
+  }
+
+  async deleteObjectByKey(key: string): Promise<void> {
+    await withRetry(() =>
+      this.s3.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: { Objects: [{ Key: key }], Quiet: true },
+        }),
+      ),
+    );
   }
 
   async runCleanupJob(): Promise<void> {

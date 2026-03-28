@@ -13,7 +13,8 @@ export interface BarberAssignedServiceDto {
   serviceId: string;
   shopId: string;
   serviceName: string;
-  durationMinutes: number;
+  price: number;
+  duration: number;
   isActive: boolean;
 }
 
@@ -76,4 +77,11 @@ export interface PublicServiceDto {
   maxDuration: number;
   applicableFor: 'MENS' | 'WOMENS' | 'ALL';
   description?: string;
+}
+
+export interface BookingServiceSnapshotData {
+  id: string;
+  name: string;
+  categoryName: string;
+  basePrice: number;
 }

@@ -1,10 +1,11 @@
+import { OnboardingStatus } from '../shop/shop.types';
+
 export interface CreateBarberInput {
   shopId: string;
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  username: string;
-  password: string;
 }
 
 export interface UpdateBarberInput {
@@ -24,11 +25,17 @@ export interface BarberManagementDto {
   vendorId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   username: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  isVendorBarber: boolean;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
+  serviceCount: number;
+  services?: { id: string; name: string }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,7 +45,7 @@ export interface ListBarbersFilter {
   limit: number;
   search?: string;
   isAvailable?: boolean;
-  status?: 'ACTIVE' | 'DELETED';
+  status?: 'INACTIVE' | 'ACTIVE' | 'DELETED';
 }
 
 export interface ListBarbersResponse {
@@ -49,14 +56,11 @@ export interface ListBarbersResponse {
   totalPages: number;
 }
 
-// Onboarding: add barber during shop setup
-
 export interface OnboardBarberInput {
   name: string;
   phone: string;
+  email: string;
   photo?: string;
-  username: string;
-  password: string;
 }
 
 export interface OnboardBarberDto {
@@ -64,13 +68,14 @@ export interface OnboardBarberDto {
   shopId: string;
   name: string;
   phone: string;
+  email?: string;
   photo?: string;
   rating: { average: number; count: number };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
+  isVendorBarber: boolean;
+  serviceCount: number;
 }
-
-// Onboarding: assign services to a barber
 
 export interface AddBarberServiceItemInput {
   serviceId: string;
@@ -105,6 +110,26 @@ export interface BarberServiceLinkDto {
   updatedAt: Date;
 }
 
+export interface AddSelfAsBarberInput {
+  name: string;
+  email: string;
+  phone: string;
+  photo?: string;
+}
+
+export interface SelfBarberDto {
+  id: string;
+  shopId: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isAvailable: boolean;
+  isVendorBarber: boolean;
+  onboardingStatus?: OnboardingStatus;
+  barberToken?: string;
+  barberRefreshToken?: string;
+}
+
 export interface AssignServiceItemInput {
   serviceId: string;
   durationMinutes: number;
@@ -114,12 +139,126 @@ export interface AssignServicesInput {
   services: AssignServiceItemInput[];
 }
 
-export interface BarberAssignedServiceDto {
+export interface BarberSendOtpInput {
+  email: string;
+  clientIp: string;
+}
+
+export interface BarberSendOtpResult {
+  message: string;
+}
+
+export interface BarberVerifyOtpInput {
+  email: string;
+  otp: string;
+}
+
+export interface BarberVerifyOtpResult {
+  resetToken: string;
+  message: string;
+}
+
+export interface BarberSetPasswordInput {
+  resetToken: string;
+  newPassword: string;
+}
+
+export interface BarberAuthResult {
+  token: string;
+  refreshToken: string;
+  barber: {
+    id: string;
+    name: string;
+    email: string;
+    shopId: string;
+    status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
+  };
+}
+
+export interface BarberLoginInput {
+  email: string;
+  password: string;
+  fcmToken?: string;
+}
+
+export interface BarberRefreshTokenResponse {
+  token: string;
+  refreshToken: string;
+}
+
+export interface CreateSlotBlockInput {
+  barberId: string;
+  serviceIds?: string[];
+  reason?: string;
+}
+
+export interface SlotBlockResult {
   id: string;
   barberId: string;
-  serviceId: string;
   shopId: string;
-  serviceName: string;
+  startTime: string;
+  endTime: string;
+
   durationMinutes: number;
-  isActive: boolean;
+  status: 'ACTIVE' | 'RELEASED';
+}
+
+export interface ReleaseSlotBlockInput {
+  blockId: string;
+  barberId: string;
+}
+
+export interface ListSlotBlocksQuery {
+  date?: string;
+  status?: 'ACTIVE' | 'RELEASED';
+}
+
+// Minimal slot block range exposed to other modules (e.g. booking)
+export interface SlotBlockRange {
+  startTime: string;
+  endTime: string;
+}
+
+export interface BarberProfileDto {
+  id: string;
+  name: string;
+  photo: string | null;
+  phone: string;
+  email: string | null;
+  shopName: string;
+  isVendorBarber: boolean;
+  services: Array<{
+    id: string;
+    name: string;
+    durationMinutes: number;
+  }>;
+}
+
+export interface BookedSlotSummary {
+  bookingNumber: string;
+  customerName: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  services: Array<{ name: string; durationMinutes: number }>;
+}
+
+export interface BarberDayScheduleResult {
+  date: string;
+  isWorking: boolean;
+  workingHours: { start: string; end: string } | null;
+  breaks: Array<{ start: string; end: string }>;
+  blocks: SlotBlockResult[];
+  bookings: BookedSlotSummary[];
+  availableRanges: Array<{ startTime: string; endTime: string }>;
+}
+
+// Public-facing barber DTO used in booking flow (select barber screen)
+export interface PublicBarberDto {
+  id: string;
+  name: string;
+  photo?: string;
+  rating: { average: number; count: number };
+  isAvailable: boolean;
+  isVendorBarber: boolean;
 }

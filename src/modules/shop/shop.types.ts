@@ -5,6 +5,28 @@ export type OnboardingStatus =
   | 'PENDING_BARBER_SERVICES'
   | 'COMPLETED';
 
+export interface ShopServicesInput {
+  shopId: string;
+  type?: 'MENS' | 'WOMENS' | 'ALL';
+}
+
+export interface ShopServiceItemDto {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  price: number;
+  isAvailable: boolean;
+}
+
+export interface ShopServicesCategoryDto {
+  categoryName: string;
+  services: ShopServiceItemDto[];
+}
+
+export interface ShopServicesResponse {
+  categories: ShopServicesCategoryDto[];
+}
+
 export interface ShopAddress {
   line1: string;
   line2?: string;
@@ -17,7 +39,7 @@ export interface ShopAddress {
 
 export interface ShopLocation {
   type: 'Point';
-  coordinates: [number, number]; // [longitude, latitude]
+  coordinates: [number, number];
 }
 
 export interface DayHours {
@@ -43,6 +65,8 @@ export interface CreateShopInput {
   phone: string;
   address: ShopAddress;
   location: ShopLocation;
+  photos?: string[];
+  isPrimary?: boolean;
 }
 
 export interface UpdateShopInput {
@@ -59,6 +83,14 @@ export interface UpdateShopInput {
 
 export interface UpdateWorkingHoursInput {
   workingHours: WorkingHours;
+}
+
+export interface UpdateShopStatusInput {
+  status: 'ACTIVE' | 'DELETED';
+}
+
+export interface ToggleShopAvailableInput {
+  isAvailable: boolean;
 }
 
 export interface CompleteProfileInput {
@@ -99,19 +131,26 @@ export interface AddBarberInput {
 export interface NearbyShopsInput {
   longitude: number;
   latitude: number;
-  maxDistanceMeters?: number;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
+  categoryId?: string;
+  userId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface RecommendedShopsInput {
+  longitude: number;
+  latitude: number;
+  userId: string;
+  categoryId?: string;
   page?: number;
   limit?: number;
 }
 
 export interface SearchShopsInput {
   query?: string;
-  city?: string;
   shopType?: 'MENS' | 'WOMENS' | 'UNISEX';
-  minRating?: number;
-  serviceName?: string;
-  availableNow?: boolean;
+  categoryIds?: string[];
   latitude?: number;
   longitude?: number;
   maxDistanceMeters?: number;
@@ -123,9 +162,12 @@ export interface ShopSearchResultDto {
   id: string;
   name: string;
   photos: string[];
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
   address: ShopAddress;
   services: Array<{ id: string; name: string; basePrice: number }>;
   distance?: number;
+  isAvailable: boolean;
+  rating: { average: number; count: number };
 }
 
 export interface SearchShopsResponse {
@@ -134,6 +176,12 @@ export interface SearchShopsResponse {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface MyBarberProfile {
+  id: string;
+  name: string;
+  isAvailable: boolean;
 }
 
 export interface ShopDto {
@@ -151,13 +199,51 @@ export interface ShopDto {
     average: number;
     count: number;
   };
-  isActive: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+  isAvailable: boolean;
+  isPrimary: boolean;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
   onboardingStatus: OnboardingStatus;
+}
+
+export interface VendorShopDto extends ShopDto {
+  myBarberProfile: MyBarberProfile | null;
+}
+
+export interface VendorShopListDto {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  address: string;
+  serviceCount: number;
+  barberCount: number;
+  onboardingStatus: OnboardingStatus;
+  status: 'PENDING_APPROVAL' | 'ACTIVE' | 'DELETED';
 }
 
 export interface NearbyShopDto extends ShopDto {
   distance: number; // meters
+}
+
+export interface NearbyShopCardDto {
+  id: string;
+  image: string | null;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
+  isAvailable: boolean;
+  closingTime: string | null;
+  distance: number;
+  topServices: string[];
+  isFavorite: boolean;
+  rating: { average: number; count: number };
+}
+
+export interface NearbyShopsResponse {
+  shops: NearbyShopCardDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface ServiceDto {
@@ -190,7 +276,7 @@ export interface BarberDto {
     average: number;
     count: number;
   };
-  status: 'ACTIVE' | 'DELETED';
+  status: 'INACTIVE' | 'ACTIVE' | 'DELETED';
   isAvailable: boolean;
   services: BarberServiceDto[];
 }
@@ -202,6 +288,8 @@ export interface AdminBarberSummaryDto {
   phone: string;
   photo?: string;
   isAvailable: boolean;
+  cancellationCount: number;
+  cancellationsThisWeek: number;
 }
 
 export interface AdminServiceSummaryDto {
@@ -215,17 +303,6 @@ export interface AdminServiceSummaryDto {
 
 // Public shop details DTOs (used by the user-facing shop details page)
 
-export interface PublicServiceDto {
-  id: string;
-  categoryId: string;
-  name: string;
-  basePrice: number;
-  minDuration: number; // minutes — min across barbers, falls back to baseDurationMinutes
-  maxDuration: number; // minutes — max across barbers, falls back to baseDurationMinutes
-  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
-  description?: string;
-}
-
 export interface PublicBarberDto {
   id: string;
   name: string;
@@ -234,7 +311,7 @@ export interface PublicBarberDto {
     average: number;
     count: number;
   };
-  isAvailableToday: boolean; // based on isActive; daily scheduling not yet modelled
+  isAvailableToday: boolean;
 }
 
 export interface ShopDetailsDto {
@@ -243,18 +320,118 @@ export interface ShopDetailsDto {
   description: string;
   shopType: 'MENS' | 'WOMENS' | 'UNISEX';
   address: ShopAddress;
-  distance?: number; // metres from caller, present only when lat/lng query params are sent
+  location: ShopLocation;
   rating: {
     average: number;
     count: number;
   };
   workingHours?: WorkingHours;
   photos: string[];
-  services: PublicServiceDto[];
   barbers: PublicBarberDto[];
+  isAvailable: boolean;
+  isFavorite: boolean;
 }
 
-export interface GetShopDetailsOptions {
-  latitude?: number;
-  longitude?: number;
+export interface AdminShopSearchInput {
+  query?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminShopSearchResultDto {
+  shopId: string;
+  shopName: string;
+  vendorName: string;
+}
+
+export interface AdminShopSearchResponse {
+  shops: AdminShopSearchResultDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AddAdditionalShopInput {
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation; // already typed as { type: 'Point'; coordinates: [number, number] }
+  description: string;
+  workingHours: WorkingHours; // already typed with all 7 days
+  photos: string[];
+}
+
+export interface CreateCompletedShopInput {
+  vendorId: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours: WorkingHours;
+  photos: string[];
+}
+
+export interface PendingApprovalShopDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  address: ShopAddress;
+  vendorId: string;
+  vendorName: string;
+  vendorPhone: string;
+  createdAt: Date;
+}
+
+export interface PendingApprovalShopsResponse {
+  shops: PendingApprovalShopDto[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PendingShopDetailsBarberDto {
+  id: string;
+  name: string;
+  phone: string;
+  photo?: string;
+  isAvailable: boolean;
+  serviceCount: number;
+}
+
+export interface PendingShopDetailsServiceDto {
+  id: string;
+  categoryId: string;
+  name: string;
+  basePrice: number;
+  baseDurationMinutes: number;
+  applicableFor: 'MENS' | 'WOMENS' | 'ALL';
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'DELETED';
+}
+
+export interface PendingShopDetailsDto {
+  id: string;
+  name: string;
+  shopType: 'MENS' | 'WOMENS' | 'UNISEX';
+  phone: string;
+  address: ShopAddress;
+  location: ShopLocation;
+  description: string;
+  workingHours?: WorkingHours;
+  photos: string[];
+  rating: { average: number; count: number };
+  createdAt: Date;
+  vendor: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  services: PendingShopDetailsServiceDto[];
+  barbers: PendingShopDetailsBarberDto[];
 }

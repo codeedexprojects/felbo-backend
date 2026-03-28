@@ -36,6 +36,7 @@ const shopDetailsSchema = z.object({
   type: z.enum(['MENS', 'WOMENS', 'UNISEX']),
   address: addressSchema,
   location: locationSchema,
+  photos: z.array(z.string().url('Enter valid image URL')).optional().default([]),
 });
 
 export const sendOtpSchema = z.object({
@@ -46,6 +47,7 @@ export const loginVerifyOtpSchema = z.object({
   phone: phoneSchema,
   otp: otpSchema,
   sessionId: z.string().min(1, 'Session ID is required'),
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerVerifyOtpSchema = z.object({
@@ -64,6 +66,7 @@ export const registerAssociationSchema = z.object({
   associationMemberId: z.string().min(1, 'Member ID is required'),
   associationIdProofUrl: z.string().url('Enter valid URL for ID proof'),
   shopDetails: shopDetailsSchema,
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerIndependentInitiateSchema = z.object({
@@ -78,6 +81,7 @@ export const registerIndependentInitiateSchema = z.object({
     ownerIdProof: z.string().url('Enter valid URL for owner ID proof'),
   }),
   shopDetails: shopDetailsSchema,
+  fcmToken: z.string().min(1).optional(),
 });
 
 export const registerIndependentConfirmSchema = z.object({
@@ -89,4 +93,62 @@ export const registerIndependentConfirmSchema = z.object({
 
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+export const fcmTokenSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+});
+
+export const updateProfileSchema = z
+  .object({
+    ownerName: z
+      .string()
+      .min(2, 'Name must be at least 2 characters')
+      .max(100, 'Name must be at most 100 characters')
+      .optional(),
+    email: z.string().email('Enter valid email').optional(),
+    profilePhoto: z.string().url('Enter valid image URL').optional(),
+  })
+  .refine(
+    (data) =>
+      data.ownerName !== undefined || data.email !== undefined || data.profilePhoto !== undefined,
+    {
+      message: 'At least one field (ownerName, email or profilePhoto) must be provided',
+    },
+  );
+
+export const dashboardStatsQuerySchema = z.object({
+  shopId: z.string().min(1).optional(),
+});
+
+export const vendorBookingIdParamSchema = z.object({
+  bookingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid booking ID'),
+});
+
+export const vendorBookingsQuerySchema = z.object({
+  shopId: z.string().min(1).optional(),
+  status: z
+    .enum([
+      'CONFIRMED',
+      'COMPLETED',
+      'CANCELLED_BY_USER',
+      'CANCELLED_BY_VENDOR',
+      'NO_SHOW',
+      'CANCELLED',
+    ])
+    .optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD')
+    .optional(),
+});
+
+export const deactivateAccountSchema = z.object({
+  reason: z.string().max(500, 'Reason too long').optional(),
 });

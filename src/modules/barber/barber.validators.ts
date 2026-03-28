@@ -7,19 +7,12 @@ const phoneSchema = z
   .length(10, 'Enter a valid 10-digit mobile number')
   .regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number');
 
-const usernameSchema = z
-  .string()
-  .min(3, 'Username must be at least 3 characters')
-  .max(50)
-  .regex(/^[a-z0-9_]+$/, 'Username must be lowercase letters, numbers, or underscores');
-
 export const createBarberSchema = z.object({
   shopId: mongoIdSchema,
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   phone: phoneSchema,
+  email: z.string().email('Enter a valid email address'),
   photo: z.string().optional(),
-  username: usernameSchema,
-  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
 export const updateBarberSchema = z
@@ -34,7 +27,12 @@ export const updateBarberSchema = z
 
 export const updateCredentialsSchema = z
   .object({
-    username: usernameSchema.optional(),
+    username: z
+      .string()
+      .min(3)
+      .max(50)
+      .regex(/^[a-z0-9_]+$/, 'Username must be lowercase letters, numbers, or underscores')
+      .optional(),
     password: z.string().min(6, 'Password must be at least 6 characters').optional(),
   })
   .refine((data) => data.username !== undefined || data.password !== undefined, {
@@ -57,15 +55,14 @@ export const listBarberQuerySchema = z.object({
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
-  status: z.enum(['ACTIVE', 'DELETED']).optional(),
+  status: z.enum(['INACTIVE', 'ACTIVE', 'DELETED']).optional(),
 });
 
 export const onboardBarberSchema = z.object({
   name: z.string().min(2, 'Barber name must be at least 2 characters').max(100),
   phone: phoneSchema,
+  email: z.string().email('Enter a valid email address'),
   photo: z.string().optional(),
-  username: usernameSchema,
-  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
 export const addBarberServicesSchema = z.object({
@@ -82,4 +79,54 @@ export const addBarberServicesSchema = z.object({
 export const barberShopParamSchema = z.object({
   shopId: mongoIdSchema,
   barberId: mongoIdSchema,
+});
+
+export const barberSendOtpSchema = z.object({
+  email: z.string().email('Enter a valid email address'),
+});
+
+export const barberVerifyOtpSchema = z.object({
+  email: z.string().email('Enter a valid email address'),
+  otp: z.string().length(6, 'OTP must be 6 digits'),
+});
+
+export const barberSetPasswordSchema = z.object({
+  resetToken: z.string().min(1, 'Reset token is required'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+export const barberLoginSchema = z.object({
+  email: z.string().email('Enter a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+  fcmToken: z.string().min(1).optional(),
+});
+
+export const barberRefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+export const addSelfAsBarberSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100),
+  phone: phoneSchema,
+  photo: z.string().optional(),
+  email: z.string().email('Enter a valid email address'),
+});
+
+export const createSlotBlockSchema = z.object({
+  serviceIds: z.array(mongoIdSchema).max(10, 'Too many services').optional(),
+
+  reason: z.string().trim().min(1, 'Reason cannot be blank').max(200, 'Reason too long').optional(),
+});
+
+export const releaseSlotBlockParamSchema = z.object({
+  blockId: mongoIdSchema,
+});
+
+export const listSlotBlocksQuerySchema = z.object({
+  date: z.string().date('Invalid date format. Use YYYY-MM-DD').optional(),
+  status: z.enum(['ACTIVE', 'RELEASED']).optional(),
+});
+
+export const fcmTokenSchema = z.object({
+  token: z.string({ error: 'Token is required' }).min(1, 'Token is required'),
 });
