@@ -12,4 +12,10 @@ router.get(
   adminController.getAssociationAdminDashboard,
 );
 
+router.get(
+  '/association/top-vendors',
+  authorize('ASSOCIATION_ADMIN'),
+  adminController.getTopAssociationVendors,
+);
+
 export default router;
