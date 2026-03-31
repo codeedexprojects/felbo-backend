@@ -160,6 +160,11 @@ export class AdminController {
     res.status(200).json({ success: true, data: result });
   };
 
+  getTopAssociationVendors = async (_req: Request, res: Response): Promise<void> => {
+    const result = await this.adminService.getTopAssociationVendors();
+    res.status(200).json({ success: true, data: result });
+  };
+
   blockVendor = async (req: Request, res: Response): Promise<void> => {
     const { id } = vendorIdParamSchema.parse(req.params);
     const { reason } = blockVendorSchema.parse(req.body);

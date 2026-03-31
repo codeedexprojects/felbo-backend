@@ -454,6 +454,34 @@ export class BookingService {
     return this.bookingRepository.getStatsByShopIds(shopIds);
   }
 
+  async getTopVendorsByShopIds(
+    shopIds: string[],
+    limit: number,
+  ): Promise<
+    Array<{
+      vendorId: string;
+      vendorName: string;
+      vendorPhone: string;
+      vendorProfilePhoto: string | null;
+      shopId: string;
+      shopName: string;
+      shopPhoto: string | null;
+      totalBookings: number;
+    }>
+  > {
+    const results = await this.bookingRepository.getTopVendorsByShopIds(shopIds, limit);
+    return results.map((r) => ({
+      vendorId: r.vendorId.toString(),
+      vendorName: r.vendorName,
+      vendorPhone: r.vendorPhone,
+      vendorProfilePhoto: r.vendorProfilePhoto,
+      shopId: r.shopId.toString(),
+      shopName: r.shopName,
+      shopPhoto: r.shopPhoto,
+      totalBookings: r.totalBookings,
+    }));
+  }
+
   async verifyBookingForIssue(bookingId: string, userId: string, shopId: string): Promise<void> {
     const booking = await this.bookingRepository.findById(bookingId);
     if (!booking) throw new NotFoundError('Booking not found.');

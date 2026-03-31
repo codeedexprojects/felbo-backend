@@ -111,6 +111,17 @@ export interface AssociationAdminDashboardDto {
   myVendorsRevenue: number;
 }
 
+export interface TopAssociationVendorDto {
+  vendorId: string;
+  vendorName: string;
+  vendorPhone: string;
+  vendorProfilePhoto: string | null;
+  shopId: string;
+  shopName: string;
+  shopPhoto: string | null;
+  totalBookings: number;
+}
+
 export interface UserDetailDto {
   id: string;
   name: string;
