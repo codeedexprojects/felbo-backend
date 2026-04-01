@@ -225,6 +225,10 @@ export default class VendorService {
       );
     }
 
+    if (vendor.isBlocked) {
+      throw new ForbiddenError('Your account has been blocked. Contact support.');
+    }
+
     if (vendor.status === 'SUSPENDED') {
       throw new ForbiddenError('Your account has been suspended. Contact support.');
     }
@@ -301,7 +305,12 @@ export default class VendorService {
 
     const vendor = await this.vendorRepository.findByIdWithRefreshToken(decoded.sub);
 
-    if (!vendor || vendor.status === 'SUSPENDED' || vendor.status === 'DELETED') {
+    if (
+      !vendor ||
+      vendor.isBlocked ||
+      vendor.status === 'SUSPENDED' ||
+      vendor.status === 'DELETED'
+    ) {
       throw new UnauthorizedError('Invalid refresh token. Please login again.');
     }
 
@@ -957,10 +966,11 @@ export default class VendorService {
 
     const extractKey = (url: string): string => new URL(url).pathname.slice(1);
 
+    const vendorS3Keys = vendorKeys.map(extractKey);
     const shopKeys = shopPhotoUrls.map(extractKey);
     const barberKeys = barberPhotoUrls.map(extractKey);
 
-    return [...new Set([...vendorKeys, ...shopKeys, ...barberKeys])];
+    return [...new Set([...vendorS3Keys, ...shopKeys, ...barberKeys])];
   }
 
   async registerFcmToken(vendorId: string, token: string): Promise<void> {

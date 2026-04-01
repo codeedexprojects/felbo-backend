@@ -8,7 +8,6 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Logger } from 'winston';
-import VendorService from '../vendor/vendor.service';
 import { VerifyUploadResponse, UploadUrlResponse } from './upload.types';
 import {
   PRESIGNED_GET_EXPIRY_SECONDS,
@@ -23,7 +22,6 @@ export default class UploadService {
   private readonly s3: S3Client;
 
   constructor(
-    private readonly vendorService: VendorService,
     private readonly bucket: string,
     private readonly region: string,
     private readonly logger: Logger,
@@ -105,84 +103,63 @@ export default class UploadService {
     );
   }
 
-  async runCleanupJob(): Promise<void> {
-    this.logger.info({ action: 'CLEANUP_JOB_STARTED', module: 'upload' });
+  async deleteOrphanedObjects(
+    dbKeys: Set<string>,
+    prefixes: string[],
+  ): Promise<{ deletedCount: number }> {
+    const s3Objects = await this.listAllS3Objects(prefixes);
+    const cutoff = new Date(Date.now() - CLEANUP_AGE_HOURS * 60 * 60 * 1000);
 
-    try {
-      const [s3Objects, dbKeys] = await Promise.all([
-        this.listAllS3Objects(),
-        this.vendorService.getAllPhotoKeys(),
-      ]);
+    const toDelete = s3Objects
+      .filter((obj) => !dbKeys.has(obj.key) && obj.lastModified < cutoff)
+      .map((obj) => ({ Key: obj.key }));
 
-      const dbKeySet = new Set(dbKeys);
-      const cutoff = new Date(Date.now() - CLEANUP_AGE_HOURS * 60 * 60 * 1000);
+    if (toDelete.length === 0) return { deletedCount: 0 };
 
-      const toDelete = s3Objects
-        .filter((obj) => !dbKeySet.has(obj.key) && obj.lastModified < cutoff)
-        .map((obj) => ({ Key: obj.key }));
+    const batches = chunkArray(toDelete, S3_DELETE_BATCH_SIZE);
+    let deletedCount = 0;
 
-      if (toDelete.length === 0) {
-        this.logger.info({
-          action: 'CLEANUP_JOB_COMPLETED',
-          module: 'upload',
-          deletedCount: 0,
-          message: 'No orphaned objects found',
-        });
-        return;
-      }
-
-      const batches = chunkArray(toDelete, S3_DELETE_BATCH_SIZE);
-      let deletedCount = 0;
-
-      for (const batch of batches) {
-        await withRetry(() =>
-          this.s3.send(
-            new DeleteObjectsCommand({
-              Bucket: this.bucket,
-              Delete: { Objects: batch, Quiet: true },
-            }),
-          ),
-        );
-        deletedCount += batch.length;
-      }
-
-      this.logger.info({
-        action: 'CLEANUP_JOB_COMPLETED',
-        module: 'upload',
-        deletedCount,
-      });
-    } catch (err) {
-      this.logger.error({
-        action: 'CLEANUP_JOB_FAILED',
-        module: 'upload',
-        error: (err as Error).message,
-      });
-    }
-  }
-
-  private async listAllS3Objects(): Promise<{ key: string; lastModified: Date }[]> {
-    const results: { key: string; lastModified: Date }[] = [];
-    let continuationToken: string | undefined;
-
-    do {
-      const response = await withRetry(() =>
+    for (const batch of batches) {
+      await withRetry(() =>
         this.s3.send(
-          new ListObjectsV2Command({
+          new DeleteObjectsCommand({
             Bucket: this.bucket,
-            Prefix: 'vendors/',
-            ContinuationToken: continuationToken,
+            Delete: { Objects: batch, Quiet: true },
           }),
         ),
       );
+      deletedCount += batch.length;
+    }
 
-      for (const obj of response.Contents ?? []) {
-        if (obj.Key && obj.LastModified) {
-          results.push({ key: obj.Key, lastModified: obj.LastModified });
+    return { deletedCount };
+  }
+
+  async listAllS3Objects(prefixes: string[]): Promise<{ key: string; lastModified: Date }[]> {
+    const results: { key: string; lastModified: Date }[] = [];
+
+    for (const prefix of prefixes) {
+      let continuationToken: string | undefined;
+
+      do {
+        const response = await withRetry(() =>
+          this.s3.send(
+            new ListObjectsV2Command({
+              Bucket: this.bucket,
+              Prefix: prefix,
+              ContinuationToken: continuationToken,
+            }),
+          ),
+        );
+
+        for (const obj of response.Contents ?? []) {
+          if (obj.Key && obj.LastModified) {
+            results.push({ key: obj.Key, lastModified: obj.LastModified });
+          }
         }
-      }
 
-      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-    } while (continuationToken);
+        continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+      } while (continuationToken);
+    }
 
     return results;
   }

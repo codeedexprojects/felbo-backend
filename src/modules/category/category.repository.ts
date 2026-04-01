@@ -66,4 +66,9 @@ export class CategoryRepository {
       { returnDocument: 'after' },
     ).exec();
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const categories = await CategoryModel.find({}, { image: 1 }).lean().exec();
+    return categories.map((c) => c.image).filter((u): u is string => !!u);
+  }
 }
