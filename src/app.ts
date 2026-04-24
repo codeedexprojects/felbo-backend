@@ -16,6 +16,19 @@ app.use(helmet());
 app.use(cors({ credentials: true, origin: true }));
 app.use(cookieParser());
 app.use(compression());
+
+app.use(
+  '/api/v1/webhooks',
+  express.raw({ type: 'application/json' }),
+  (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    if (Buffer.isBuffer(req.body)) {
+      (req as express.Request & { rawBody: string }).rawBody = req.body.toString('utf8');
+      req.body = JSON.parse((req as express.Request & { rawBody: string }).rawBody);
+    }
+    next();
+  },
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

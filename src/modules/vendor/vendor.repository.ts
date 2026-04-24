@@ -238,6 +238,7 @@ export default class VendorRepository {
         'documents.ownerIdProof': 1,
         associationIdProofUrl: 1,
         profilePhoto: 1,
+        'shopDetails.photos': 1,
       },
     )
       .lean()
@@ -249,6 +250,9 @@ export default class VendorRepository {
       if (v.documents?.ownerIdProof) keys.push(v.documents.ownerIdProof);
       if (v.associationIdProofUrl) keys.push(v.associationIdProofUrl);
       if (v.profilePhoto) keys.push(v.profilePhoto);
+      for (const url of v.shopDetails?.photos ?? []) {
+        if (url) keys.push(url);
+      }
     }
 
     return [...new Set(keys)];

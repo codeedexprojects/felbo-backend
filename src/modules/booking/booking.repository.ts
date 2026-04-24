@@ -248,11 +248,15 @@ export class BookingRepository {
     return BookingModel.findById(id).exec();
   }
 
-  updateBookingConfirmed(id: string, paymentId: string): Promise<IBooking | null> {
+  updateBookingConfirmed(
+    id: string,
+    paymentId: string,
+    session?: ClientSession,
+  ): Promise<IBooking | null> {
     return BookingModel.findByIdAndUpdate(
       id,
       { status: 'CONFIRMED', paymentId },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -283,7 +287,8 @@ export class BookingRepository {
       refundAmount: number;
       refundCoins: number;
       refundType: 'FELBO_COINS' | 'ORIGINAL';
-      refundStatus: 'PENDING' | 'COMPLETED';
+      refundStatus: 'PENDING' | 'COMPLETED' | 'FAILED';
+      refundId?: string;
     },
     session?: ClientSession,
   ): Promise<IBooking | null> {
@@ -300,6 +305,22 @@ export class BookingRepository {
         },
       },
       { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  markCancellationRefundCompleted(refundId: string): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { 'cancellation.refundId': refundId, 'cancellation.refundStatus': 'PENDING' },
+      { $set: { 'cancellation.refundStatus': 'COMPLETED' } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  markCancellationRefundFailed(refundId: string): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { 'cancellation.refundId': refundId, 'cancellation.refundStatus': 'PENDING' },
+      { $set: { 'cancellation.refundStatus': 'FAILED' } },
+      { returnDocument: 'after' },
     ).exec();
   }
 
@@ -1217,6 +1238,73 @@ export class BookingRepository {
       bookings: result.bookings,
       total: result.total[0]?.count ?? 0,
     };
+  }
+
+  async getTopVendorsByShopIds(
+    shopIds: string[],
+    limit: number,
+  ): Promise<
+    Array<{
+      vendorId: mongoose.Types.ObjectId;
+      vendorName: string;
+      vendorPhone: string;
+      vendorProfilePhoto: string | null;
+      shopId: mongoose.Types.ObjectId;
+      shopName: string;
+      shopPhoto: string | null;
+      totalBookings: number;
+    }>
+  > {
+    const shopObjectIds = shopIds.map((id) => new mongoose.Types.ObjectId(id));
+
+    return BookingModel.aggregate([
+      { $match: { shopId: { $in: shopObjectIds }, status: { $ne: 'PENDING_PAYMENT' } } },
+      { $group: { _id: '$shopId', totalBookings: { $sum: 1 } } },
+      {
+        $lookup: {
+          from: 'shops',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'shopData',
+          pipeline: [{ $project: { name: 1, photos: 1, vendorId: 1 } }],
+        },
+      },
+      { $addFields: { shop: { $arrayElemAt: ['$shopData', 0] } } },
+      {
+        $group: {
+          _id: '$shop.vendorId',
+          totalBookings: { $sum: '$totalBookings' },
+          shopId: { $first: '$_id' },
+          shopName: { $first: '$shop.name' },
+          shopPhoto: { $first: { $arrayElemAt: ['$shop.photos', 0] } },
+        },
+      },
+      { $sort: { totalBookings: -1 } },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'vendors',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'vendorData',
+          pipeline: [{ $project: { ownerName: 1, phone: 1, profilePhoto: 1 } }],
+        },
+      },
+      { $addFields: { vendor: { $arrayElemAt: ['$vendorData', 0] } } },
+      {
+        $project: {
+          _id: 0,
+          vendorId: '$_id',
+          vendorName: '$vendor.ownerName',
+          vendorPhone: '$vendor.phone',
+          vendorProfilePhoto: { $ifNull: ['$vendor.profilePhoto', null] },
+          shopId: 1,
+          shopName: 1,
+          shopPhoto: { $ifNull: ['$shopPhoto', null] },
+          totalBookings: 1,
+        },
+      },
+    ]).exec();
   }
 
   hasActiveBookingsForShop(shopId: string): Promise<boolean> {

@@ -16,4 +16,9 @@ export class AvatarRepository {
   async deleteById(id: string): Promise<void> {
     await AvatarModel.findByIdAndDelete(id).exec();
   }
+
+  async getAllKeys(): Promise<string[]> {
+    const avatars = await AvatarModel.find({}, { key: 1 }).lean().exec();
+    return avatars.map((a) => a.key).filter((k): k is string => !!k);
+  }
 }

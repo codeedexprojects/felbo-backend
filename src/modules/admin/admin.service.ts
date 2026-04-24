@@ -6,6 +6,7 @@ import {
   AdminDTO,
   SuperAdminDashboardDto,
   AssociationAdminDashboardDto,
+  TopAssociationVendorDto,
 } from './admin.types';
 import { JwtService, TokenPayload } from '../../shared/services/jwt.service';
 import { UnauthorizedError, ForbiddenError } from '../../shared/errors/index';
@@ -78,6 +79,16 @@ export class AdminService {
       },
       myVendorsRevenue: bookingStats.totalBookings * 2,
     };
+  }
+
+  async getTopAssociationVendors(): Promise<TopAssociationVendorDto[]> {
+    const vendorIds = await this.vendorService.getAssociationVendorIds();
+
+    const shopIds = await this.shopService.getShopIdsByVendorIds(
+      vendorIds.map((id) => id.toString()),
+    );
+
+    return this.bookingService.getTopVendorsByShopIds(shopIds, 10);
   }
 
   async getVendorRequestDetail(vendorId: string): Promise<VendorRequestAdminDetail> {

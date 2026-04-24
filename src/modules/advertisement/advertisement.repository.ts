@@ -76,4 +76,9 @@ export class AdvertisementRepository {
   countActive(): Promise<number> {
     return AdvertisementModel.countDocuments({ isActive: true }).exec();
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const ads = await AdvertisementModel.find({}, { bannerImage: 1 }).lean().exec();
+    return ads.map((a) => a.bannerImage).filter((u): u is string => !!u);
+  }
 }
