@@ -82,7 +82,7 @@ export class ServiceRepository {
     return BarberServiceModel.findOneAndUpdate(
       { barberId, serviceId },
       { $set: { durationMinutes } },
-      { new: true },
+      { returnDocument: 'after', new: true },
     ).exec();
   }
 

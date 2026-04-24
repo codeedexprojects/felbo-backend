@@ -1,6 +1,7 @@
 import { hmacSha256 } from '../../shared/utils/token';
 import Razorpay from 'razorpay';
 import { Logger } from 'winston';
+import { ClientSession } from '../../shared/database/transaction';
 import PaymentRepository from './payment.repository';
 import {
   CreateOrderInput,
@@ -10,13 +11,15 @@ import {
 } from './payment.types';
 import { ValidationError, NotFoundError } from '../../shared/errors/index';
 import { IssueService } from '../issue/issue.service';
+import { BookingRepository } from '../booking/booking.repository';
 
 export default class PaymentService {
-  private readonly razorpay: InstanceType<typeof Razorpay>;
+  readonly razorpay: InstanceType<typeof Razorpay>;
 
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly getIssueService: () => IssueService,
+    private readonly getBookingRepository: () => BookingRepository,
     private readonly razorpayKeyId: string,
     private readonly razorpayKeySecret: string,
     private readonly webhookSecret: string,
@@ -32,6 +35,10 @@ export default class PaymentService {
     return this.getIssueService();
   }
 
+  private get bookingRepository(): BookingRepository {
+    return this.getBookingRepository();
+  }
+
   async createBookingAdvanceOrder(input: CreateBookingPaymentInput): Promise<CreateOrderResult> {
     const amountPaise = input.amountRupees * 100;
     const receipt = `bk_${input.userId.slice(-6)}_${Date.now()}`;
@@ -43,18 +50,6 @@ export default class PaymentService {
       notes: { purpose: 'BOOKING_ADVANCE', userId: input.userId, shopId: input.shopId },
     });
 
-    await this.paymentRepository.create({
-      razorpayOrderId: order.id,
-      purpose: 'BOOKING_ADVANCE',
-      amountPaise,
-      currency: 'INR',
-      userId: input.userId,
-      shopId: input.shopId,
-      receipt,
-      notes: { purpose: 'BOOKING_ADVANCE', userId: input.userId, shopId: input.shopId },
-      status: 'CREATED',
-    });
-
     this.logger.info({
       action: 'PAYMENT_ORDER_CREATED',
       module: 'payment',
@@ -64,10 +59,31 @@ export default class PaymentService {
       userId: input.userId,
     });
 
-    return { orderId: order.id };
+    return { orderId: order.id, receipt };
   }
 
-  async verifyBookingPayment(input: VerifyPaymentInput): Promise<void> {
+  async saveBookingPaymentRecord(
+    input: CreateBookingPaymentInput & { orderId: string; receipt: string },
+    session?: ClientSession,
+  ): Promise<void> {
+    const amountPaise = input.amountRupees * 100;
+    await this.paymentRepository.create(
+      {
+        razorpayOrderId: input.orderId,
+        purpose: 'BOOKING_ADVANCE',
+        amountPaise,
+        currency: 'INR',
+        userId: input.userId,
+        shopId: input.shopId,
+        receipt: input.receipt,
+        notes: { purpose: 'BOOKING_ADVANCE', userId: input.userId, shopId: input.shopId },
+        status: 'CREATED',
+      },
+      session,
+    );
+  }
+
+  async verifyBookingPayment(input: VerifyPaymentInput, session?: ClientSession): Promise<void> {
     const expectedSignature = hmacSha256(
       this.razorpayKeySecret,
       `${input.orderId}|${input.paymentId}`,
@@ -91,11 +107,15 @@ export default class PaymentService {
       return;
     }
 
-    await this.paymentRepository.updatePaymentVerified(input.orderId, {
-      razorpayPaymentId: input.paymentId,
-      razorpaySignature: input.signature,
-      paidAt: new Date(),
-    });
+    await this.paymentRepository.updatePaymentVerified(
+      input.orderId,
+      {
+        razorpayPaymentId: input.paymentId,
+        razorpaySignature: input.signature,
+        paidAt: new Date(),
+      },
+      session,
+    );
 
     this.logger.info({
       action: 'PAYMENT_VERIFIED',
@@ -264,11 +284,7 @@ export default class PaymentService {
     const event = JSON.parse(rawBody);
     const eventType: string = event.event;
 
-    this.logger.info({
-      action: 'WEBHOOK_RECEIVED',
-      module: 'payment',
-      eventType,
-    });
+    this.logger.info({ action: 'WEBHOOK_RECEIVED', module: 'payment', eventType });
 
     if (eventType === 'payment.failed') {
       const paymentEntity = event.payload?.payment?.entity;
@@ -280,30 +296,59 @@ export default class PaymentService {
           orderId: paymentEntity.order_id,
         });
       }
+      return;
     }
 
-    if (eventType === 'refund.processed') {
+    if (eventType === 'refund.processed' || eventType === 'refund.failed') {
       const refundEntity = event.payload?.refund?.entity;
-      if (refundEntity?.payment_id && refundEntity?.id) {
-        const payment = await this.paymentRepository.findByPaymentId(refundEntity.payment_id);
-        if (payment) {
-          const refundEntry = payment.refunds.find((r) => r.razorpayRefundId === refundEntity.id);
-          if (refundEntry) {
-            refundEntry.status = 'PROCESSED';
-            refundEntry.processedAt = new Date();
-            await payment.save();
-          }
+      const refundId: string | undefined = refundEntity?.id;
+      const paymentId: string | undefined = refundEntity?.payment_id;
+
+      if (!refundId || !paymentId) return;
+
+      const succeeded = eventType === 'refund.processed';
+
+      // 1. Update the refund entry inside the Payment document
+      const payment = await this.paymentRepository.findByPaymentId(paymentId);
+      if (payment) {
+        const refundEntry = payment.refunds.find((r) => r.razorpayRefundId === refundId);
+        if (refundEntry) {
+          refundEntry.status = succeeded ? 'PROCESSED' : 'FAILED';
+          if (succeeded) refundEntry.processedAt = new Date();
+          await payment.save();
+        } else {
+          this.logger.warn({
+            action: 'WEBHOOK_REFUND_ENTRY_NOT_FOUND',
+            module: 'payment',
+            refundId,
+            paymentId,
+          });
         }
+      }
 
-        await this.issueService.markIssueRefundCompleted(refundEntity.id);
-
-        this.logger.info({
-          action: 'REFUND_PROCESSED',
+      // 2. Update booking cancellation refundStatus (barber-cancelled Razorpay bookings)
+      if (succeeded) {
+        await this.bookingRepository.markCancellationRefundCompleted(refundId);
+        await this.issueService.markIssueRefundCompleted(refundId);
+      } else {
+        await this.bookingRepository.markCancellationRefundFailed(refundId);
+        this.logger.warn({
+          action: 'REFUND_FAILED',
           module: 'payment',
-          refundId: refundEntity.id,
-          paymentId: refundEntity.payment_id,
+          refundId,
+          paymentId,
         });
       }
+
+      this.logger.info({
+        action: succeeded ? 'REFUND_PROCESSED' : 'REFUND_FAILED',
+        module: 'payment',
+        refundId,
+        paymentId,
+      });
+      return;
     }
+
+    this.logger.info({ action: 'WEBHOOK_EVENT_IGNORED', module: 'payment', eventType });
   }
 }

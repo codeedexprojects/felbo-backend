@@ -41,4 +41,9 @@ export class EventRepository {
   async deleteById(id: string): Promise<void> {
     await EventModel.findByIdAndDelete(id).exec();
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const events = await EventModel.find({}, { image: 1 }).lean().exec();
+    return events.map((e) => e.image).filter((u): u is string => !!u);
+  }
 }

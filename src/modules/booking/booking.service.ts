@@ -1,6 +1,7 @@
 import PaymentService from '../payment/payment.service';
 import { Logger } from 'winston';
 import { BookingRepository } from './booking.repository';
+import { IBooking } from './booking.model';
 import {
   GetSlotsInput,
   GetSlotsResponse,
@@ -786,36 +787,54 @@ export class BookingService {
       };
     }
 
-    // 14b. Razorpay payment: create order and pending booking
-    const { orderId } = await this.paymentService.createBookingAdvanceOrder({
+    // 14b. Razorpay payment: create Razorpay order first (external — cannot be rolled back),
+    //      then atomically write the payment record + booking so neither exists without the other.
+    const { orderId, receipt } = await this.paymentService.createBookingAdvanceOrder({
       userId,
       shopId: input.shopId,
       amountRupees: advanceAmountRupees,
     });
 
-    const booking = await this.bookingRepository.createBooking({
-      bookingNumber,
-      userId,
-      userName: user.name ?? '',
-      userPhone: user.phone,
-      shopId: input.shopId,
-      shopName: shop.name,
-      barberId: input.barberId,
-      barberName: barber.name,
-      barberSelectionType: 'SPECIFIC',
-      date: requestedDate,
-      startTime: input.startTime,
-      endTime,
-      totalDurationMinutes,
-      services: dbServices,
-      totalServiceAmount,
-      advancePaid: advanceAmountRupees,
-      remainingAmount,
-      paymentMethod: 'RAZORPAY',
-      razorpayOrderId: orderId,
-      verificationCode,
-      status: 'PENDING_PAYMENT',
+    let booking: Awaited<ReturnType<BookingRepository['createBooking']>>;
+    await withTransaction(async (session) => {
+      await this.paymentService.saveBookingPaymentRecord(
+        {
+          userId,
+          shopId: input.shopId,
+          amountRupees: advanceAmountRupees,
+          orderId,
+          receipt: receipt!,
+        },
+        session,
+      );
+      booking = await this.bookingRepository.createBooking(
+        {
+          bookingNumber,
+          userId,
+          userName: user.name ?? '',
+          userPhone: user.phone,
+          shopId: input.shopId,
+          shopName: shop.name,
+          barberId: input.barberId,
+          barberName: barber.name,
+          barberSelectionType: 'SPECIFIC',
+          date: requestedDate,
+          startTime: input.startTime,
+          endTime,
+          totalDurationMinutes,
+          services: dbServices,
+          totalServiceAmount,
+          advancePaid: advanceAmountRupees,
+          remainingAmount,
+          paymentMethod: 'RAZORPAY',
+          razorpayOrderId: orderId,
+          verificationCode,
+          status: 'PENDING_PAYMENT',
+        },
+        session,
+      );
     });
+    booking = booking!;
 
     this.logger.info({
       action: 'BOOKING_INITIATED',
@@ -871,19 +890,26 @@ export class BookingService {
       throw new ValidationError('Payment order ID mismatch.');
     }
 
-    await this.paymentService.verifyBookingPayment({
-      orderId: input.razorpayOrderId,
-      paymentId: input.razorpayPaymentId,
-      signature: input.razorpaySignature,
+    let confirmed: IBooking | null = null;
+    await withTransaction(async (session) => {
+      await this.paymentService.verifyBookingPayment(
+        {
+          orderId: input.razorpayOrderId,
+          paymentId: input.razorpayPaymentId,
+          signature: input.razorpaySignature,
+        },
+        session,
+      );
+      confirmed = await this.bookingRepository.updateBookingConfirmed(
+        bookingId,
+        input.razorpayPaymentId,
+        session,
+      );
     });
-
-    const confirmed = await this.bookingRepository.updateBookingConfirmed(
-      bookingId,
-      input.razorpayPaymentId,
-    );
     if (!confirmed) {
       throw new NotFoundError('Booking not found.');
     }
+    const safeConfirmed = confirmed as IBooking;
 
     this.logger.info({
       action: 'BOOKING_CONFIRMED',
@@ -893,22 +919,22 @@ export class BookingService {
       userId,
     });
 
-    const appointmentTime = formatAppointmentTime(confirmed.startTime);
-    const appointmentAt = buildAppointmentDate(confirmed.date, confirmed.startTime);
-    const confirmedBarberId = confirmed.barberId.toString();
-    const confirmedServiceName = confirmed.services.map((s) => s.serviceName).join(', ');
+    const appointmentTime = formatAppointmentTime(safeConfirmed.startTime);
+    const appointmentAt = buildAppointmentDate(safeConfirmed.date, safeConfirmed.startTime);
+    const confirmedBarberId = safeConfirmed.barberId.toString();
+    const confirmedServiceName = safeConfirmed.services.map((s) => s.serviceName).join(', ');
 
     await Promise.all([
       enqueueNewBookingBarber({
         barberId: confirmedBarberId,
-        customerName: confirmed.userName,
+        customerName: safeConfirmed.userName,
         serviceName: confirmedServiceName,
         appointmentTime,
       }),
       enqueueReminder10Min({
         userId,
         barberId: confirmedBarberId,
-        shopName: confirmed.shopName,
+        shopName: safeConfirmed.shopName,
         appointmentTime,
         appointmentAt,
         bookingId,
@@ -917,12 +943,12 @@ export class BookingService {
 
     return {
       booking: {
-        id: confirmed._id.toString(),
-        bookingNumber: confirmed.bookingNumber,
-        status: confirmed.status,
+        id: safeConfirmed._id.toString(),
+        bookingNumber: safeConfirmed.bookingNumber,
+        status: safeConfirmed.status,
         paymentId: input.razorpayPaymentId,
-        advancePaid: confirmed.advancePaid,
-        remainingAmount: confirmed.remainingAmount,
+        advancePaid: safeConfirmed.advancePaid,
+        remainingAmount: safeConfirmed.remainingAmount,
       },
     };
   }
@@ -992,27 +1018,38 @@ export class BookingService {
         );
       });
     } else {
-      // Razorpay-paid booking: issue Razorpay refund
+      // Razorpay-paid booking: issue Razorpay refund first (external — cannot be rolled back),
+      // then atomically mark the booking cancelled so the refundId is always persisted together.
       if (!booking.paymentId) {
         throw new ValidationError('No payment record found for this booking.');
       }
 
-      await this.paymentService.refundBookingAdvance(booking.paymentId, booking.advancePaid * 100);
+      const refundId = await this.paymentService.refundBookingAdvance(
+        booking.paymentId,
+        booking.advancePaid * 100,
+      );
 
-      cancelled = await this.bookingRepository.updateBookingCancelled(bookingId, {
-        cancelledBy: 'VENDOR',
-        reason,
-        refundAmount: booking.advancePaid,
-        refundCoins: 0,
-        refundType: 'ORIGINAL',
-        refundStatus: 'PENDING',
-      });
-
-      if (!cancelled || !cancelled.cancellation) {
-        throw new ConflictError(
-          'Booking could not be cancelled — it may have already been updated.',
+      await withTransaction(async (session) => {
+        cancelled = await this.bookingRepository.updateBookingCancelled(
+          bookingId,
+          {
+            cancelledBy: 'VENDOR',
+            reason,
+            refundAmount: booking.advancePaid,
+            refundCoins: 0,
+            refundType: 'ORIGINAL',
+            refundStatus: 'PENDING',
+            refundId,
+          },
+          session,
         );
-      }
+
+        if (!cancelled || !cancelled.cancellation) {
+          throw new ConflictError(
+            'Booking could not be cancelled — it may have already been updated.',
+          );
+        }
+      });
     }
 
     const [{ cancellationsThisWeek, vendorId }] = await Promise.all([

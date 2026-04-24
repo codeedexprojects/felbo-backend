@@ -56,7 +56,11 @@ export class BarberRepository {
   }
 
   updateRefreshToken(id: string, refreshTokenHash: string | null): Promise<IBarber | null> {
-    return BarberModel.findByIdAndUpdate(id, { refreshTokenHash }, { new: true }).exec();
+    return BarberModel.findByIdAndUpdate(
+      id,
+      { refreshTokenHash },
+      { returnDocument: 'after', new: true },
+    ).exec();
   }
 
   findByUsername(username: string): Promise<IBarber | null> {
@@ -198,7 +202,11 @@ export class BarberRepository {
   }
 
   updateAvailability(id: string, isAvailable: boolean): Promise<IBarber | null> {
-    return BarberModel.findByIdAndUpdate(id, { isAvailable }, { new: true }).exec();
+    return BarberModel.findByIdAndUpdate(
+      id,
+      { isAvailable },
+      { returnDocument: 'after', new: true },
+    ).exec();
   }
 
   updateCredentials(
@@ -209,7 +217,11 @@ export class BarberRepository {
   }
 
   setPassword(id: string, passwordHash: string): Promise<IBarber | null> {
-    return BarberModel.findByIdAndUpdate(id, { passwordHash }, { new: true }).exec();
+    return BarberModel.findByIdAndUpdate(
+      id,
+      { passwordHash },
+      { returnDocument: 'after', new: true },
+    ).exec();
   }
 
   async activateBarbersByVendorId(vendorId: string, session?: ClientSession): Promise<void> {
@@ -343,7 +355,7 @@ export class BarberRepository {
         status: 'RELEASED',
         releasedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after', new: true },
     )
       .lean<ISlotBlock>()
       .exec();

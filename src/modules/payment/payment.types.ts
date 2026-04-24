@@ -36,6 +36,7 @@ export interface CreateBookingPaymentInput {
 
 export interface CreateOrderResult {
   orderId: string;
+  receipt?: string;
 }
 
 export interface VerifyPaymentInput {

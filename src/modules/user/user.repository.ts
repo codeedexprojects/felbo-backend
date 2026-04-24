@@ -205,4 +205,9 @@ export default class UserRepository {
       { returnDocument: 'after', session },
     ).exec();
   }
+
+  async getAllPhotoUrls(): Promise<string[]> {
+    const users = await UserModel.find({}, { profileUrl: 1 }).lean().exec();
+    return users.map((u) => u.profileUrl).filter((u): u is string => !!u);
+  }
 }
