@@ -248,11 +248,15 @@ export class BookingRepository {
     return BookingModel.findById(id).exec();
   }
 
-  updateBookingConfirmed(id: string, paymentId: string): Promise<IBooking | null> {
+  updateBookingConfirmed(
+    id: string,
+    paymentId: string,
+    session?: ClientSession,
+  ): Promise<IBooking | null> {
     return BookingModel.findByIdAndUpdate(
       id,
       { status: 'CONFIRMED', paymentId },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', session },
     ).exec();
   }
 
@@ -283,7 +287,8 @@ export class BookingRepository {
       refundAmount: number;
       refundCoins: number;
       refundType: 'FELBO_COINS' | 'ORIGINAL';
-      refundStatus: 'PENDING' | 'COMPLETED';
+      refundStatus: 'PENDING' | 'COMPLETED' | 'FAILED';
+      refundId?: string;
     },
     session?: ClientSession,
   ): Promise<IBooking | null> {
@@ -300,6 +305,22 @@ export class BookingRepository {
         },
       },
       { returnDocument: 'after', session },
+    ).exec();
+  }
+
+  markCancellationRefundCompleted(refundId: string): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { 'cancellation.refundId': refundId, 'cancellation.refundStatus': 'PENDING' },
+      { $set: { 'cancellation.refundStatus': 'COMPLETED' } },
+      { returnDocument: 'after' },
+    ).exec();
+  }
+
+  markCancellationRefundFailed(refundId: string): Promise<IBooking | null> {
+    return BookingModel.findOneAndUpdate(
+      { 'cancellation.refundId': refundId, 'cancellation.refundStatus': 'PENDING' },
+      { $set: { 'cancellation.refundStatus': 'FAILED' } },
+      { returnDocument: 'after' },
     ).exec();
   }
 

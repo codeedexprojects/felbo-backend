@@ -15,7 +15,8 @@ export interface IBookingCancellation {
   refundAmount: number;
   refundCoins: number;
   refundType: 'FELBO_COINS' | 'ORIGINAL';
-  refundStatus: 'PENDING' | 'COMPLETED';
+  refundStatus: 'PENDING' | 'COMPLETED' | 'FAILED';
+  refundId?: string;
 }
 
 export interface IBooking extends Document {
@@ -74,7 +75,8 @@ const cancellationSubSchema = new Schema(
     refundAmount: { type: Number, required: true },
     refundCoins: { type: Number, default: 0 },
     refundType: { type: String, enum: ['FELBO_COINS', 'ORIGINAL'], required: true },
-    refundStatus: { type: String, enum: ['PENDING', 'COMPLETED'], required: true },
+    refundStatus: { type: String, enum: ['PENDING', 'COMPLETED', 'FAILED'], required: true },
+    refundId: { type: String },
   },
   { _id: false },
 );
